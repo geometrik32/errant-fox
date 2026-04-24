@@ -1,0 +1,11 @@
+# Rust
+target/
+Cargo.lock
+
+# Node / Noodl
+node_modules/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
