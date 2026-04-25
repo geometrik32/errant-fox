@@ -50,7 +50,7 @@ nano .env
 |---|---|---|
 | `JWT_SECRET` | Сгенерировать | `openssl rand -hex 32` |
 | `SEAFILE_URL` | Адрес вашего Seafile | `http://192.168.1.100:8082` |
-| `SEAFILE_TOKEN` | Seafile → Account Settings → API Token | `abc123...` |
+| `SEAFILE_TOKEN` | Открыть библиотеку → меню `···` → API Token | `abc123...` |
 | `SEAFILE_REPO_ID` | URL при открытии библиотеки в Seafile | `a1b2c3d4-...` |
 | `FRONTEND_ORIGIN` | IP вашего TrueNAS | `http://192.168.1.100` |
 
