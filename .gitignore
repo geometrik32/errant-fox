@@ -9,3 +9,11 @@ node_modules/
 # OS
 .DS_Store
 Thumbs.db
+
+# Secrets and local data
+.env
+*.sqlite
+data/
+
+# Frontend build
+frontend/dist/

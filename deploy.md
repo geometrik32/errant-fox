@@ -2,24 +2,25 @@
 
 ## Требования
 
-- TrueNAS SCALE с включённым Docker (Apps → Advanced Settings)
-- Git для клонирования репозитория
-- Работающий экземпляр Seafile на TrueNAS
+- TrueNAS SCALE (24.04+) с включённым Docker
+- SSH-доступ к серверу
+- Работающий Seafile на TrueNAS (нужен URL, токен и ID библиотеки)
 
 ---
 
-## 1. Установить Docker на TrueNAS
+## 1. Включить Docker на TrueNAS SCALE
 
-TrueNAS SCALE поставляется с Docker в составе Kubernetes (Apps). Для использования `docker-compose` напрямую:
-
-1. В веб-интерфейсе TrueNAS: **System → Shell** (или SSH-соединение).
-2. Проверьте наличие Docker:
+1. Войдите в веб-интерфейс TrueNAS.
+2. **Apps → Settings → Enable Apps** — включите, если ещё не включено.
+3. Подключитесь по SSH и проверьте:
    ```bash
    docker --version
    docker compose version
    ```
-3. Если Docker недоступен — включите Apps в TrueNAS SCALE:
-   **Apps → Settings → Enable Apps**, затем перезагрузите.
+   Если `docker compose` недоступен, установите плагин:
+   ```bash
+   apk add docker-cli-compose
+   ```
 
 ---
 
@@ -27,88 +28,97 @@ TrueNAS SCALE поставляется с Docker в составе Kubernetes (A
 
 ```bash
 # Через SSH на TrueNAS
-cd /mnt/your-pool/apps
+cd /mnt/your-pool/apps        # замените your-pool на имя вашего пула
 git clone <url-репозитория> errant-fox
 cd errant-fox
 ```
 
+> Если git не установлен: `apk add git`
+
 ---
 
-## 3. Заполнить .env
-
-Скопируйте шаблон и заполните переменные:
+## 3. Создать .env
 
 ```bash
 cp backend/.env.example .env
-nano .env   # или vi .env
+nano .env
 ```
 
-Обязательные переменные:
+Заполните все поля:
 
-| Переменная | Описание | Пример |
+| Переменная | Откуда взять | Пример |
 |---|---|---|
-| `JWT_SECRET` | Случайная строка для подписи токенов | `openssl rand -hex 32` |
-| `SEAFILE_URL` | Адрес Seafile | `http://192.168.1.100:8082` |
-| `SEAFILE_TOKEN` | API-токен Seafile | Из настроек аккаунта Seafile |
-| `SEAFILE_REPO_ID` | ID библиотеки Seafile | Из URL при открытии библиотеки |
-| `FRONTEND_ORIGIN` | URL фронтенда | `http://192.168.1.100` |
+| `JWT_SECRET` | Сгенерировать | `openssl rand -hex 32` |
+| `SEAFILE_URL` | Адрес вашего Seafile | `http://192.168.1.100:8082` |
+| `SEAFILE_TOKEN` | Seafile → Account Settings → API Token | `abc123...` |
+| `SEAFILE_REPO_ID` | URL при открытии библиотеки в Seafile | `a1b2c3d4-...` |
+| `FRONTEND_ORIGIN` | IP вашего TrueNAS | `http://192.168.1.100` |
 
-Сгенерировать `JWT_SECRET`:
+Переменные `DATABASE_URL`, `PREVIEWS_DIR`, `AVATARS_DIR`, `SERVER_PORT` уже
+проставлены правильно в `docker-compose.yml` через `environment:` — менять не нужно.
+
+Сгенерировать JWT_SECRET:
 ```bash
 openssl rand -hex 32
 ```
 
 ---
 
-## 4. Запустить контейнеры
+## 4. Собрать и запустить
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
+
+Первый запуск занимает 5–10 минут (сборка Rust и Node).
 
 Проверить статус:
 ```bash
 docker compose ps
-docker compose logs -f
+docker compose logs backend   # логи бэкенда
+docker compose logs frontend  # логи nginx
 ```
 
-Приложение будет доступно по адресу: `http://<ip-truenas>`
+База данных создаётся и мигрирует **автоматически** при первом старте бэкенда.
+
+Приложение доступно по адресу: **http://\<ip-truenas\>**
 
 ---
 
 ## 5. Создать первого Admin-пользователя
 
-После запуска контейнеров подключитесь к базе данных:
+Endpoint регистрации не предусмотрен — первого пользователя нужно добавить напрямую в базу.
+
+### Шаг 1 — Сгенерировать bcrypt-хеш пароля
+
+На любой машине с Python:
+```bash
+python3 -c "import bcrypt; print(bcrypt.hashpw(b'your_password', bcrypt.gensalt(12)).decode())"
+```
+Или онлайн: https://bcrypt.online (cost factor 12).
+
+### Шаг 2 — Вставить пользователя в базу
 
 ```bash
 docker compose exec backend sh
-```
-
-Внутри контейнера используйте SQLite:
-
-```bash
-# Установить sqlite3 (если нет)
 apk add --no-cache sqlite
-
-# Открыть базу
 sqlite3 /data/db/errant_fox.db
 ```
 
 В SQLite-оболочке:
-
 ```sql
--- Посмотреть таблицу пользователей
-SELECT id, username, role FROM users;
-
--- Повысить существующего пользователя до admin
-UPDATE users SET role = 'admin' WHERE username = 'your_username';
-
--- Выйти
+INSERT INTO users (id, username, password_hash, role)
+VALUES (
+  lower(hex(randomblob(16))),
+  'admin',
+  '$2b$12$ВСТАВЬТЕ_ХЕШ_СЮДА',
+  'admin'
+);
 .quit
 ```
 
-Если пользователей ещё нет — зарегистрируйтесь через интерфейс (`/register`),
-затем повысьте роль через SQLite как показано выше.
+После этого войдите в приложение с этим логином и паролем.
+Дальнейших пользователей создаёт Admin через интерфейс (раздел настроек).
 
 ---
 
@@ -116,21 +126,33 @@ UPDATE users SET role = 'admin' WHERE username = 'your_username';
 
 ```bash
 git pull
-docker compose build --no-cache
-docker compose up -d
+docker compose up -d --build
 ```
+
+Миграции применяются автоматически при каждом старте.
 
 ---
 
-## Структура данных
+## Резервное копирование
 
-Все данные хранятся в `./data/` на хосте:
+Все данные хранятся в `./data/` рядом с `docker-compose.yml`:
 
 ```
 ./data/
-  db/         — SQLite база данных
-  previews/   — кадры-превью видео
+  db/         — SQLite база (главный файл — errant_fox.db)
+  previews/   — превью-кадры видео
   avatars/    — аватары пользователей
 ```
 
-Для резервного копирования достаточно сохранить папку `./data/` и файл `.env`.
+Для бэкапа достаточно сохранить папку `./data/` и файл `.env`.
+
+---
+
+## Устранение неполадок
+
+| Симптом | Причина | Решение |
+|---|---|---|
+| Белый экран | Nginx не получил dist | `docker compose logs frontend` |
+| `no such table` | Миграции не прошли | `docker compose logs backend` — смотреть ошибку |
+| Seafile sync error в логах | Неверный токен или ID репозитория | Проверить `SEAFILE_TOKEN` и `SEAFILE_REPO_ID` в `.env` |
+| Порт 80 занят | Другое приложение | Поменять `"80:80"` на `"8081:80"` в `docker-compose.yml` |

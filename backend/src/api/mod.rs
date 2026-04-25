@@ -19,41 +19,41 @@ pub fn router(state: AppState) -> Router {
         // Current user profile
         .route("/api/users/me", get(auth::get_me).patch(users::patch_me))
         .route("/api/users/me/avatar", post(users::upload_avatar))
-        .route("/api/users/:id/avatar", get(users::get_avatar))
+        .route("/api/users/{id}/avatar", get(users::get_avatar))
         // Fighters
         .route("/api/fighters", get(users::list_fighters))
-        .route("/api/fighters/:id/bouts", get(users::fighter_bouts))
+        .route("/api/fighters/{id}/bouts", get(users::fighter_bouts))
         // Admin — user management
         .route("/api/admin/users", post(users::create_user))
-        .route("/api/admin/users/:id", delete(users::delete_user))
+        .route("/api/admin/users/{id}", delete(users::delete_user))
         // Techniques
         .route("/api/techniques", get(techniques::list_techniques))
         .route("/api/admin/techniques", post(techniques::create_technique))
         .route(
-            "/api/admin/techniques/:id",
+            "/api/admin/techniques/{id}",
             delete(techniques::delete_technique),
         )
         // Videos
         .route("/api/videos", get(videos::list_videos))
         .route(
-            "/api/videos/:id",
+            "/api/videos/{id}",
             get(videos::get_video).patch(videos::patch_video),
         )
-        .route("/api/videos/:id/stream", get(videos::get_stream))
+        .route("/api/videos/{id}/stream", get(videos::get_stream))
         .route(
-            "/api/videos/:id/previews/:frame",
+            "/api/videos/{id}/previews/{frame}",
             get(videos::get_preview_frame),
         )
         // Bouts
         .route("/api/bouts", post(bouts::post_bout))
         .route(
-            "/api/bouts/:id",
+            "/api/bouts/{id}",
             patch(bouts::patch_bout).delete(bouts::delete_bout),
         )
         // Comments
         .route("/api/comments", post(comments::post_comment))
         .route(
-            "/api/comments/:id",
+            "/api/comments/{id}",
             patch(comments::patch_comment).delete(comments::delete_comment),
         )
         // WebSocket
