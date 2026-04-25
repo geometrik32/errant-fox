@@ -7,7 +7,15 @@
       "Bash(gh auth *)",
       "PowerShell(gh auth status 2>&1)",
       "PowerShell($env:PATH += \";C:\\\\Program Files\\\\GitHub CLI\"; gh auth status 2>&1)",
-      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" auth status 2>&1)"
+      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" auth status 2>&1)",
+      "Bash(grep -E \"\\(README|\\\\.md$\\)\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "WebSearch",
+      "Bash(npx skills *)",
+      "Bash(cargo check *)",
+      "Bash(npx svelte-check *)"
     ]
   }
 }
