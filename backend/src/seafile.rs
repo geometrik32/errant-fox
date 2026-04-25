@@ -37,7 +37,7 @@ impl SeafileClient {
     }
 
     fn auth_header(&self) -> String {
-        format!("Token {}", self.token)
+        format!("Seafile {}", self.token)
     }
 
     /// List top-level folders in the repo root.
