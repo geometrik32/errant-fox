@@ -4,7 +4,7 @@ export interface User {
   display_name: string;
   is_admin: boolean;
   avatar_url: string;
-  color: string;
+  color?: string;
 }
 
 export interface Fighter {

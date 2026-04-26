@@ -15,7 +15,18 @@
       "WebSearch",
       "Bash(npx skills *)",
       "Bash(cargo check *)",
-      "Bash(npx svelte-check *)"
+      "Bash(npx svelte-check *)",
+      "Bash(cargo run *)",
+      "Bash(echo \"Backend started with PID $!\")",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(taskkill /F /IM errant_fox.exe)",
+      "PowerShell(Stop-Process -Name \"errant_fox\" -Force -ErrorAction SilentlyContinue)",
+      "Bash(cargo update *)",
+      "WebFetch(domain:seafile-api.readme.io)",
+      "WebFetch(domain:manual.seafile.com)",
+      "WebFetch(domain:docs.seafile.com)",
+      "Bash(curl -s -w '\\\\nHTTP_STATUS:%{http_code}' -H 'Authorization: Seafile 1d12d16fdcef05c2be5598a033f120c4aa04e54e' 'http://192.168.3.27:8082/api2/repos/3981eb27-f4c1-4c6d-a05e-5448ee140b8f/dir/?p=/')"
     ]
   }
 }
