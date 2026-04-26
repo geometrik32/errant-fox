@@ -39,7 +39,6 @@ pub fn router(state: AppState) -> Router {
             "/api/videos/{id}",
             get(videos::get_video).patch(videos::patch_video),
         )
-        .route("/api/videos/{id}/stream", get(videos::get_stream))
         .route(
             "/api/videos/{id}/previews/{frame}",
             get(videos::get_preview_frame),

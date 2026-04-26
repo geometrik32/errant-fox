@@ -18,7 +18,7 @@ pub async fn run_sync(
     db: DbPool,
     ws_tx: broadcast::Sender<WsEvent>,
 ) {
-    let date_re = Regex::new(r"(\d{4}-\d{2}-\d{2})").unwrap();
+    let date_re = Regex::new(r"(\d{4}[.\-]\d{2}[.\-]\d{2})").unwrap();
     let mut interval = tokio::time::interval(Duration::from_secs(60));
 
     loop {
@@ -43,7 +43,9 @@ async fn sync_once(
             None => continue,
         };
 
-        let date = match NaiveDate::parse_from_str(&date_str, "%Y-%m-%d") {
+        let date = match NaiveDate::parse_from_str(&date_str, "%Y.%m.%d")
+            .or_else(|_| NaiveDate::parse_from_str(&date_str, "%Y-%m-%d"))
+        {
             Ok(d) => d,
             Err(_) => continue,
         };

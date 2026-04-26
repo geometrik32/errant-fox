@@ -12,6 +12,9 @@ services:
       DATABASE_URL: /data/db/errant_fox.db
       PREVIEWS_DIR: /data/previews
       AVATARS_DIR: /data/avatars
+    networks:
+      - default
+      - proxy
 
   frontend:
     build:
@@ -22,3 +25,7 @@ services:
       - "8081:80"
     depends_on:
       - backend
+
+networks:
+  proxy:
+    external: true

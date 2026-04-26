@@ -23,7 +23,6 @@ async fn main() {
     let seafile_client = seafile::SeafileClient::new(
         config.seafile_url.clone(),
         config.seafile_token.clone(),
-        config.seafile_repo_id.clone(),
     );
 
     let db_pool = db::init_pool(&config.database_url);
