@@ -63,6 +63,7 @@ pub struct CommentAuthorDto {
     pub id: String,
     pub display_name: String,
     pub avatar_url: String,
+    pub color: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -157,11 +158,13 @@ fn build_video_full(
                     id: u.id.clone(),
                     display_name: u.display_name.clone(),
                     avatar_url: format!("/api/users/{}/avatar", u.id),
+                    color: u.color.clone(),
                 })
                 .unwrap_or_else(|| CommentAuthorDto {
                     id: c.author_id.clone(),
                     display_name: "Unknown".to_string(),
                     avatar_url: format!("/api/users/{}/avatar", c.author_id),
+                    color: None,
                 });
             CommentDto {
                 id: c.id,

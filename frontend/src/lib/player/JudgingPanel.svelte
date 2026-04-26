@@ -2,15 +2,17 @@
   import { onMount, onDestroy } from 'svelte';
   import { fighters } from '../../stores';
   import type { VideoFull, Bout, VideoFighter } from '../api/types';
+  import { resolveColor } from '../api/types';
   import { createBout } from '../api/bouts';
   import BoutCard from './BoutCard.svelte';
 
   interface Props {
     video: VideoFull;
     currentTime: number;
+    onboutschange?: (bouts: Bout[]) => void;
   }
 
-  let { video, currentTime }: Props = $props();
+  let { video, currentTime, onboutschange }: Props = $props();
 
   // ── Local bouts state ────────────────────────────────────────────────────
 
@@ -45,6 +47,7 @@
         time_end_ms: Math.round(currentTime * 1000),
       });
       bouts = [...bouts, created];
+      onboutschange?.(bouts);
       startTime = null;
     } catch (e) {
       finishError = e instanceof Error ? e.message : 'Ошибка создания схода';
@@ -116,6 +119,7 @@
               ? bouts.map((b, i) => i === idx ? incoming : b)
               : [...bouts, incoming];
           }
+          onboutschange?.(bouts);
         }
       } catch { /* ignore malformed */ }
     };
@@ -150,7 +154,12 @@
   <!-- ── Fighter selects ──────────────────────────────────────────────────── -->
   <div class="fighters-section">
     <div class="fighter-row">
-      <span class="fighter-side side-a">A</span>
+      <span
+        class="fighter-side"
+        style:background={activeFighterA ? resolveColor(activeFighterA.id, activeFighterA.color) + '33' : 'rgba(82,134,224,0.2)'}
+        style:color={activeFighterA ? resolveColor(activeFighterA.id, activeFighterA.color) : '#6fa0e0'}
+        style:border-color={activeFighterA ? resolveColor(activeFighterA.id, activeFighterA.color) + '55' : 'rgba(82,134,224,0.3)'}
+      >A</span>
       <select class="fighter-sel" bind:value={fighterAId} aria-label="Боец A">
         <option value="">— Боец A —</option>
         {#each $fighters as f (f.id)}
@@ -159,7 +168,12 @@
       </select>
     </div>
     <div class="fighter-row">
-      <span class="fighter-side side-b">B</span>
+      <span
+        class="fighter-side"
+        style:background={activeFighterB ? resolveColor(activeFighterB.id, activeFighterB.color) + '33' : 'rgba(224,82,82,0.2)'}
+        style:color={activeFighterB ? resolveColor(activeFighterB.id, activeFighterB.color) : '#e08080'}
+        style:border-color={activeFighterB ? resolveColor(activeFighterB.id, activeFighterB.color) + '55' : 'rgba(224,82,82,0.3)'}
+      >B</span>
       <select class="fighter-sel" bind:value={fighterBId} aria-label="Боец B">
         <option value="">— Боец B —</option>
         {#each $fighters as f (f.id)}
@@ -260,16 +274,8 @@
     letter-spacing: 0;
   }
 
-  .side-a {
-    background: rgba(82, 134, 224, 0.2);
-    color: #6fa0e0;
-    border: 1px solid rgba(82, 134, 224, 0.3);
-  }
-
-  .side-b {
-    background: rgba(224, 82, 82, 0.2);
-    color: #e08080;
-    border: 1px solid rgba(224, 82, 82, 0.3);
+  .fighter-side {
+    border: 1px solid;
   }
 
   .fighter-sel {

@@ -23,6 +23,23 @@
 
   let { bouts, filters, opponents, onfilter, onnavigate }: Props = $props();
 
+  // Visible column config
+  type ColKey = 'date' | 'opponent' | 'score' | 'my_tech' | 'my_result' | 'my_zone' | 'opp_tech' | 'opp_result' | 'opp_zone';
+  const COL_LABELS: Record<ColKey, string> = {
+    date: 'Дата', opponent: 'Оппонент', score: 'Счёт',
+    my_tech: 'Мой приём', my_result: 'Мой рез.', my_zone: 'Моя зона',
+    opp_tech: 'Приём опп.', opp_result: 'Рез. опп.', opp_zone: 'Зона опп.',
+  };
+  let visibleCols = $state<Set<ColKey>>(new Set(Object.keys(COL_LABELS) as ColKey[]));
+  let showColPicker = $state(false);
+
+  function toggleCol(col: ColKey) {
+    const next = new Set(visibleCols);
+    if (next.has(col)) { if (next.size > 1) next.delete(col); }
+    else next.add(col);
+    visibleCols = next;
+  }
+
   function toggleSort(col: string) {
     if (filters.sort_col === col) {
       onfilter({ ...filters, sort_dir: filters.sort_dir === 'asc' ? 'desc' : 'asc' });
@@ -45,117 +62,138 @@
   }
 </script>
 
+<div class="table-header-bar">
+  <div class="col-picker-wrap">
+    <button class="eye-btn" onclick={() => { showColPicker = !showColPicker; }} title="Выбрать столбцы" aria-expanded={showColPicker}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+    </button>
+    {#if showColPicker}
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      <div class="col-picker" role="menu" onclick={(e) => e.stopPropagation()}>
+        {#each Object.entries(COL_LABELS) as [key, label]}
+          <label class="col-option">
+            <input type="checkbox" checked={visibleCols.has(key as ColKey)} onchange={() => toggleCol(key as ColKey)} />
+            {label}
+          </label>
+        {/each}
+      </div>
+    {/if}
+  </div>
+</div>
+
 <div class="table-wrap">
   <table class="table">
     <thead>
       <tr class="header-row">
+        {#if visibleCols.has('date')}
         <th class="th sortable" onclick={() => toggleSort('video_date')}>
           <span>Дата <span class="sort-icon">{sortIcon('video_date')}</span></span>
-          <input
-            class="filter-input"
-            type="date"
-            value={filters.date}
+          <input class="filter-input" type="date" value={filters.date}
             oninput={(e) => setFilter('date', (e.target as HTMLInputElement).value)}
-            onclick={(e) => e.stopPropagation()}
-          />
+            onclick={(e) => e.stopPropagation()} />
         </th>
+        {/if}
+        {#if visibleCols.has('opponent')}
         <th class="th sortable" onclick={() => toggleSort('opponent_name')}>
           <span>Оппонент <span class="sort-icon">{sortIcon('opponent_name')}</span></span>
-          <select
-            class="filter-input"
-            value={filters.opponent_id}
+          <select class="filter-input" value={filters.opponent_id}
             onchange={(e) => setFilter('opponent_id', (e.target as HTMLSelectElement).value)}
-            onclick={(e) => e.stopPropagation()}
-          >
+            onclick={(e) => e.stopPropagation()}>
             <option value="">Все</option>
             {#each opponents as opp}
               <option value={opp.id}>{opp.name}</option>
             {/each}
           </select>
         </th>
+        {/if}
+        {#if visibleCols.has('score')}
         <th class="th sortable" onclick={() => toggleSort('my_score')}>
           <span>Счёт <span class="sort-icon">{sortIcon('my_score')}</span></span>
           <div class="filter-spacer"></div>
         </th>
+        {/if}
+        {#if visibleCols.has('my_tech')}
         <th class="th sortable" onclick={() => toggleSort('my_technique_name')}>
           <span>Мой приём <span class="sort-icon">{sortIcon('my_technique_name')}</span></span>
-          <input
-            class="filter-input"
-            type="text"
-            placeholder="Фильтр…"
-            value={filters.my_technique}
+          <input class="filter-input" type="text" placeholder="Фильтр…" value={filters.my_technique}
             oninput={(e) => setFilter('my_technique', (e.target as HTMLInputElement).value)}
-            onclick={(e) => e.stopPropagation()}
-          />
+            onclick={(e) => e.stopPropagation()} />
         </th>
+        {/if}
+        {#if visibleCols.has('my_result')}
         <th class="th sortable" onclick={() => toggleSort('my_result')}>
-          <span>Мой результат <span class="sort-icon">{sortIcon('my_result')}</span></span>
-          <select
-            class="filter-input"
-            value={filters.my_result}
+          <span>Мой рез. <span class="sort-icon">{sortIcon('my_result')}</span></span>
+          <select class="filter-input" value={filters.my_result}
             onchange={(e) => setFilter('my_result', (e.target as HTMLSelectElement).value)}
-            onclick={(e) => e.stopPropagation()}
-          >
+            onclick={(e) => e.stopPropagation()}>
             <option value="">Все</option>
             <option value="hit">Попал</option>
             <option value="miss">Промах</option>
           </select>
         </th>
+        {/if}
+        {#if visibleCols.has('my_zone')}
+        <th class="th"><span>Моя зона</span><div class="filter-spacer"></div></th>
+        {/if}
+        {#if visibleCols.has('opp_tech')}
         <th class="th sortable" onclick={() => toggleSort('opponent_technique_name')}>
-          <span>Приём оппонента <span class="sort-icon">{sortIcon('opponent_technique_name')}</span></span>
-          <input
-            class="filter-input"
-            type="text"
-            placeholder="Фильтр…"
-            value={filters.opponent_technique}
+          <span>Приём опп. <span class="sort-icon">{sortIcon('opponent_technique_name')}</span></span>
+          <input class="filter-input" type="text" placeholder="Фильтр…" value={filters.opponent_technique}
             oninput={(e) => setFilter('opponent_technique', (e.target as HTMLInputElement).value)}
-            onclick={(e) => e.stopPropagation()}
-          />
+            onclick={(e) => e.stopPropagation()} />
         </th>
+        {/if}
+        {#if visibleCols.has('opp_result')}
         <th class="th sortable" onclick={() => toggleSort('opponent_result')}>
-          <span>Результат оппонента <span class="sort-icon">{sortIcon('opponent_result')}</span></span>
-          <select
-            class="filter-input"
-            value={filters.opponent_result}
+          <span>Рез. опп. <span class="sort-icon">{sortIcon('opponent_result')}</span></span>
+          <select class="filter-input" value={filters.opponent_result}
             onchange={(e) => setFilter('opponent_result', (e.target as HTMLSelectElement).value)}
-            onclick={(e) => e.stopPropagation()}
-          >
+            onclick={(e) => e.stopPropagation()}>
             <option value="">Все</option>
             <option value="hit">Попал</option>
             <option value="miss">Промах</option>
           </select>
         </th>
+        {/if}
+        {#if visibleCols.has('opp_zone')}
+        <th class="th"><span>Зона опп.</span><div class="filter-spacer"></div></th>
+        {/if}
         <th class="th th--nav"></th>
       </tr>
     </thead>
     <tbody>
       {#each bouts as bout (bout.id)}
         <tr class="body-row">
-          <td class="td">{formatDate(bout.video_date)}</td>
-          <td class="td">{bout.opponent_name}</td>
+          {#if visibleCols.has('date')}<td class="td">{formatDate(bout.video_date)}</td>{/if}
+          {#if visibleCols.has('opponent')}<td class="td">{bout.opponent_name}</td>{/if}
+          {#if visibleCols.has('score')}
           <td class="td score">
-            <span class:win={bout.my_score > bout.opponent_score}
-                  class:loss={bout.my_score < bout.opponent_score}>
-              {bout.my_score}
-            </span>
+            <span class:win={bout.my_score > bout.opponent_score} class:loss={bout.my_score < bout.opponent_score}>{bout.my_score}</span>
             <span class="sep">:</span>
-            <span class:win={bout.opponent_score > bout.my_score}
-                  class:loss={bout.opponent_score < bout.my_score}>
-              {bout.opponent_score}
-            </span>
+            <span class:win={bout.opponent_score > bout.my_score} class:loss={bout.opponent_score < bout.my_score}>{bout.opponent_score}</span>
           </td>
-          <td class="td">{bout.my_technique_name ?? '—'}</td>
+          {/if}
+          {#if visibleCols.has('my_tech')}<td class="td">{bout.my_technique_name ?? '—'}</td>{/if}
+          {#if visibleCols.has('my_result')}
           <td class="td">
             <span class="result-badge" class:hit={bout.my_result === 'hit'} class:miss={bout.my_result === 'miss'}>
               {bout.my_result === 'hit' ? 'Попал' : 'Промах'}
             </span>
           </td>
-          <td class="td">{bout.opponent_technique_name ?? '—'}</td>
+          {/if}
+          {#if visibleCols.has('my_zone')}<td class="td zone-cell">{(bout.my_hit_zone ?? '').split(':')[0] || '—'}</td>{/if}
+          {#if visibleCols.has('opp_tech')}<td class="td">{bout.opponent_technique_name ?? '—'}</td>{/if}
+          {#if visibleCols.has('opp_result')}
           <td class="td">
             <span class="result-badge" class:hit={bout.opponent_result === 'hit'} class:miss={bout.opponent_result === 'miss'}>
               {bout.opponent_result === 'hit' ? 'Попал' : 'Промах'}
             </span>
           </td>
+          {/if}
+          {#if visibleCols.has('opp_zone')}<td class="td zone-cell">{(bout.opponent_hit_zone ?? '').split(':')[0] || '—'}</td>{/if}
           <td class="td td--nav">
             <button class="nav-btn" onclick={() => onnavigate(bout.video_id)} title="Открыть видео">→</button>
           </td>
@@ -163,7 +201,7 @@
       {/each}
       {#if bouts.length === 0}
         <tr>
-          <td colspan="8" class="td empty">Нет данных</td>
+          <td colspan="10" class="td empty">Нет данных</td>
         </tr>
       {/if}
     </tbody>
@@ -335,5 +373,73 @@
     background: #1a3050;
     color: #DB841F;
     border-color: #DB841F;
+  }
+
+  /* Column picker */
+  .table-header-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    margin-bottom: 6px;
+  }
+
+  .col-picker-wrap {
+    position: relative;
+  }
+
+  .eye-btn {
+    background: none;
+    border: 1px solid #1f3a57;
+    border-radius: 4px;
+    color: #4a6280;
+    width: 28px;
+    height: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.12s, border-color 0.12s;
+  }
+
+  .eye-btn:hover {
+    color: #a0b4c8;
+    border-color: #2a4f73;
+  }
+
+  .col-picker {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 4px);
+    background: #0d1e30;
+    border: 1px solid #1f3a57;
+    border-radius: 6px;
+    padding: 8px 10px;
+    z-index: 20;
+    min-width: 150px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  }
+
+  .col-option {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.78rem;
+    color: #a0b4c8;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+
+  .col-option input[type="checkbox"] {
+    accent-color: #DB841F;
+    cursor: pointer;
+  }
+
+  .zone-cell {
+    font-size: 0.78rem;
+    color: #6b8aab;
   }
 </style>

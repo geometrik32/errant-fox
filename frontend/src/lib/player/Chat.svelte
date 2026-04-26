@@ -1,22 +1,27 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { currentUser } from '../../stores';
   import type { Comment } from '../api/types';
-  import { createComment } from '../api/comments';
+  import { createComment, updateComment, deleteComment } from '../api/comments';
 
   interface Props {
     videoId: string;
     comments?: Comment[];
     currentTime?: number;
     onseek?: (timestamp_ms: number) => void;
+    oncommentschange?: (comments: Comment[]) => void;
   }
 
-  let { videoId, comments: initComments = [], currentTime = 0, onseek }: Props = $props();
+  let { videoId, comments: initComments = [], currentTime = 0, onseek, oncommentschange }: Props = $props();
 
   let comments = $state<Comment[]>([...initComments]);
   let text = $state('');
   let replyTo = $state<Comment | null>(null);
   let sending = $state(false);
   let listEl: HTMLDivElement;
+
+  let editingId = $state<number | null>(null);
+  let editText = $state('');
 
   function fmtMs(ms: number): string {
     const total = Math.floor(ms / 1000);
@@ -47,6 +52,7 @@
         reply_to_id: replyTo?.id ?? null,
       });
       comments = [...comments, created];
+      oncommentschange?.(comments);
       text = '';
       replyTo = null;
       requestAnimationFrame(() => {
@@ -55,6 +61,30 @@
     } finally {
       sending = false;
     }
+  }
+
+  function startEdit(c: Comment) {
+    editingId = c.id;
+    editText = c.text;
+  }
+
+  async function submitEdit(id: number) {
+    const t = editText.trim();
+    if (!t) return;
+    try {
+      const updated = await updateComment(id, t);
+      comments = comments.map(c => c.id === id ? updated : c);
+      oncommentschange?.(comments);
+    } finally {
+      editingId = null;
+    }
+  }
+
+  async function handleDelete(id: number) {
+    if (!confirm('Удалить сообщение?')) return;
+    await deleteComment(id);
+    comments = comments.filter(c => c.id !== id);
+    oncommentschange?.(comments);
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -81,6 +111,7 @@
         if (msg.type === 'new_comment' && msg.video_id === videoId) {
           const { type: _t, video_id: _v, ...fields } = msg;
           comments = [...comments, fields as unknown as Comment];
+          oncommentschange?.(comments);
           requestAnimationFrame(() => {
             if (listEl) listEl.scrollTop = listEl.scrollHeight;
           });
@@ -124,9 +155,30 @@
           <div class="reply-preview">{getReplyPreview(c.reply_to_id)}</div>
         {/if}
 
-        <div class="msg-text">{c.text}</div>
+        {#if editingId === c.id}
+          <div class="edit-area">
+            <textarea
+              class="edit-inp"
+              bind:value={editText}
+              rows="2"
+              onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitEdit(c.id); } if (e.key === 'Escape') editingId = null; }}
+            ></textarea>
+            <div class="edit-actions">
+              <button class="edit-save" onclick={() => submitEdit(c.id)}>Сохранить</button>
+              <button class="edit-cancel" onclick={() => { editingId = null; }}>Отмена</button>
+            </div>
+          </div>
+        {:else}
+          <div class="msg-text">{c.text}</div>
+        {/if}
 
-        <button class="reply-link" onclick={() => { replyTo = c; }}>Ответить</button>
+        <div class="msg-footer">
+          <button class="reply-link" onclick={() => { replyTo = c; }}>Ответить</button>
+          {#if $currentUser?.id === c.author.id}
+            <button class="edit-link" onclick={() => startEdit(c)}>Редактировать</button>
+            <button class="del-link" onclick={() => handleDelete(c.id)}>Удалить</button>
+          {/if}
+        </div>
       </div>
     {:else}
       <div class="empty">Нет комментариев</div>
@@ -271,18 +323,68 @@
     line-height: 1.4;
   }
 
-  .reply-link {
-    align-self: flex-start;
+  .msg-footer {
+    display: flex;
+    gap: 8px;
+  }
+
+  .reply-link, .edit-link, .del-link {
     background: none;
     border: none;
-    color: #3a6080;
     font-size: 0.65rem;
     cursor: pointer;
     padding: 0;
     transition: color 0.1s;
   }
 
+  .reply-link { color: #3a6080; }
   .reply-link:hover { color: #5a9ab8; }
+
+  .edit-link { color: #3a6080; }
+  .edit-link:hover { color: #5a9ab8; }
+
+  .del-link { color: #5a3030; }
+  .del-link:hover { color: #e05252; }
+
+  .edit-area {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .edit-inp {
+    width: 100%;
+    background: #0d1e35;
+    border: 1px solid #2a4f73;
+    border-radius: 4px;
+    color: #c8d8e8;
+    font-size: 0.78rem;
+    padding: 5px;
+    resize: none;
+    outline: none;
+    font-family: inherit;
+    line-height: 1.4;
+  }
+
+  .edit-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .edit-save, .edit-cancel {
+    flex: 1;
+    padding: 3px 0;
+    border-radius: 3px;
+    font-size: 0.72rem;
+    cursor: pointer;
+    border: none;
+  }
+
+  .edit-save { background: #DB841F; color: #fff; }
+  .edit-save:hover { background: #e8941f; }
+
+  .edit-cancel { background: #0a1628; border: 1px solid #1a3050; color: #7090a8; }
+  .edit-cancel:hover { background: #0f2035; }
 
   .empty {
     font-size: 0.78rem;

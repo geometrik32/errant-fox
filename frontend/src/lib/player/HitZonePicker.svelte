@@ -1,193 +1,201 @@
 <script lang="ts">
   export const HIT_ZONES = [
-    'Голова', 'Шея', 'Плечи', 'Предплечья', 'Кисти',
-    'Тело', 'Таз', 'Бедро', 'Голень',
+    'Голова', 'Шея',
+    'Плечо пр.', 'Предплечье пр.', 'Кисть пр.',
+    'Плечо лев.', 'Предплечье лев.', 'Кисть лев.',
+    'Тело', 'Таз',
+    'Бедро пр.', 'Голень пр.', 'Стопа пр.',
+    'Бедро лев.', 'Голень лев.', 'Стопа лев.',
   ] as const;
 
   export type HitZone = typeof HIT_ZONES[number];
 
   interface Props {
     value: string;
-    onchange?: (zone: string) => void;
+    onchange?: (value: string) => void;
   }
 
   let { value, onchange }: Props = $props();
 
-  function select(zone: string) {
-    onchange?.(value === zone ? '' : zone);
+  let svgEl: SVGElement;
+
+  // value format: "ZoneName" or "ZoneName:x:y" or ""
+  function currentZone(): string {
+    return value.split(':')[0];
+  }
+
+  function handleZoneClick(e: MouseEvent, zone: string) {
+    if (currentZone() === zone) {
+      onchange?.('');
+      return;
+    }
+    const rect = svgEl.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width).toFixed(3);
+    const y = ((e.clientY - rect.top) / rect.height).toFixed(3);
+    onchange?.(`${zone}:${x}:${y}`);
   }
 
   function fill(zone: string) {
-    return value === zone ? '#DB841F' : '#1a3a5c';
+    return currentZone() === zone ? '#DB841F' : '#1a3a5c';
   }
 
   function stroke(zone: string) {
-    return value === zone ? '#e8941f' : '#2a4f73';
+    return currentZone() === zone ? '#e8941f' : '#2a4f73';
   }
+
+  // SVG viewBox: 0 0 90 222
+  // Layout matches the user's diagram (16 zones, bilateral arms/legs)
 </script>
 
-<!--
-  Compact interactive silhouette. ViewBox 90 × 230.
-  Zones (top → bottom):
-    Голова (head)          — circle
-    Шея (neck)             — rect center
-    Плечи (shoulders)      — wide rect
-    Предплечья (forearms)  — two side rects
-    Кисти (hands)          — two small rects
-    Тело (torso)           — center rect
-    Таз (pelvis)           — short center rect
-    Бедро (thighs)         — two rects
-    Голень (shins)         — two rects
--->
 <div class="picker">
-  <svg viewBox="0 0 90 230" xmlns="http://www.w3.org/2000/svg" class="svg" aria-label="Зона поражения">
+  <svg bind:this={svgEl} viewBox="0 0 90 222" xmlns="http://www.w3.org/2000/svg" class="svg" aria-label="Зона поражения">
 
-    <!-- Голова -->
-    <circle cx="45" cy="14" r="12"
+    <!-- 1. Голова -->
+    <rect x="29" y="1" width="32" height="28" rx="6"
       fill={fill('Голова')} stroke={stroke('Голова')} stroke-width="1"
       class="zone" role="button" tabindex="0"
-      onclick={() => select('Голова')}
-      onkeydown={(e) => e.key === 'Enter' && select('Голова')}
-      aria-label="Голова" aria-pressed={value === 'Голова'}
-    >
-      <title>Голова</title>
-    </circle>
+      onclick={(e) => handleZoneClick(e, 'Голова')}
+      onkeydown={(e) => e.key === 'Enter' && handleZoneClick(e as unknown as MouseEvent, 'Голова')}
+      aria-label="Голова" aria-pressed={currentZone() === 'Голова'}
+    ><title>Голова</title></rect>
 
-    <!-- Шея -->
-    <rect x="38" y="27" width="14" height="10" rx="3"
+    <!-- 2. Шея -->
+    <rect x="36" y="30" width="18" height="10" rx="3"
       fill={fill('Шея')} stroke={stroke('Шея')} stroke-width="1"
       class="zone" role="button" tabindex="0"
-      onclick={() => select('Шея')}
-      onkeydown={(e) => e.key === 'Enter' && select('Шея')}
-      aria-label="Шея" aria-pressed={value === 'Шея'}
-    >
-      <title>Шея</title>
-    </rect>
+      onclick={(e) => handleZoneClick(e, 'Шея')}
+      onkeydown={(e) => e.key === 'Enter' && handleZoneClick(e as unknown as MouseEvent, 'Шея')}
+      aria-label="Шея" aria-pressed={currentZone() === 'Шея'}
+    ><title>Шея</title></rect>
 
-    <!-- Плечи (wide band) -->
-    <rect x="6" y="38" width="78" height="14" rx="5"
-      fill={fill('Плечи')} stroke={stroke('Плечи')} stroke-width="1"
+    <!-- 3. Плечо пр. (viewer left = fighter right) -->
+    <rect x="4" y="41" width="23" height="28" rx="4"
+      fill={fill('Плечо пр.')} stroke={stroke('Плечо пр.')} stroke-width="1"
       class="zone" role="button" tabindex="0"
-      onclick={() => select('Плечи')}
-      onkeydown={(e) => e.key === 'Enter' && select('Плечи')}
-      aria-label="Плечи" aria-pressed={value === 'Плечи'}
-    >
-      <title>Плечи</title>
-    </rect>
+      onclick={(e) => handleZoneClick(e, 'Плечо пр.')}
+      onkeydown={(e) => e.key === 'Enter' && handleZoneClick(e as unknown as MouseEvent, 'Плечо пр.')}
+      aria-label="Плечо пр." aria-pressed={currentZone() === 'Плечо пр.'}
+    ><title>Плечо пр.</title></rect>
 
-    <!-- Тело -->
-    <rect x="26" y="53" width="38" height="52" rx="4"
+    <!-- 4. Предплечье пр. -->
+    <rect x="4" y="70" width="18" height="30" rx="4"
+      fill={fill('Предплечье пр.')} stroke={stroke('Предплечье пр.')} stroke-width="1"
+      class="zone" role="button" tabindex="0"
+      onclick={(e) => handleZoneClick(e, 'Предплечье пр.')}
+      onkeydown={(e) => e.key === 'Enter' && handleZoneClick(e as unknown as MouseEvent, 'Предплечье пр.')}
+      aria-label="Предплечье пр." aria-pressed={currentZone() === 'Предплечье пр.'}
+    ><title>Предплечье пр.</title></rect>
+
+    <!-- 5. Кисть пр. -->
+    <rect x="5" y="101" width="15" height="12" rx="3"
+      fill={fill('Кисть пр.')} stroke={stroke('Кисть пр.')} stroke-width="1"
+      class="zone" role="button" tabindex="0"
+      onclick={(e) => handleZoneClick(e, 'Кисть пр.')}
+      onkeydown={(e) => e.key === 'Enter' && handleZoneClick(e as unknown as MouseEvent, 'Кисть пр.')}
+      aria-label="Кисть пр." aria-pressed={currentZone() === 'Кисть пр.'}
+    ><title>Кисть пр.</title></rect>
+
+    <!-- 9. Тело -->
+    <rect x="28" y="41" width="34" height="54" rx="4"
       fill={fill('Тело')} stroke={stroke('Тело')} stroke-width="1"
       class="zone" role="button" tabindex="0"
-      onclick={() => select('Тело')}
-      onkeydown={(e) => e.key === 'Enter' && select('Тело')}
-      aria-label="Тело" aria-pressed={value === 'Тело'}
-    >
-      <title>Тело</title>
-    </rect>
+      onclick={(e) => handleZoneClick(e, 'Тело')}
+      onkeydown={(e) => e.key === 'Enter' && handleZoneClick(e as unknown as MouseEvent, 'Тело')}
+      aria-label="Тело" aria-pressed={currentZone() === 'Тело'}
+    ><title>Тело</title></rect>
 
-    <!-- Предплечья — левое (визуально левое = правая сторона фигуры) -->
-    <rect x="6" y="53" width="18" height="36" rx="4"
-      fill={fill('Предплечья')} stroke={stroke('Предплечья')} stroke-width="1"
-      class="zone" role="button" tabindex="0"
-      onclick={() => select('Предплечья')}
-      onkeydown={(e) => e.key === 'Enter' && select('Предплечья')}
-      aria-label="Предплечья" aria-pressed={value === 'Предплечья'}
-    >
-      <title>Предплечья</title>
-    </rect>
-
-    <!-- Предплечья — правое -->
-    <rect x="66" y="53" width="18" height="36" rx="4"
-      fill={fill('Предплечья')} stroke={stroke('Предплечья')} stroke-width="1"
-      class="zone" role="button" tabindex="0"
-      onclick={() => select('Предплечья')}
-      onkeydown={(e) => e.key === 'Enter' && select('Предплечья')}
-      aria-label="Предплечья" aria-pressed={value === 'Предплечья'}
-    >
-      <title>Предплечья</title>
-    </rect>
-
-    <!-- Кисти — левая -->
-    <rect x="7" y="90" width="16" height="12" rx="4"
-      fill={fill('Кисти')} stroke={stroke('Кисти')} stroke-width="1"
-      class="zone" role="button" tabindex="0"
-      onclick={() => select('Кисти')}
-      onkeydown={(e) => e.key === 'Enter' && select('Кисти')}
-      aria-label="Кисти" aria-pressed={value === 'Кисти'}
-    >
-      <title>Кисти</title>
-    </rect>
-
-    <!-- Кисти — правая -->
-    <rect x="67" y="90" width="16" height="12" rx="4"
-      fill={fill('Кисти')} stroke={stroke('Кисти')} stroke-width="1"
-      class="zone" role="button" tabindex="0"
-      onclick={() => select('Кисти')}
-      onkeydown={(e) => e.key === 'Enter' && select('Кисти')}
-      aria-label="Кисти" aria-pressed={value === 'Кисти'}
-    >
-      <title>Кисти</title>
-    </rect>
-
-    <!-- Таз -->
-    <rect x="28" y="106" width="34" height="16" rx="3"
+    <!-- 10. Таз -->
+    <rect x="28" y="96" width="34" height="18" rx="3"
       fill={fill('Таз')} stroke={stroke('Таз')} stroke-width="1"
       class="zone" role="button" tabindex="0"
-      onclick={() => select('Таз')}
-      onkeydown={(e) => e.key === 'Enter' && select('Таз')}
-      aria-label="Таз" aria-pressed={value === 'Таз'}
-    >
-      <title>Таз</title>
-    </rect>
+      onclick={(e) => handleZoneClick(e, 'Таз')}
+      onkeydown={(e) => e.key === 'Enter' && handleZoneClick(e as unknown as MouseEvent, 'Таз')}
+      aria-label="Таз" aria-pressed={currentZone() === 'Таз'}
+    ><title>Таз</title></rect>
 
-    <!-- Бедро — левое -->
-    <rect x="28" y="124" width="15" height="44" rx="4"
-      fill={fill('Бедро')} stroke={stroke('Бедро')} stroke-width="1"
+    <!-- 6. Плечо лев. (viewer right = fighter left) -->
+    <rect x="63" y="41" width="23" height="28" rx="4"
+      fill={fill('Плечо лев.')} stroke={stroke('Плечо лев.')} stroke-width="1"
       class="zone" role="button" tabindex="0"
-      onclick={() => select('Бедро')}
-      onkeydown={(e) => e.key === 'Enter' && select('Бедро')}
-      aria-label="Бедро" aria-pressed={value === 'Бедро'}
-    >
-      <title>Бедро</title>
-    </rect>
+      onclick={(e) => handleZoneClick(e, 'Плечо лев.')}
+      onkeydown={(e) => e.key === 'Enter' && handleZoneClick(e as unknown as MouseEvent, 'Плечо лев.')}
+      aria-label="Плечо лев." aria-pressed={currentZone() === 'Плечо лев.'}
+    ><title>Плечо лев.</title></rect>
 
-    <!-- Бедро — правое -->
-    <rect x="47" y="124" width="15" height="44" rx="4"
-      fill={fill('Бедро')} stroke={stroke('Бедро')} stroke-width="1"
+    <!-- 7. Предплечье лев. -->
+    <rect x="68" y="70" width="18" height="30" rx="4"
+      fill={fill('Предплечье лев.')} stroke={stroke('Предплечье лев.')} stroke-width="1"
       class="zone" role="button" tabindex="0"
-      onclick={() => select('Бедро')}
-      onkeydown={(e) => e.key === 'Enter' && select('Бедро')}
-      aria-label="Бедро" aria-pressed={value === 'Бедро'}
-    >
-      <title>Бедро</title>
-    </rect>
+      onclick={(e) => handleZoneClick(e, 'Предплечье лев.')}
+      onkeydown={(e) => e.key === 'Enter' && handleZoneClick(e as unknown as MouseEvent, 'Предплечье лев.')}
+      aria-label="Предплечье лев." aria-pressed={currentZone() === 'Предплечье лев.'}
+    ><title>Предплечье лев.</title></rect>
 
-    <!-- Голень — левая -->
-    <rect x="28" y="170" width="15" height="44" rx="4"
-      fill={fill('Голень')} stroke={stroke('Голень')} stroke-width="1"
+    <!-- 8. Кисть лев. -->
+    <rect x="70" y="101" width="15" height="12" rx="3"
+      fill={fill('Кисть лев.')} stroke={stroke('Кисть лев.')} stroke-width="1"
       class="zone" role="button" tabindex="0"
-      onclick={() => select('Голень')}
-      onkeydown={(e) => e.key === 'Enter' && select('Голень')}
-      aria-label="Голень" aria-pressed={value === 'Голень'}
-    >
-      <title>Голень</title>
-    </rect>
+      onclick={(e) => handleZoneClick(e, 'Кисть лев.')}
+      onkeydown={(e) => e.key === 'Enter' && handleZoneClick(e as unknown as MouseEvent, 'Кисть лев.')}
+      aria-label="Кисть лев." aria-pressed={currentZone() === 'Кисть лев.'}
+    ><title>Кисть лев.</title></rect>
 
-    <!-- Голень — правая -->
-    <rect x="47" y="170" width="15" height="44" rx="4"
-      fill={fill('Голень')} stroke={stroke('Голень')} stroke-width="1"
+    <!-- 11. Бедро пр. -->
+    <rect x="27" y="115" width="16" height="42" rx="4"
+      fill={fill('Бедро пр.')} stroke={stroke('Бедро пр.')} stroke-width="1"
       class="zone" role="button" tabindex="0"
-      onclick={() => select('Голень')}
-      onkeydown={(e) => e.key === 'Enter' && select('Голень')}
-      aria-label="Голень" aria-pressed={value === 'Голень'}
-    >
-      <title>Голень</title>
-    </rect>
+      onclick={(e) => handleZoneClick(e, 'Бедро пр.')}
+      onkeydown={(e) => e.key === 'Enter' && handleZoneClick(e as unknown as MouseEvent, 'Бедро пр.')}
+      aria-label="Бедро пр." aria-pressed={currentZone() === 'Бедро пр.'}
+    ><title>Бедро пр.</title></rect>
 
-    <!-- Labels -->
-    {#if value}
-      <text x="45" y="221" text-anchor="middle" class="selected-label">{value}</text>
+    <!-- 12. Голень пр. -->
+    <rect x="27" y="158" width="16" height="40" rx="4"
+      fill={fill('Голень пр.')} stroke={stroke('Голень пр.')} stroke-width="1"
+      class="zone" role="button" tabindex="0"
+      onclick={(e) => handleZoneClick(e, 'Голень пр.')}
+      onkeydown={(e) => e.key === 'Enter' && handleZoneClick(e as unknown as MouseEvent, 'Голень пр.')}
+      aria-label="Голень пр." aria-pressed={currentZone() === 'Голень пр.'}
+    ><title>Голень пр.</title></rect>
+
+    <!-- 13. Стопа пр. -->
+    <rect x="27" y="199" width="16" height="12" rx="3"
+      fill={fill('Стопа пр.')} stroke={stroke('Стопа пр.')} stroke-width="1"
+      class="zone" role="button" tabindex="0"
+      onclick={(e) => handleZoneClick(e, 'Стопа пр.')}
+      onkeydown={(e) => e.key === 'Enter' && handleZoneClick(e as unknown as MouseEvent, 'Стопа пр.')}
+      aria-label="Стопа пр." aria-pressed={currentZone() === 'Стопа пр.'}
+    ><title>Стопа пр.</title></rect>
+
+    <!-- 14. Бедро лев. -->
+    <rect x="47" y="115" width="16" height="42" rx="4"
+      fill={fill('Бедро лев.')} stroke={stroke('Бедро лев.')} stroke-width="1"
+      class="zone" role="button" tabindex="0"
+      onclick={(e) => handleZoneClick(e, 'Бедро лев.')}
+      onkeydown={(e) => e.key === 'Enter' && handleZoneClick(e as unknown as MouseEvent, 'Бедро лев.')}
+      aria-label="Бедро лев." aria-pressed={currentZone() === 'Бедро лев.'}
+    ><title>Бедро лев.</title></rect>
+
+    <!-- 15. Голень лев. -->
+    <rect x="47" y="158" width="16" height="40" rx="4"
+      fill={fill('Голень лев.')} stroke={stroke('Голень лев.')} stroke-width="1"
+      class="zone" role="button" tabindex="0"
+      onclick={(e) => handleZoneClick(e, 'Голень лев.')}
+      onkeydown={(e) => e.key === 'Enter' && handleZoneClick(e as unknown as MouseEvent, 'Голень лев.')}
+      aria-label="Голень лев." aria-pressed={currentZone() === 'Голень лев.'}
+    ><title>Голень лев.</title></rect>
+
+    <!-- 16. Стопа лев. -->
+    <rect x="47" y="199" width="16" height="12" rx="3"
+      fill={fill('Стопа лев.')} stroke={stroke('Стопа лев.')} stroke-width="1"
+      class="zone" role="button" tabindex="0"
+      onclick={(e) => handleZoneClick(e, 'Стопа лев.')}
+      onkeydown={(e) => e.key === 'Enter' && handleZoneClick(e as unknown as MouseEvent, 'Стопа лев.')}
+      aria-label="Стопа лев." aria-pressed={currentZone() === 'Стопа лев.'}
+    ><title>Стопа лев.</title></rect>
+
+    {#if currentZone()}
+      <text x="45" y="217" text-anchor="middle" class="selected-label">{currentZone()}</text>
     {/if}
 
   </svg>
@@ -200,7 +208,7 @@
   }
 
   .svg {
-    width: 72px;
+    width: 80px;
     flex-shrink: 0;
     overflow: visible;
   }
@@ -212,12 +220,13 @@
   }
 
   .zone:hover {
-    filter: brightness(1.35);
+    filter: brightness(1.4);
   }
 
   .selected-label {
-    font-size: 7px;
+    font-size: 6px;
     fill: #DB841F;
     font-weight: 600;
+    pointer-events: none;
   }
 </style>
