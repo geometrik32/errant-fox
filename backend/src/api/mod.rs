@@ -25,7 +25,11 @@ pub fn router(state: AppState) -> Router {
         .route("/api/fighters/{id}/bouts", get(users::fighter_bouts))
         // Admin — user management
         .route("/api/admin/users", post(users::create_user))
-        .route("/api/admin/users/{id}", delete(users::delete_user))
+        .route(
+            "/api/admin/users/{id}",
+            patch(users::patch_admin_user).delete(users::delete_user),
+        )
+        .route("/api/admin/users/{id}/avatar", post(users::upload_avatar_for))
         // Techniques
         .route("/api/techniques", get(techniques::list_techniques))
         .route("/api/admin/techniques", post(techniques::create_technique))

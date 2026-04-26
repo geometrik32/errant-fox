@@ -1,6 +1,7 @@
 <script lang="ts">
   import { currentUser } from '../../stores';
-  import { patchMe } from '../api/auth';
+  import { patchMe, uploadMyAvatar } from '../api/auth';
+  import { resolveColor } from '../api/types';
 
   interface Props {
     onclose: () => void;
@@ -9,11 +10,30 @@
   let { onclose }: Props = $props();
 
   let displayName = $state($currentUser?.display_name ?? '');
+  let color = $state($currentUser?.color ?? '');
   let newPassword = $state('');
   let confirmPassword = $state('');
   let saving = $state(false);
   let error = $state('');
   let success = $state('');
+  let avatarFile = $state<File | null>(null);
+  let avatarPreview = $state<string | null>(null);
+
+  let effectiveColor = $derived(
+    color || resolveColor($currentUser?.id ?? '', null)
+  );
+
+  function handleAvatarChange(e: Event) {
+    const file = (e.target as HTMLInputElement).files?.[0] ?? null;
+    avatarFile = file;
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => { avatarPreview = ev.target?.result as string; };
+      reader.readAsDataURL(file);
+    } else {
+      avatarPreview = null;
+    }
+  }
 
   async function handleSave(e: Event) {
     e.preventDefault();
@@ -27,35 +47,56 @@
 
     saving = true;
     try {
-      const data: { display_name?: string; password?: string } = {};
+      const data: { display_name?: string; password?: string; color?: string } = {};
       if (displayName !== $currentUser?.display_name) data.display_name = displayName;
       if (newPassword) data.password = newPassword;
+      if (color && color !== $currentUser?.color) data.color = color;
 
-      if (Object.keys(data).length === 0) {
-        success = 'Нет изменений';
-        return;
+      if (Object.keys(data).length > 0) {
+        const updated = await patchMe(data);
+        currentUser.set(updated);
       }
 
-      const updated = await patchMe(data);
-      currentUser.set(updated);
+      if (avatarFile) {
+        await uploadMyAvatar(avatarFile);
+        // force avatar reload by bumping the url with a cache-bust
+        currentUser.update(u => u ? { ...u, avatar_url: u.avatar_url + '?t=' + Date.now() } : u);
+      }
+
       newPassword = '';
       confirmPassword = '';
+      avatarFile = null;
+      avatarPreview = null;
       success = 'Сохранено';
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Ошибка сохранения';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Ошибка сохранения';
     } finally {
       saving = false;
     }
   }
 
-  function handleBackdrop(e: MouseEvent) {
-    if ((e.target as HTMLElement).classList.contains('modal-backdrop')) {
+  // Close only if mousedown started on the backdrop itself
+  let backdropMousedown = false;
+
+  function handleBackdropMousedown(e: MouseEvent) {
+    backdropMousedown = (e.target as HTMLElement).classList.contains('modal-backdrop');
+  }
+
+  function handleBackdropClick(e: MouseEvent) {
+    if (backdropMousedown && (e.target as HTMLElement).classList.contains('modal-backdrop')) {
       onclose();
     }
+    backdropMousedown = false;
   }
 </script>
 
-<div class="modal-backdrop" role="presentation" onclick={handleBackdrop}>
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<div
+  class="modal-backdrop"
+  role="presentation"
+  onmousedown={handleBackdropMousedown}
+  onclick={handleBackdropClick}
+>
   <div class="modal" role="dialog" aria-modal="true" aria-label="Профиль">
     <div class="modal-header">
       <h2>Профиль</h2>
@@ -67,13 +108,23 @@
     </div>
 
     <form class="modal-body" onsubmit={handleSave}>
-      <div class="avatar-preview" style:background={$currentUser?.color ?? '#1f3a57'}>
-        {#if $currentUser?.avatar_url}
-          <img src={$currentUser.avatar_url} alt={$currentUser.display_name} />
-        {:else}
-          <span>{$currentUser?.display_name?.charAt(0).toUpperCase() ?? '?'}</span>
-        {/if}
-      </div>
+      <!-- Avatar -->
+      <label class="avatar-wrap" title="Нажмите для загрузки аватарки">
+        <div class="avatar-preview" style:background={effectiveColor}>
+          {#if avatarPreview}
+            <img src={avatarPreview} alt="preview" />
+          {:else if $currentUser?.avatar_url}
+            <img src={$currentUser.avatar_url} alt={$currentUser.display_name} />
+          {:else}
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="1.5"/>
+              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          {/if}
+        </div>
+        <span class="avatar-hint">Загрузить фото</span>
+        <input type="file" accept="image/*" class="file-hidden" onchange={handleAvatarChange} />
+      </label>
 
       <div class="field">
         <label for="username">Логин</label>
@@ -83,6 +134,14 @@
       <div class="field">
         <label for="display-name">Имя</label>
         <input id="display-name" type="text" bind:value={displayName} required />
+      </div>
+
+      <div class="field">
+        <label for="color-pick">Цвет</label>
+        <div class="color-row">
+          <input id="color-pick" type="color" bind:value={color} class="color-input" />
+          <span class="color-val">{color || effectiveColor}</span>
+        </div>
       </div>
 
       <div class="divider"></div>
@@ -169,28 +228,72 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+
+  /* Avatar upload */
+  .avatar-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    align-self: center;
   }
 
   .avatar-preview {
-    width: 64px;
-    height: 64px;
+    width: 72px;
+    height: 72px;
     border-radius: 50%;
     border: 2px solid #2a4f73;
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #fff;
-    align-self: center;
-    margin-bottom: 4px;
+    transition: filter 0.15s;
+  }
+
+  .avatar-wrap:hover .avatar-preview {
+    filter: brightness(0.75);
   }
 
   .avatar-preview img {
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+
+  .avatar-hint {
+    font-size: 0.72rem;
+    color: #4a6280;
+  }
+
+  .file-hidden {
+    display: none;
+  }
+
+  /* Color row */
+  .color-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .color-input {
+    width: 40px;
+    height: 32px;
+    border: 1px solid #1f3a57;
+    border-radius: 6px;
+    background: #0d1b2a;
+    cursor: pointer;
+    padding: 2px;
+  }
+
+  .color-val {
+    font-size: 0.8rem;
+    color: #6b8aab;
+    font-family: monospace;
   }
 
   .field {
@@ -205,7 +308,8 @@
     color: #6b8aab;
   }
 
-  .field input {
+  .field input[type="text"],
+  .field input[type="password"] {
     background: #0d1b2a;
     border: 1px solid #1f3a57;
     border-radius: 6px;

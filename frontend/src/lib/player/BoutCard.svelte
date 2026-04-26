@@ -3,10 +3,7 @@
   import { techniques } from '../../stores';
   import type { Bout, VideoFighter } from '../api/types';
   import { updateBout } from '../api/bouts';
-
-  const HIT_ZONES = [
-    'Голова', 'Тело', 'Рука левая', 'Рука правая', 'Нога левая', 'Нога правая',
-  ] as const;
+  import HitZonePicker from './HitZonePicker.svelte';
 
   type ResultType = 'hit' | 'miss' | 'blocked';
 
@@ -194,12 +191,7 @@
 
         <div class="field">
           <span class="field-lbl">Зона поражения</span>
-          <select class="field-sel" bind:value={zoneA}>
-            <option value="">—</option>
-            {#each HIT_ZONES as z}
-              <option value={z}>{z}</option>
-            {/each}
-          </select>
+          <HitZonePicker value={zoneA} onchange={(z) => { zoneA = z; }} />
         </div>
 
         <div class="field">
@@ -236,12 +228,7 @@
 
         <div class="field">
           <span class="field-lbl">Зона поражения</span>
-          <select class="field-sel" bind:value={zoneB}>
-            <option value="">—</option>
-            {#each HIT_ZONES as z}
-              <option value={z}>{z}</option>
-            {/each}
-          </select>
+          <HitZonePicker value={zoneB} onchange={(z) => { zoneB = z; }} />
         </div>
 
         <div class="field">

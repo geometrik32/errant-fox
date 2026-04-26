@@ -26,6 +26,15 @@
   let originX = $state(50);
   let originY = $state(50);
 
+  // Pan state (middle-mouse drag)
+  let panX = $state(0);
+  let panY = $state(0);
+  let panning = $state(false);
+  let panStartX = 0;
+  let panStartY = 0;
+  let panStartPanX = 0;
+  let panStartPanY = 0;
+
   $effect(() => { if (videoEl) videoEl.playbackRate = speed; });
   $effect(() => { if (videoEl) videoEl.volume = volume; });
 
@@ -85,12 +94,51 @@
 
   function handleWheel(e: WheelEvent) {
     e.preventDefault();
+    const prevZoom = zoom;
     zoom = Math.max(1, Math.min(4, zoom + (e.deltaY < 0 ? 0.1 : -0.1)));
+
     if (videoEl) {
       const r = videoEl.getBoundingClientRect();
       originX = ((e.clientX - r.left) / r.width) * 100;
       originY = ((e.clientY - r.top) / r.height) * 100;
     }
+
+    // Reset pan when fully zoomed out
+    if (zoom === 1) { panX = 0; panY = 0; }
+
+    void prevZoom;
+  }
+
+  function handleMousedown(e: MouseEvent) {
+    // Middle mouse button = button 1
+    if (e.button !== 1) return;
+    e.preventDefault();
+    panning = true;
+    panStartX = e.clientX;
+    panStartY = e.clientY;
+    panStartPanX = panX;
+    panStartPanY = panY;
+
+    function onMove(ev: MouseEvent) {
+      if (!panning) return;
+      panX = panStartPanX + ev.clientX - panStartX;
+      panY = panStartPanY + ev.clientY - panStartY;
+    }
+
+    function onUp() {
+      panning = false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
+  function handleClick(e: MouseEvent) {
+    // Don't toggle play on middle click
+    if (e.button !== 0) return;
+    togglePlay();
   }
 </script>
 
@@ -103,10 +151,13 @@
     ondurationchange={handleDurationChange}
     onplay={handlePlay}
     onpause={handlePause}
-    onclick={() => togglePlay()}
+    onclick={handleClick}
+    onmousedown={handleMousedown}
     onwheel={handleWheel}
     class="video"
-    style="transform: scale({zoom}); transform-origin: {originX}% {originY}%"
+    style:transform="translate({panX}px, {panY}px) scale({zoom})"
+    style:transform-origin="{originX}% {originY}%"
+    style:cursor={panning ? 'grabbing' : zoom > 1.05 ? 'grab' : 'pointer'}
     preload="metadata"
   ></video>
 
@@ -125,7 +176,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    cursor: pointer;
   }
 
   .video {
@@ -133,6 +183,7 @@
     height: 100%;
     object-fit: contain;
     display: block;
+    will-change: transform;
   }
 
   .zoom-badge {

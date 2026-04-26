@@ -108,11 +108,11 @@
       <div class="msg" style={c.reply_to_id !== null ? 'margin-left: 16px' : ''}>
         <div class="msg-head">
           <div class="avatar">
-            {#if c.author.avatar_url}
-              <img src={c.author.avatar_url} alt={c.author.display_name} />
-            {:else}
-              {c.author.display_name.charAt(0).toUpperCase()}
-            {/if}
+            <svg class="avatar-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <img src={c.author.avatar_url} alt={c.author.display_name} onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
           </div>
           <span class="name">{c.author.display_name}</span>
           <button class="ts" onclick={() => onseek?.(c.timestamp_ms)}>
@@ -206,13 +206,18 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.65rem;
-    font-weight: 700;
-    color: #a0b4c8;
+    color: #4a6280;
     flex-shrink: 0;
+    position: relative;
+  }
+
+  .avatar-icon {
+    position: absolute;
   }
 
   .avatar img {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;

@@ -3,12 +3,10 @@
   import { getVideos } from '../lib/api/videos';
   import Sidebar from '../lib/gallery/Sidebar.svelte';
   import VideoGrid from '../lib/gallery/VideoGrid.svelte';
-  import TagModal from '../lib/gallery/TagModal.svelte';
   import type { Video } from '../lib/api/types';
 
   let allVideos = $state<Video[]>([]);
   let filteredVideos = $state<Video[]>([]);
-  let tagTarget = $state<Video | null>(null);
   let loading = $state(true);
   let errorMsg = $state('');
 
@@ -62,16 +60,6 @@
     window.location.hash = '#/player/' + id;
   }
 
-  function handleTag(video: Video) {
-    tagTarget = video;
-  }
-
-  async function handleSaved() {
-    tagTarget = null;
-    await loadVideos();
-  }
-
-  // WebSocket: receives new_video events from the backend sync process
   let ws: WebSocket | null = null;
 
   function connectWS() {
@@ -79,9 +67,7 @@
 
     ws.onopen = () => {
       const token = localStorage.getItem('ef_token');
-      if (token) {
-        ws!.send(JSON.stringify({ token }));
-      }
+      if (token) ws!.send(JSON.stringify({ token }));
     };
 
     ws.onmessage = (e) => {
@@ -106,20 +92,16 @@
     };
 
     ws.onclose = () => {
-      // reconnect after 4s unless the component was destroyed
-      setTimeout(() => {
-        if (ws !== null) connectWS();
-      }, 4000);
+      setTimeout(() => { if (ws !== null) connectWS(); }, 4000);
     };
   }
 
   onMount(() => {
     loadVideos();
     connectWS();
-
     return () => {
       const socket = ws;
-      ws = null; // prevent reconnect
+      ws = null;
       socket?.close();
     };
   });
@@ -133,13 +115,9 @@
   <div class="gallery">
     <Sidebar videos={allVideos} onfilter={handleFilter} />
     <div class="content">
-      <VideoGrid videos={filteredVideos} onopen={handleOpen} ontag={handleTag} />
+      <VideoGrid videos={filteredVideos} onopen={handleOpen} />
     </div>
   </div>
-{/if}
-
-{#if tagTarget}
-  <TagModal video={tagTarget} onsaved={handleSaved} onclose={() => (tagTarget = null)} />
 {/if}
 
 <style>
@@ -160,11 +138,6 @@
     font-size: 0.9rem;
   }
 
-  .loading {
-    color: #4a6280;
-  }
-
-  .error {
-    color: #e05252;
-  }
+  .loading { color: #4a6280; }
+  .error { color: #e05252; }
 </style>

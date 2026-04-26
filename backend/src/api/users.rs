@@ -26,6 +26,7 @@ pub struct FighterDto {
     pub display_name: String,
     pub avatar_url: String,
     pub color: Option<String>,
+    pub is_admin: bool,
 }
 
 #[derive(Serialize)]
@@ -67,6 +68,7 @@ fn to_fighter_dto(u: &User) -> FighterDto {
         display_name: u.display_name.clone(),
         avatar_url: format!("/api/users/{}/avatar", u.id),
         color: u.color.clone(),
+        is_admin: u.is_admin,
     }
 }
 
@@ -87,6 +89,7 @@ fn to_me_dto(u: &User) -> UserMeDto {
 pub struct PatchMeRequest {
     pub display_name: Option<String>,
     pub password: Option<String>,
+    pub color: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -95,6 +98,15 @@ pub struct CreateUserRequest {
     pub display_name: String,
     pub password: String,
     pub is_admin: bool,
+    pub color: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct PatchAdminUserRequest {
+    pub display_name: Option<String>,
+    pub password: Option<String>,
+    pub color: Option<String>,
+    pub is_admin: Option<bool>,
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
@@ -246,7 +258,7 @@ pub async fn patch_me(
     let user_id = user.id.clone();
 
     let updated = tokio::task::spawn_blocking(move || {
-        use crate::db::schema::users::dsl::{display_name, id, password_hash, users};
+        use crate::db::schema::users::dsl::{color, display_name, id, password_hash, users};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -257,9 +269,14 @@ pub async fn patch_me(
         } else {
             user.password_hash
         };
+        let new_color = body.color.or(user.color);
 
         diesel::update(users.filter(id.eq(&user_id)))
-            .set((display_name.eq(&new_name), password_hash.eq(&new_hash)))
+            .set((
+                display_name.eq(&new_name),
+                password_hash.eq(&new_hash),
+                color.eq(&new_color),
+            ))
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -315,7 +332,6 @@ pub async fn upload_avatar(
 
 pub async fn get_avatar(
     State(state): State<AppState>,
-    _user: CurrentUser,
     Path(user_id): Path<String>,
 ) -> Result<Response, AppError> {
     let path = format!("{}/{}.jpg", state.avatars_dir, user_id);
@@ -357,7 +373,7 @@ pub async fn create_user(
             password_hash,
             is_admin: body.is_admin,
             avatar_path: None,
-            color: None,
+            color: body.color,
         };
 
         diesel::insert_into(users)
@@ -374,6 +390,104 @@ pub async fn create_user(
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
     Ok((StatusCode::CREATED, Json(to_me_dto(&created))))
+}
+
+pub async fn patch_admin_user(
+    State(state): State<AppState>,
+    CurrentUser(current): CurrentUser,
+    Path(user_id): Path<String>,
+    Json(body): Json<PatchAdminUserRequest>,
+) -> Result<Json<UserMeDto>, AppError> {
+    if !current.is_admin {
+        return Err(AppError::Forbidden);
+    }
+
+    let db = state.db.clone();
+
+    let updated = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::users::dsl::{color, display_name, id, is_admin, password_hash, users};
+
+        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let target_user = users
+            .filter(id.eq(&user_id))
+            .first::<User>(&mut conn)
+            .optional()
+            .map_err(|e| AppError::Internal(e.to_string()))?
+            .ok_or(AppError::NotFound)?;
+
+        let new_name = body.display_name.unwrap_or(target_user.display_name);
+        let new_hash = if let Some(pw) = body.password {
+            bcrypt::hash(&pw, bcrypt::DEFAULT_COST)
+                .map_err(|e| AppError::Internal(e.to_string()))?
+        } else {
+            target_user.password_hash
+        };
+        let new_color = body.color.or(target_user.color);
+        let new_is_admin = body.is_admin.unwrap_or(target_user.is_admin);
+
+        diesel::update(users.filter(id.eq(&user_id)))
+            .set((
+                display_name.eq(&new_name),
+                password_hash.eq(&new_hash),
+                color.eq(&new_color),
+                is_admin.eq(new_is_admin),
+            ))
+            .execute(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        users
+            .filter(id.eq(&user_id))
+            .first::<User>(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    Ok(Json(to_me_dto(&updated)))
+}
+
+pub async fn upload_avatar_for(
+    State(state): State<AppState>,
+    CurrentUser(current): CurrentUser,
+    Path(user_id): Path<String>,
+    mut multipart: Multipart,
+) -> Result<Json<serde_json::Value>, AppError> {
+    if !current.is_admin {
+        return Err(AppError::Forbidden);
+    }
+
+    let avatars_dir = state.avatars_dir.clone();
+
+    let mut file_data: Option<Vec<u8>> = None;
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?
+    {
+        if field.name().unwrap_or("") == "avatar" {
+            let data = field
+                .bytes()
+                .await
+                .map_err(|e| AppError::BadRequest(e.to_string()))?;
+            if data.len() > 2 * 1024 * 1024 {
+                return Err(AppError::BadRequest("Avatar too large (max 2 MB)".to_string()));
+            }
+            file_data = Some(data.to_vec());
+        }
+    }
+
+    let data = file_data
+        .ok_or_else(|| AppError::BadRequest("Missing 'avatar' field in form".to_string()))?;
+
+    let path = format!("{}/{}.jpg", avatars_dir, user_id);
+    tokio::fs::write(&path, data)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    Ok(Json(
+        serde_json::json!({ "avatar_url": format!("/api/users/{}/avatar", user_id) }),
+    ))
 }
 
 pub async fn delete_user(

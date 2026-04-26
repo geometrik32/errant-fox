@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fighters } from '../../stores';
   import type { Video } from '../api/types';
+  import { resolveColor } from '../api/types';
 
   interface FilterEvent {
     fighter_ids: string[];
@@ -58,11 +59,7 @@
           onchange={() => toggleFighter(fighter.id)}
         />
         <div class="fighter-info">
-          {#if fighter.avatar_url}
-            <img class="avatar" src={fighter.avatar_url} alt={fighter.display_name} />
-          {:else}
-            <div class="avatar-fallback">{fighter.display_name.charAt(0).toUpperCase()}</div>
-          {/if}
+          <div class="color-dot" style:background={resolveColor(fighter.id, fighter.color)}></div>
           <span class="fighter-name">{fighter.display_name}</span>
         </div>
         <span class="count">{count}</span>
@@ -153,27 +150,10 @@
     min-width: 0;
   }
 
-  .avatar {
-    width: 22px;
-    height: 22px;
+  .color-dot {
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
-    object-fit: cover;
-    flex-shrink: 0;
-    border: 1px solid #2a4f73;
-  }
-
-  .avatar-fallback {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: #1a3050;
-    border: 1px solid #2a4f73;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.65rem;
-    font-weight: 600;
-    color: #a0b4c8;
     flex-shrink: 0;
   }
 
