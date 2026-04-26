@@ -123,7 +123,7 @@
 <style>
   .gallery {
     display: flex;
-    gap: 28px;
+    gap: 16px;
     align-items: flex-start;
   }
 
