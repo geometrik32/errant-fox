@@ -5,8 +5,26 @@ use tokio::process::Command;
 
 use crate::{db::DbPool, errors::AppError};
 
-/// Generate 10 evenly-spaced preview frames (0.jpg … 9.jpg) via FFmpeg,
-/// then update preview_count=10 in the database.
+const N_FRAMES: u32 = 10;
+
+async fn get_duration(url: &str) -> f64 {
+    let out = Command::new("ffprobe")
+        .args([
+            "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "csv=p=0",
+            url,
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .await;
+    out.ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .and_then(|s| s.trim().parse::<f64>().ok())
+        .unwrap_or(60.0)
+}
+
 pub async fn generate_previews(
     video_id: &str,
     download_url: &str,
@@ -18,23 +36,26 @@ pub async fn generate_previews(
         .await
         .map_err(|e| AppError::Internal(format!("create_dir_all: {e}")))?;
 
-    // %d is 0-based thanks to -start_number 0
     let output_pattern = output_dir
         .join("%d.jpg")
         .to_string_lossy()
         .into_owned();
+
+    // Get video duration to compute even frame interval
+    let duration = get_duration(download_url).await;
+    // interval = duration / N so frames land at 0, interval, 2*interval, ...
+    let interval = (duration / N_FRAMES as f64).max(0.5);
+    // fps=1/interval means one output frame every `interval` seconds
+    let vf = format!("fps=1/{interval:.3},scale=480:-1");
 
     let output = Command::new("ffmpeg")
         .arg("-y")
         .arg("-i")
         .arg(download_url)
         .arg("-vf")
-        // select every 300th frame (≈10 s at 30 fps) then scale to 480 px wide
-        .arg("select=not(mod(n\\,300)),scale=480:-1")
-        .arg("-vsync")
-        .arg("0")
+        .arg(&vf)
         .arg("-frames:v")
-        .arg("10")
+        .arg(N_FRAMES.to_string())
         .arg("-start_number")
         .arg("0")
         .arg(&output_pattern)
@@ -58,7 +79,7 @@ pub async fn generate_previews(
         use diesel::prelude::*;
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
         diesel::update(videos::table.filter(videos::id.eq(&video_id)))
-            .set(videos::preview_count.eq(10))
+            .set(videos::preview_count.eq(N_FRAMES as i32))
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
         Ok::<(), AppError>(())
@@ -66,6 +87,6 @@ pub async fn generate_previews(
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
-    tracing::info!("previews generated for {log_id}");
+    tracing::info!("previews generated for {log_id} (duration={duration:.1}s, interval={interval:.3}s)");
     Ok(())
 }

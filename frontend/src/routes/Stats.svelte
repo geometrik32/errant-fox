@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fighters } from '../stores';
   import { getFighterBouts } from '../lib/api/fighters';
+  import { resolveColor } from '../lib/api/types';
   import FighterSidebar from '../lib/stats/FighterSidebar.svelte';
   import HistoryTable from '../lib/stats/HistoryTable.svelte';
   import QuickStats from '../lib/stats/QuickStats.svelte';
@@ -29,10 +30,19 @@
   };
 
   let tableFilters = $state<TableFilters>({ ...defaultFilters });
+  let zoneFilter = $state('');
 
   // The single derived store — all dashboard components read from this
   let filteredBouts = $derived.by(() => {
     let result = rawBouts;
+
+    if (zoneFilter) {
+      result = result.filter(b => {
+        const mz = (b.my_hit_zone ?? '').split(':')[0];
+        const oz = (b.opponent_hit_zone ?? '').split(':')[0];
+        return mz === zoneFilter || oz === zoneFilter;
+      });
+    }
 
     if (tableFilters.date)
       result = result.filter(b => b.video_date === tableFilters.date);
@@ -88,6 +98,7 @@
     selectedFighter = fighter;
     rawBouts = [];
     tableFilters = { ...defaultFilters };
+    zoneFilter = '';
     loading = true;
     errorMsg = '';
     try {
@@ -133,11 +144,14 @@
     {:else}
       <!-- Fighter header -->
       <div class="fighter-header">
-        {#if selectedFighter.avatar_url}
-          <img class="avatar" src={selectedFighter.avatar_url} alt={selectedFighter.display_name} />
-        {:else}
-          <div class="avatar-fallback">{selectedFighter.display_name.charAt(0).toUpperCase()}</div>
-        {/if}
+        <div class="avatar-wrap" style:background={resolveColor(selectedFighter.id, selectedFighter.color)}>
+          <svg class="avatar-icon" width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="1.5"/>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <img class="avatar-img" src={selectedFighter.avatar_url} alt={selectedFighter.display_name}
+            onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+        </div>
         <div class="fighter-info">
           <div class="fighter-name">{selectedFighter.display_name}</div>
           {#if firstBoutDate}
@@ -158,13 +172,13 @@
 
       <!-- Body silhouettes -->
       <div class="silhouettes-row">
-        <BodySilhouette bouts={filteredBouts} type="dealt" />
-        <BodySilhouette bouts={filteredBouts} type="received" />
+        <BodySilhouette bouts={filteredBouts} type="dealt" selectedZone={zoneFilter} onzoneclick={(z) => { zoneFilter = z; }} />
+        <BodySilhouette bouts={filteredBouts} type="received" selectedZone={zoneFilter} onzoneclick={(z) => { zoneFilter = z; }} />
       </div>
 
       <!-- History table -->
       <div class="table-section">
-        <div class="section-title">История боёв</div>
+        <div class="section-title">История сходов</div>
         <HistoryTable
           bouts={filteredBouts}
           filters={tableFilters}
@@ -232,28 +246,30 @@
     border-radius: 10px;
   }
 
-  .avatar {
+  .avatar-wrap {
     width: 54px;
     height: 54px;
     border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid #2a4f73;
+    border: 2px solid rgba(255,255,255,0.2);
     flex-shrink: 0;
-  }
-
-  .avatar-fallback {
-    width: 54px;
-    height: 54px;
-    border-radius: 50%;
-    background: #1a3050;
-    border: 2px solid #2a4f73;
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.4rem;
-    font-weight: 700;
-    color: #a0b4c8;
-    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .avatar-icon {
+    position: absolute;
+    pointer-events: none;
+  }
+
+  .avatar-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
   .fighter-name {

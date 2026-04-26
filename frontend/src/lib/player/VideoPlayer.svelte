@@ -136,9 +136,14 @@
   }
 
   function handleClick(e: MouseEvent) {
-    // Don't toggle play on middle click
     if (e.button !== 0) return;
     togglePlay();
+  }
+
+  function resetZoom() {
+    zoom = 1;
+    panX = 0;
+    panY = 0;
   }
 </script>
 
@@ -152,6 +157,7 @@
     onplay={handlePlay}
     onpause={handlePause}
     onclick={handleClick}
+    ondblclick={resetZoom}
     onmousedown={handleMousedown}
     onwheel={handleWheel}
     class="video"
@@ -162,7 +168,7 @@
   ></video>
 
   {#if zoom > 1.05}
-    <div class="zoom-badge">{zoom.toFixed(1)}×</div>
+    <button class="zoom-badge" onclick={resetZoom}>{zoom.toFixed(1)}×</button>
   {/if}
 </div>
 
@@ -196,7 +202,13 @@
     font-weight: 700;
     padding: 3px 8px;
     border-radius: 4px;
-    pointer-events: none;
+    border: none;
+    cursor: pointer;
     font-variant-numeric: tabular-nums;
+    transition: background 0.12s;
+  }
+
+  .zoom-badge:hover {
+    background: rgba(0, 0, 0, 0.85);
   }
 </style>

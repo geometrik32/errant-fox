@@ -1,11 +1,14 @@
 <script lang="ts">
-  import type { Bout, Comment } from '../api/types';
+  import type { Bout, Comment, VideoFighter } from '../api/types';
+  import { resolveColor } from '../api/types';
 
   interface Props {
     currentTime: number;
     duration: number;
     bouts?: Bout[];
     comments?: Comment[];
+    fighterA?: VideoFighter | null;
+    fighterB?: VideoFighter | null;
     playing?: boolean;
     looping?: boolean;
     speed?: number;
@@ -25,6 +28,8 @@
     duration,
     bouts = [],
     comments = [],
+    fighterA = null,
+    fighterB = null,
     playing = false,
     looping = false,
     speed = 1,
@@ -40,10 +45,16 @@
   }: Props = $props();
 
   const SPEEDS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
-  const BOUT_COLORS = [
-    '#e05252', '#5286e0', '#52c05a', '#e0b052',
-    '#a052e0', '#52d4d4', '#e08040', '#c052a0',
-  ];
+
+  function boutColor(b: Bout): string {
+    if (b.score_a > b.score_b) return resolveColor(fighterA?.id ?? 'a', fighterA?.color ?? null);
+    if (b.score_b > b.score_a) return resolveColor(fighterB?.id ?? 'b', fighterB?.color ?? null);
+    return '#c8d8e8';
+  }
+
+  function commentColor(c: Comment): string {
+    return resolveColor(c.author.id, (c.author as { color?: string | null }).color ?? null);
+  }
 
   function fmt(sec: number): string {
     const m = Math.floor(sec / 60);
@@ -90,7 +101,7 @@
     {#each comments as c (c.id)}
       <button
         class="c-dot"
-        style="left: {commentPos(c)}%"
+        style="left: {commentPos(c)}%; background: {commentColor(c)}"
         onclick={() => onseek?.(c.timestamp_ms)}
         title={c.text}
         aria-label="Комментарий: {c.text}"
@@ -120,7 +131,7 @@
     {#each bouts as b, i (b.id)}
       <button
         class="bout-seg"
-        style="left: {boutL(b)}%; width: {boutW(b)}%; --color: {BOUT_COLORS[i % BOUT_COLORS.length]}"
+        style="left: {boutL(b)}%; width: {boutW(b)}%; --color: {boutColor(b)}"
         onclick={() => onloop?.({ start: b.time_start_ms, end: b.time_end_ms })}
         aria-label="Сход {i + 1} — зациклить"
         title="Сход {i + 1}"

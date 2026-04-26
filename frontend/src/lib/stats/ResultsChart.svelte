@@ -11,20 +11,10 @@
   let canvas = $state<HTMLCanvasElement | undefined>(undefined);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let chart: any = null;
-  let opponentFilter = $state('');
-
-  // unique opponents in current bouts
-  let opponents = $derived.by(() => {
-    const map = new Map<string, string>();
-    for (const b of bouts) map.set(b.opponent_id, b.opponent_name);
-    return [...map.entries()].map(([id, name]) => ({ id, name }));
-  });
-
-  // aggregate per-video win/loss, filtered by opponent
-  function computeVideoResults(bouts: FighterBout[], opponentId: string) {
-    const filtered = opponentId ? bouts.filter(b => b.opponent_id === opponentId) : bouts;
+  // aggregate per-video win/loss
+  function computeVideoResults(bouts: FighterBout[]) {
     const videoMap = new Map<string, { date: string; my: number; opp: number }>();
-    for (const b of filtered) {
+    for (const b of bouts) {
       const v = videoMap.get(b.video_id);
       if (v) { v.my += b.my_score; v.opp += b.opponent_score; }
       else videoMap.set(b.video_id, { date: b.video_date, my: b.my_score, opp: b.opponent_score });
@@ -35,7 +25,7 @@
   }
 
   let winRate = $derived.by(() => {
-    const results = computeVideoResults(bouts, opponentFilter);
+    const results = computeVideoResults(bouts);
     if (!results.length) return null;
     const wins = results.filter(r => r.result === 1).length;
     return { wins, total: results.length, pct: Math.round(wins / results.length * 100) };
@@ -43,7 +33,7 @@
 
   $effect(() => {
     if (!canvas) return;
-    const results = computeVideoResults(bouts, opponentFilter);
+    const results = computeVideoResults(bouts);
     const labels = results.map(r => r.date);
     const data = results.map(r => r.result);
 
@@ -120,12 +110,6 @@
         </div>
       {/if}
     </div>
-    <select class="opp-select" bind:value={opponentFilter}>
-      <option value="">Все оппоненты</option>
-      {#each opponents as opp}
-        <option value={opp.id}>{opp.name}</option>
-      {/each}
-    </select>
   </div>
   <div class="chart-body">
     <canvas bind:this={canvas}></canvas>

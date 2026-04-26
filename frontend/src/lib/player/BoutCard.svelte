@@ -21,6 +21,8 @@
 
   // ── Form state ──────────────────────────────────────────────────────────────
 
+  let timeStartMs = $state(bout.time_start_ms);
+  let timeEndMs   = $state(bout.time_end_ms);
   let scoreA   = $state(bout.score_a);
   let scoreB   = $state(bout.score_b);
   let techAId  = $state<number | null>(bout.technique_a_id);
@@ -32,6 +34,8 @@
 
   // ── Committed snapshot (last saved) ─────────────────────────────────────────
 
+  let cTimeStart = $state(bout.time_start_ms);
+  let cTimeEnd   = $state(bout.time_end_ms);
   let cScoreA  = $state(bout.score_a);
   let cScoreB  = $state(bout.score_b);
   let cTechAId = $state<number | null>(bout.technique_a_id);
@@ -42,6 +46,7 @@
   let cResB    = $state<ResultType>((bout.result_b as ResultType | null) ?? 'hit');
 
   let dirty = $derived(
+    timeStartMs !== cTimeStart || timeEndMs !== cTimeEnd ||
     scoreA !== cScoreA || scoreB !== cScoreB ||
     techAId !== cTechAId || techBId !== cTechBId ||
     zoneA !== cZoneA || zoneB !== cZoneB ||
@@ -59,6 +64,8 @@
     const b = bout;
     const isOpen = expanded;
 
+    cTimeStart = b.time_start_ms;
+    cTimeEnd   = b.time_end_ms;
     cScoreA  = b.score_a;
     cScoreB  = b.score_b;
     cTechAId = b.technique_a_id;
@@ -69,6 +76,8 @@
     cResB    = (b.result_b as ResultType | null) ?? 'hit';
 
     if (!isOpen) {
+      timeStartMs = b.time_start_ms;
+      timeEndMs   = b.time_end_ms;
       scoreA  = b.score_a;
       scoreB  = b.score_b;
       techAId = b.technique_a_id;
@@ -90,6 +99,8 @@
     saveError = null;
     try {
       const updated = await updateBout(bout.id, {
+        time_start_ms: timeStartMs,
+        time_end_ms: timeEndMs,
         score_a: scoreA,
         score_b: scoreB,
         technique_a_id: techAId,
@@ -99,7 +110,8 @@
         result_a: resA,
         result_b: resB,
       });
-      // Advance committed to current form values
+      cTimeStart = timeStartMs;
+      cTimeEnd   = timeEndMs;
       cScoreA  = scoreA;
       cScoreB  = scoreB;
       cTechAId = techAId;
@@ -164,6 +176,18 @@
       </span>
       <span class="card-score">{scoreA} : {scoreB}</span>
       {#if dirty}<span class="dirty-dot" title="Несохранённые изменения"></span>{/if}
+    </div>
+
+    <!-- Time range row -->
+    <div class="time-row">
+      <div class="time-field">
+        <span class="field-lbl">Начало (мс)</span>
+        <input class="time-inp" type="number" min="0" bind:value={timeStartMs} aria-label="Начало схода" />
+      </div>
+      <div class="time-field">
+        <span class="field-lbl">Конец (мс)</span>
+        <input class="time-inp" type="number" min="0" bind:value={timeEndMs} aria-label="Конец схода" />
+      </div>
     </div>
 
     <!-- Two-column fighter form -->
@@ -344,6 +368,38 @@
     flex-shrink: 0;
     vertical-align: middle;
   }
+
+  /* ── Time row ───────────────────────────────────────────────────────────── */
+  .time-row {
+    display: flex;
+    gap: 8px;
+    padding: 8px 10px 0;
+  }
+
+  .time-field {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .time-inp {
+    width: 100%;
+    text-align: center;
+    background: #0a1628;
+    border: 1px solid #1a3050;
+    border-radius: 4px;
+    color: #a0b4c8;
+    font-size: 0.78rem;
+    padding: 4px 6px;
+    outline: none;
+    -moz-appearance: textfield;
+  }
+
+  .time-inp::-webkit-inner-spin-button,
+  .time-inp::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+  .time-inp:focus { border-color: #2a4f73; }
 
   /* ── Fighter grid ───────────────────────────────────────────────────────── */
   .fighters-grid {
