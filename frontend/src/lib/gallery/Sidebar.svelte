@@ -19,90 +19,272 @@
   let selectedIds = $state<Set<string>>(new Set());
   let dateFrom = $state('');
   let dateTo = $state('');
+  let collapsed = $state(false);
+  let dateMode = $state<'year' | 'classic'>('year');
+  let calYear = $state(new Date().getFullYear());
+  let selWeekStart = $state('');
+
+  const MONTHS_RU = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн',
+                     'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+
+  // Set of ISO Monday dates that have at least one video
+  let videoWeekSet = $derived.by(() => {
+    const s = new Set<string>();
+    for (const v of videos) {
+      if (v.date) s.add(isoWeekStart(v.date.slice(0, 10)));
+    }
+    return s;
+  });
+
+  // Years that have at least one video (for visual cue on year nav)
+  let videoYears = $derived.by(() => {
+    const s = new Set<number>();
+    for (const v of videos) {
+      const y = parseInt(v.date?.slice(0, 4) ?? '0');
+      if (y > 0) s.add(y);
+    }
+    return s;
+  });
+
+  function isoWeekStart(dateStr: string): string {
+    const d = new Date(dateStr + 'T12:00:00Z');
+    const dow = d.getUTCDay();
+    d.setUTCDate(d.getUTCDate() + (dow === 0 ? -6 : 1 - dow));
+    return d.toISOString().slice(0, 10);
+  }
+
+  function addDays(dateStr: string, n: number): string {
+    const d = new Date(dateStr + 'T12:00:00Z');
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+
+  // Returns ISO Monday dates of weeks whose Monday falls in the given month
+  function monthWeeks(year: number, month: number): string[] {
+    const result: string[] = [];
+    const first = new Date(Date.UTC(year, month, 1));
+    const last  = new Date(Date.UTC(year, month + 1, 0));
+    let d = new Date(first);
+    const dow = d.getUTCDay();
+    if (dow !== 1) d.setUTCDate(d.getUTCDate() + (dow === 0 ? 1 : 8 - dow));
+    while (d <= last) {
+      result.push(d.toISOString().slice(0, 10));
+      d.setUTCDate(d.getUTCDate() + 7);
+    }
+    return result;
+  }
+
+  function selectWeek(weekStart: string) {
+    if (selWeekStart === weekStart) {
+      selWeekStart = '';
+      dateFrom = '';
+      dateTo = '';
+    } else {
+      selWeekStart = weekStart;
+      dateFrom = weekStart;
+      dateTo = addDays(weekStart, 6);
+    }
+    emit();
+  }
+
+  function clearDate() {
+    selWeekStart = '';
+    dateFrom = '';
+    dateTo = '';
+    emit();
+  }
 
   function countForFighter(id: string): number {
-    return videos.filter(
-      (v) => v.fighter_a?.id === id || v.fighter_b?.id === id
-    ).length;
+    return videos.filter(v => v.fighter_a?.id === id || v.fighter_b?.id === id).length;
   }
 
   function toggleFighter(id: string) {
     const next = new Set(selectedIds);
-    if (next.has(id)) {
-      next.delete(id);
-    } else {
-      next.add(id);
-    }
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
     selectedIds = next;
     emit();
   }
 
   function emit() {
-    onfilter?.({
-      fighter_ids: [...selectedIds],
-      date_from: dateFrom,
-      date_to: dateTo,
-    });
+    onfilter?.({ fighter_ids: [...selectedIds], date_from: dateFrom, date_to: dateTo });
+  }
+
+  function formatWeekLabel(start: string): string {
+    const end = addDays(start, 6);
+    const s = new Date(start + 'T12:00:00Z');
+    const e = new Date(end   + 'T12:00:00Z');
+    const fmt = (d: Date) => `${d.getUTCDate()} ${MONTHS_RU[d.getUTCMonth()]}`;
+    return `${fmt(s)} — ${fmt(e)}`;
   }
 </script>
 
-<aside class="sidebar">
-  <section class="section">
-    <h3 class="section-title">Бойцы</h3>
-
-    {#each $fighters as fighter (fighter.id)}
-      {@const count = countForFighter(fighter.id)}
-      <label class="row">
-        <input
-          type="checkbox"
-          checked={selectedIds.has(fighter.id)}
-          onchange={() => toggleFighter(fighter.id)}
-        />
-        <div class="fighter-info">
-          <div class="color-dot" style:background={resolveColor(fighter.id, fighter.color)}></div>
-          <span class="fighter-name">{fighter.display_name}</span>
-        </div>
-        <span class="count">{count}</span>
-      </label>
-    {/each}
-
-    {#if $fighters.length === 0}
-      <p class="empty">Нет бойцов</p>
-    {/if}
-  </section>
-
-  <section class="section">
-    <h3 class="section-title">Дата</h3>
-    <div class="date-range">
-      <label class="date-row">
-        <span class="date-label">С</span>
-        <input
-          type="date"
-          class="date-input"
-          bind:value={dateFrom}
-          onchange={emit}
-        />
-      </label>
-      <label class="date-row">
-        <span class="date-label">По</span>
-        <input
-          type="date"
-          class="date-input"
-          bind:value={dateTo}
-          onchange={emit}
-        />
-      </label>
+{#if collapsed}
+  <div class="sidebar-slim">
+    <button class="slim-toggle" onclick={() => { collapsed = false; }} title="Развернуть фильтры">›</button>
+  </div>
+{:else}
+  <aside class="sidebar">
+    <!-- Header -->
+    <div class="sidebar-head">
+      <span class="head-title">Фильтры</span>
+      <button class="head-toggle" onclick={() => { collapsed = true; }} title="Свернуть">‹</button>
     </div>
-  </section>
-</aside>
+
+    <!-- Fighters -->
+    <section class="section">
+      <h3 class="section-title">Бойцы</h3>
+      {#each $fighters as fighter (fighter.id)}
+        {@const count = countForFighter(fighter.id)}
+        <label class="row">
+          <input type="checkbox" checked={selectedIds.has(fighter.id)} onchange={() => toggleFighter(fighter.id)} />
+          <div class="fighter-info">
+            <div class="color-dot" style:background={resolveColor(fighter.id, fighter.color)}></div>
+            <span class="fighter-name">{fighter.display_name}</span>
+          </div>
+          <span class="count">{count}</span>
+        </label>
+      {/each}
+      {#if $fighters.length === 0}
+        <p class="empty">Нет бойцов</p>
+      {/if}
+    </section>
+
+    <!-- Date filter -->
+    <section class="section">
+      <div class="section-title-row">
+        <h3 class="section-title">Дата</h3>
+        <button class="mode-btn" onclick={() => {
+          dateMode = dateMode === 'year' ? 'classic' : 'year';
+        }}>
+          {dateMode === 'year' ? 'Классический' : 'Год-вид'}
+        </button>
+      </div>
+
+      {#if selWeekStart && dateMode === 'year'}
+        <div class="active-week">
+          <span>{formatWeekLabel(selWeekStart)}</span>
+          <button class="clear-btn" onclick={clearDate} title="Сбросить">×</button>
+        </div>
+      {/if}
+
+      {#if dateMode === 'year'}
+        <!-- Year navigation -->
+        <div class="cal-nav">
+          <button class="cal-arrow" onclick={() => { calYear -= 1; }}>‹</button>
+          <span class="cal-year" class:has-videos={videoYears.has(calYear)}>{calYear}</span>
+          <button class="cal-arrow" onclick={() => { calYear += 1; }}>›</button>
+        </div>
+
+        <!-- Month grid -->
+        <div class="cal-months">
+          {#each Array.from({length: 12}, (_, i) => i) as month}
+            {@const weeks = monthWeeks(calYear, month)}
+            {#if weeks.length > 0}
+              <div class="cal-month">
+                <div class="cal-month-lbl">{MONTHS_RU[month]}</div>
+                <div class="cal-weeks">
+                  {#each weeks as week}
+                    <button
+                      class="cal-week"
+                      class:has-video={videoWeekSet.has(week)}
+                      class:selected={selWeekStart === week}
+                      onclick={() => selectWeek(week)}
+                      title={formatWeekLabel(week)}
+                    ></button>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+          {/each}
+        </div>
+      {:else}
+        <div class="date-range">
+          <label class="date-row">
+            <span class="date-label">С</span>
+            <input type="date" class="date-input" bind:value={dateFrom} onchange={emit} />
+          </label>
+          <label class="date-row">
+            <span class="date-label">По</span>
+            <input type="date" class="date-input" bind:value={dateTo} onchange={emit} />
+          </label>
+        </div>
+      {/if}
+    </section>
+  </aside>
+{/if}
 
 <style>
+  .sidebar-slim {
+    width: 22px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 4px;
+  }
+
+  .slim-toggle {
+    background: none;
+    border: 1px solid #1f3a57;
+    border-radius: 4px;
+    color: #4a6280;
+    width: 22px;
+    height: 28px;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    transition: color 0.12s, border-color 0.12s;
+  }
+
+  .slim-toggle:hover {
+    color: #a0b4c8;
+    border-color: #2a4f73;
+  }
+
   .sidebar {
     width: 216px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    gap: 28px;
+    gap: 24px;
+  }
+
+  .sidebar-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #1a3050;
+  }
+
+  .head-title {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #4a6280;
+  }
+
+  .head-toggle {
+    background: none;
+    border: 1px solid #1f3a57;
+    border-radius: 4px;
+    color: #4a6280;
+    width: 22px;
+    height: 22px;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.12s, border-color 0.12s;
+  }
+
+  .head-toggle:hover {
+    color: #a0b4c8;
+    border-color: #2a4f73;
   }
 
   .section {
@@ -117,9 +299,35 @@
     letter-spacing: 0.09em;
     text-transform: uppercase;
     color: #4a6280;
+    margin: 0 0 8px;
+  }
+
+  .section-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     margin-bottom: 8px;
   }
 
+  .section-title-row .section-title {
+    margin-bottom: 0;
+  }
+
+  .mode-btn {
+    background: none;
+    border: none;
+    color: #2a4f73;
+    font-size: 0.7rem;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.12s;
+  }
+
+  .mode-btn:hover {
+    color: #6b8aab;
+  }
+
+  /* Fighter rows */
   .row {
     display: flex;
     align-items: center;
@@ -130,9 +338,7 @@
     transition: background 0.12s;
   }
 
-  .row:hover {
-    background: #1a3050;
-  }
+  .row:hover { background: #1a3050; }
 
   .row input[type="checkbox"] {
     width: 14px;
@@ -177,6 +383,131 @@
     padding: 4px 6px;
   }
 
+  /* Active week badge */
+  .active-week {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(219, 132, 31, 0.1);
+    border: 1px solid rgba(219, 132, 31, 0.3);
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-size: 0.74rem;
+    color: #DB841F;
+    margin-bottom: 6px;
+  }
+
+  .clear-btn {
+    background: none;
+    border: none;
+    color: #DB841F;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0 0 0 6px;
+    opacity: 0.7;
+    transition: opacity 0.12s;
+  }
+
+  .clear-btn:hover { opacity: 1; }
+
+  /* Year calendar */
+  .cal-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .cal-arrow {
+    background: none;
+    border: 1px solid #1f3a57;
+    border-radius: 4px;
+    color: #4a6280;
+    width: 22px;
+    height: 22px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.12s, border-color 0.12s;
+  }
+
+  .cal-arrow:hover {
+    color: #a0b4c8;
+    border-color: #2a4f73;
+  }
+
+  .cal-year {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #4a6280;
+    letter-spacing: 0.04em;
+  }
+
+  .cal-year.has-videos {
+    color: #a0b4c8;
+  }
+
+  .cal-months {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .cal-month {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .cal-month-lbl {
+    font-size: 0.66rem;
+    color: #4a6280;
+    width: 26px;
+    flex-shrink: 0;
+    text-align: right;
+  }
+
+  .cal-weeks {
+    display: flex;
+    gap: 3px;
+    flex-wrap: wrap;
+  }
+
+  .cal-week {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    border: none;
+    background: #0f2035;
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.1s, outline 0.1s;
+    outline: 1px solid transparent;
+  }
+
+  .cal-week:hover {
+    background: #1a3050;
+    outline-color: #2a4f73;
+  }
+
+  .cal-week.has-video {
+    background: rgba(219, 132, 31, 0.45);
+  }
+
+  .cal-week.has-video:hover {
+    background: rgba(219, 132, 31, 0.65);
+  }
+
+  .cal-week.selected {
+    background: #DB841F !important;
+    outline-color: #DB841F;
+  }
+
+  /* Classic date pickers */
   .date-range {
     display: flex;
     flex-direction: column;
@@ -209,9 +540,7 @@
     min-width: 0;
   }
 
-  .date-input:focus {
-    border-color: #2a4f73;
-  }
+  .date-input:focus { border-color: #2a4f73; }
 
   .date-input::-webkit-calendar-picker-indicator {
     filter: invert(0.5);
