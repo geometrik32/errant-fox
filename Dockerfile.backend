@@ -22,8 +22,6 @@ WORKDIR /app
 
 COPY --from=builder /app/target/release/errant_fox ./errant_fox
 
-RUN mkdir -p /data/db /data/previews /data/avatars
-
 EXPOSE 8080
 
-CMD ["./errant_fox"]
+CMD mkdir -p /data/db /data/previews /data/avatars && ./errant_fox
