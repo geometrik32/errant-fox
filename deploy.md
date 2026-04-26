@@ -107,12 +107,13 @@ sqlite3 /data/db/errant_fox.db
 
 В SQLite-оболочке:
 ```sql
-INSERT INTO users (id, username, password_hash, role)
+INSERT INTO users (id, username, display_name, password_hash, is_admin)
 VALUES (
   lower(hex(randomblob(16))),
   'admin',
+  'Admin',
   '$2b$12$ВСТАВЬТЕ_ХЕШ_СЮДА',
-  'admin'
+  1
 );
 .quit
 ```
