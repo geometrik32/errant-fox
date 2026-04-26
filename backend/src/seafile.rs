@@ -105,6 +105,22 @@ impl SeafileClient {
         Ok(files)
     }
 
+    /// Fetch a byte range from a file, proxying through a fresh download URL.
+    /// Returns the raw reqwest Response so the caller can stream it.
+    pub async fn fetch_range(
+        &self,
+        path: &str,
+        range: Option<&str>,
+    ) -> Result<reqwest::Response> {
+        let download_url = self.get_download_url(path).await?;
+        let mut req = self.client.get(&download_url);
+        if let Some(r) = range {
+            req = req.header("Range", r);
+        }
+        let resp = req.send().await?.error_for_status()?;
+        Ok(resp)
+    }
+
     /// Get a temporary download URL for a file.
     /// `path` is relative to repo root without a leading slash (e.g. "Folder/video.mp4").
     pub async fn get_download_url(&self, path: &str) -> Result<String> {

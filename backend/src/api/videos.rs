@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, Query, State},
-    http::{header, StatusCode},
+    http::{header, HeaderMap, StatusCode},
     response::IntoResponse,
     Json,
 };
@@ -409,11 +409,7 @@ pub async fn get_video(
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
-    let stream_url = state
-        .seafile
-        .get_download_url(&seafile_path)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    let stream_url = format!("/api/videos/{}/stream", dto.id);
 
     Ok(Json(VideoFullDto { stream_url, ..dto }))
 }
@@ -477,11 +473,7 @@ pub async fn patch_video(
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
-    let stream_url = state
-        .seafile
-        .get_download_url(&seafile_path)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    let stream_url = format!("/api/videos/{}/stream", dto.id);
 
     Ok(Json(VideoFullDto { stream_url, ..dto }))
 }
@@ -545,4 +537,55 @@ pub async fn get_preview_frame(
         .map_err(|_| AppError::NotFound)?;
 
     Ok(([(header::CONTENT_TYPE, "image/jpeg")], bytes).into_response())
+}
+
+// ── Video stream proxy ────────────────────────────────────────────────────────
+
+pub async fn stream_video(
+    State(state): State<AppState>,
+    _user: CurrentUser,
+    Path(video_id): Path<String>,
+    req_headers: HeaderMap,
+) -> Result<axum::response::Response, AppError> {
+    let db = state.db.clone();
+
+    let seafile_path = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::videos;
+        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+        let video = videos::table
+            .filter(videos::id.eq(&video_id))
+            .first::<Video>(&mut conn)
+            .optional()
+            .map_err(|e| AppError::Internal(e.to_string()))?
+            .ok_or(AppError::NotFound)?;
+        Ok::<String, AppError>(video.seafile_path)
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    let range = req_headers
+        .get(header::RANGE)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    let seafile_resp = state
+        .seafile
+        .fetch_range(&seafile_path, range.as_deref())
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let status = seafile_resp.status();
+    let mut builder = axum::response::Response::builder().status(status);
+
+    for key in &["content-type", "content-length", "content-range"] {
+        if let Some(val) = seafile_resp.headers().get(*key) {
+            builder = builder.header(*key, val);
+        }
+    }
+    builder = builder.header("accept-ranges", "bytes");
+
+    let body = axum::body::Body::from_stream(seafile_resp.bytes_stream());
+    builder
+        .body(body)
+        .map_err(|e| AppError::Internal(e.to_string()))
 }
