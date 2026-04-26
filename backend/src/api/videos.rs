@@ -133,7 +133,7 @@ fn build_video_full(
     bouts: Vec<Bout>,
     comments: Vec<Comment>,
     users_map: &HashMap<String, User>,
-    seafile_url: &str,
+    stream_url: String,
 ) -> VideoFullDto {
     let fighter_a = video
         .fighter_a_id
@@ -145,8 +145,6 @@ fn build_video_full(
         .as_ref()
         .and_then(|id| users_map.get(id))
         .map(fighter_dto);
-
-    let stream_url = format!("{}/seafhttp/files/{}", seafile_url, video.seafile_path);
 
     let comment_dtos = comments
         .iter()
@@ -367,9 +365,8 @@ pub async fn get_video(
     Path(video_id): Path<String>,
 ) -> Result<Json<VideoFullDto>, AppError> {
     let db = state.db.clone();
-    let seafile_url = state.seafile.url.clone();
 
-    let dto = tokio::task::spawn_blocking(move || {
+    let (dto, seafile_path) = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{bouts, comments, videos};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
@@ -380,6 +377,8 @@ pub async fn get_video(
             .optional()
             .map_err(|e| AppError::Internal(e.to_string()))?
             .ok_or(AppError::NotFound)?;
+
+        let seafile_path = video.seafile_path.clone();
 
         let video_bouts = bouts::table
             .filter(bouts::video_id.eq(&video_id))
@@ -395,18 +394,26 @@ pub async fn get_video(
 
         let users_map = load_users_for_video(&video, &video_comments, &mut conn)?;
 
-        Ok(build_video_full(
+        let dto = build_video_full(
             &video,
             video_bouts,
             video_comments,
             &users_map,
-            &seafile_url,
-        ))
+            String::new(),
+        );
+
+        Ok::<_, AppError>((dto, seafile_path))
     })
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
-    Ok(Json(dto))
+    let stream_url = state
+        .seafile
+        .get_download_url(&seafile_path)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    Ok(Json(VideoFullDto { stream_url, ..dto }))
 }
 
 pub async fn patch_video(
@@ -416,9 +423,8 @@ pub async fn patch_video(
     Json(body): Json<PatchVideoRequest>,
 ) -> Result<Json<VideoFullDto>, AppError> {
     let db = state.db.clone();
-    let seafile_url = state.seafile.url.clone();
 
-    let dto = tokio::task::spawn_blocking(move || {
+    let (dto, seafile_path) = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{bouts, comments, videos};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
@@ -440,6 +446,8 @@ pub async fn patch_video(
             .first::<Video>(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
+        let seafile_path = video.seafile_path.clone();
+
         let video_bouts = bouts::table
             .filter(bouts::video_id.eq(&video_id))
             .order(bouts::order_index.asc())
@@ -454,40 +462,15 @@ pub async fn patch_video(
 
         let users_map = load_users_for_video(&video, &video_comments, &mut conn)?;
 
-        Ok(build_video_full(
+        let dto = build_video_full(
             &video,
             video_bouts,
             video_comments,
             &users_map,
-            &seafile_url,
-        ))
-    })
-    .await
-    .map_err(|e| AppError::Internal(e.to_string()))??;
+            String::new(),
+        );
 
-    Ok(Json(dto))
-}
-
-// ── Seafile stream & previews ──────────────────────────────────────────────────
-
-pub async fn get_stream(
-    State(state): State<AppState>,
-    _user: CurrentUser,
-    Path(video_id): Path<String>,
-) -> Result<Json<serde_json::Value>, AppError> {
-    let db = state.db.clone();
-    let vid_clone = video_id.clone();
-
-    let seafile_path = tokio::task::spawn_blocking(move || {
-        use crate::db::schema::videos;
-        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
-        let video = videos::table
-            .filter(videos::id.eq(&vid_clone))
-            .first::<Video>(&mut conn)
-            .optional()
-            .map_err(|e| AppError::Internal(e.to_string()))?
-            .ok_or(AppError::NotFound)?;
-        Ok::<String, AppError>(video.seafile_path)
+        Ok::<_, AppError>((dto, seafile_path))
     })
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
@@ -498,8 +481,10 @@ pub async fn get_stream(
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    Ok(Json(serde_json::json!({ "stream_url": stream_url })))
+    Ok(Json(VideoFullDto { stream_url, ..dto }))
 }
+
+// ── Seafile previews ──────────────────────────────────────────────────────────
 
 pub async fn get_preview_frame(
     State(state): State<AppState>,

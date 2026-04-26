@@ -6,7 +6,6 @@ use serde::Deserialize;
 
 pub struct SeafileClient {
     pub url: String,
-    pub repo_id: String,
     token: String,
     client: Client,
 }
@@ -26,57 +25,90 @@ pub struct FileInfo {
     pub size: Option<i64>,
 }
 
+#[derive(Deserialize)]
+struct DirResponse {
+    dirent_list: Vec<serde_json::Value>,
+}
+
 impl SeafileClient {
-    pub fn new(url: String, token: String, repo_id: String) -> Arc<Self> {
+    pub fn new(url: String, token: String) -> Arc<Self> {
         Arc::new(Self {
             url,
-            repo_id,
             token,
             client: Client::new(),
         })
     }
 
     fn auth_header(&self) -> String {
-        format!("Seafile {}", self.token)
+        format!("Bearer {}", self.token)
     }
 
     /// List top-level folders in the repo root.
     pub async fn list_folders(&self) -> Result<Vec<FolderInfo>> {
-        let url = format!("{}/api2/repos/{}/dir/", self.url, self.repo_id);
-        let items: Vec<FolderInfo> = self
+        let url = format!("{}/api/v2.1/via-repo-token/dir/", self.url);
+        let resp: DirResponse = self
             .client
             .get(&url)
-            .query(&[("p", "/")])
+            .query(&[("path", "/")])
             .header("Authorization", self.auth_header())
             .send()
             .await?
             .error_for_status()?
             .json()
             .await?;
-        Ok(items.into_iter().filter(|i| i.entry_type == "dir").collect())
+
+        let folders = resp
+            .dirent_list
+            .into_iter()
+            .filter_map(|v| {
+                let entry_type = v["type"].as_str()?.to_string();
+                let name = v["name"].as_str()?.to_string();
+                if entry_type == "dir" {
+                    Some(FolderInfo { name, entry_type })
+                } else {
+                    None
+                }
+            })
+            .collect();
+        Ok(folders)
     }
 
     /// List files inside a folder (folder = bare name, no leading slash).
     pub async fn list_files(&self, folder: &str) -> Result<Vec<FileInfo>> {
-        let url = format!("{}/api2/repos/{}/dir/", self.url, self.repo_id);
+        let url = format!("{}/api/v2.1/via-repo-token/dir/", self.url);
         let path = format!("/{}", folder);
-        let items: Vec<FileInfo> = self
+        let resp: DirResponse = self
             .client
             .get(&url)
-            .query(&[("p", path.as_str())])
+            .query(&[("path", path.as_str())])
             .header("Authorization", self.auth_header())
             .send()
             .await?
             .error_for_status()?
             .json()
             .await?;
-        Ok(items.into_iter().filter(|i| i.entry_type == "file").collect())
+
+        let files = resp
+            .dirent_list
+            .into_iter()
+            .filter_map(|v| {
+                let entry_type = v["type"].as_str()?.to_string();
+                let name = v["name"].as_str()?.to_string();
+                if entry_type == "file" {
+                    let size = v["size"].as_i64();
+                    Some(FileInfo { name, entry_type, size })
+                } else {
+                    None
+                }
+            })
+            .collect();
+        Ok(files)
     }
 
-    /// Get a 1-hour temporary download URL for a file.
+    /// Get a temporary download URL for a file.
     /// `path` is relative to repo root without a leading slash (e.g. "Folder/video.mp4").
     pub async fn get_download_url(&self, path: &str) -> Result<String> {
-        let url = format!("{}/api2/repos/{}/file/", self.url, self.repo_id);
+        let url = format!("{}/api/v2.1/via-repo-token/download-link/", self.url);
         let api_path = if path.starts_with('/') {
             path.to_string()
         } else {
@@ -85,7 +117,7 @@ impl SeafileClient {
         let download_url: String = self
             .client
             .get(&url)
-            .query(&[("p", api_path.as_str()), ("reuse", "1")])
+            .query(&[("path", api_path.as_str())])
             .header("Authorization", self.auth_header())
             .send()
             .await?

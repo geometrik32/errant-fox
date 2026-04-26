@@ -5,7 +5,6 @@ pub struct Config {
     pub jwt_secret: String,
     pub seafile_url: String,
     pub seafile_token: String,
-    pub seafile_repo_id: String,
     pub previews_dir: String,
     pub avatars_dir: String,
     pub server_port: u16,
@@ -20,7 +19,6 @@ impl Config {
             jwt_secret: required("JWT_SECRET"),
             seafile_url: required("SEAFILE_URL"),
             seafile_token: required("SEAFILE_TOKEN"),
-            seafile_repo_id: required("SEAFILE_REPO_ID"),
             previews_dir: required("PREVIEWS_DIR"),
             avatars_dir: required("AVATARS_DIR"),
             server_port: required("SERVER_PORT")
