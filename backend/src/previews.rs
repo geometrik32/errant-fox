@@ -24,7 +24,7 @@ pub async fn generate_previews(
         .to_string_lossy()
         .into_owned();
 
-    let status = Command::new("ffmpeg")
+    let output = Command::new("ffmpeg")
         .arg("-y")
         .arg("-i")
         .arg(download_url)
@@ -39,12 +39,14 @@ pub async fn generate_previews(
         .arg("0")
         .arg(&output_pattern)
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
+        .stderr(Stdio::piped())
+        .output()
         .await
         .map_err(|e| AppError::Internal(format!("ffmpeg spawn: {e}")))?;
 
-    if !status.success() {
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        tracing::error!("ffmpeg failed for {video_id}:\n{stderr}");
         return Err(AppError::Internal("ffmpeg exited with non-zero status".to_string()));
     }
 
