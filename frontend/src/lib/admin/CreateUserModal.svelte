@@ -295,16 +295,13 @@
               <!-- Collapsed row -->
               <div class="user-info">
                 <div class="user-dot" style:background={resolveColor(f.id, f.color)}></div>
-                {#if f.avatar_url}
-                  <img class="user-avatar" src={f.avatar_url} alt={f.display_name} />
-                {:else}
-                  <div class="user-avatar-placeholder">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5"/>
-                      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                    </svg>
-                  </div>
-                {/if}
+                <div class="user-avatar-wrap">
+                  <svg class="user-avatar-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="1.5"/>
+                    <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+                  </svg>
+                  <img class="user-avatar-img" src={f.avatar_url} alt={f.display_name} onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                </div>
                 <div class="user-names">
                   <span class="user-display">{f.display_name}</span>
                   <span class="user-login">@{f.username}{f.is_admin ? ' · Адм' : ''}</span>
@@ -572,26 +569,31 @@
     flex-shrink: 0;
   }
 
-  .user-avatar {
+  .user-avatar-wrap {
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    object-fit: cover;
-    flex-shrink: 0;
-    border: 1px solid #2a4f73;
-  }
-
-  .user-avatar-placeholder {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: #1a3050;
+    background: #1f3a57;
     border: 1px solid #2a4f73;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #4a6280;
+    position: relative;
     flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .user-avatar-icon {
+    position: absolute;
+    pointer-events: none;
+  }
+
+  .user-avatar-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
   .user-names {

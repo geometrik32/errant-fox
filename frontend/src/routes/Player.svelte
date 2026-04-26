@@ -26,6 +26,18 @@
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let player: any = $state(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let judgingPanel: any = $state(null);
+
+  let layoutEl: HTMLElement | null = $state(null);
+
+  async function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+    } else {
+      await layoutEl?.requestFullscreen();
+    }
+  }
 
   // Live data that Timeline reads (updated by JudgingPanel + Chat via WS)
   let liveBouts = $state<Bout[]>([]);
@@ -51,9 +63,30 @@
   function handleKeydown(e: KeyboardEvent) {
     const tag = (e.target as HTMLElement).tagName.toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
-    if (e.code === 'Space') { e.preventDefault(); player?.togglePlay(); }
-    else if (e.code === 'KeyX') { e.preventDefault(); player?.stepForward(); }
-    else if (e.code === 'KeyZ') { e.preventDefault(); player?.stepBackward(); }
+
+    if (e.code === 'Space') {
+      e.preventDefault(); player?.togglePlay();
+    } else if (e.code === 'KeyX') {
+      e.preventDefault(); player?.stepForward();
+    } else if (e.code === 'KeyZ') {
+      e.preventDefault(); player?.stepBackward();
+    } else if (e.code === 'ArrowLeft') {
+      e.preventDefault(); player?.seekTo(Math.max(0, (currentTime - 2) * 1000));
+    } else if (e.code === 'ArrowRight') {
+      e.preventDefault(); player?.seekTo(Math.min(duration, currentTime + 2) * 1000);
+    } else if (e.code === 'KeyC') {
+      e.preventDefault(); judgingPanel?.triggerMark();
+    } else if (e.code === 'KeyF') {
+      e.preventDefault(); toggleFullscreen();
+    } else if (e.code === 'KeyA') {
+      e.preventDefault();
+      const s = speed === 0.2 ? 1 : 0.2;
+      speed = s; player?.setSpeed(s);
+    } else if (e.code === 'KeyS') {
+      e.preventDefault();
+      const s = speed === 2 ? 1 : 2;
+      speed = s; player?.setSpeed(s);
+    }
   }
 </script>
 
@@ -64,7 +97,7 @@
 {:else if loadError}
   <div class="state-msg error">{loadError}</div>
 {:else if video}
-  <div class="layout">
+  <div class="layout" bind:this={layoutEl}>
 
     <div class="cols">
 
@@ -100,6 +133,7 @@
       {#if showJudging}
         <div class="col col-left">
           <JudgingPanel
+            bind:this={judgingPanel}
             {video}
             {currentTime}
             onboutschange={(b) => { liveBouts = b; }}

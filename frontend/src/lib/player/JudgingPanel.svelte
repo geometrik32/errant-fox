@@ -4,6 +4,7 @@
   import type { VideoFull, Bout, VideoFighter } from '../api/types';
   import { resolveColor } from '../api/types';
   import { createBout } from '../api/bouts';
+  import { patchVideo } from '../api/videos';
   import BoutCard from './BoutCard.svelte';
 
   interface Props {
@@ -30,11 +31,33 @@
     $fighters.find(f => f.id === fighterBId) as VideoFighter | null ?? null
   );
 
+  // ── Fighter save ─────────────────────────────────────────────────────────
+
+  async function saveFighters() {
+    try {
+      await patchVideo(video.id, {
+        fighter_a_id: fighterAId || null,
+        fighter_b_id: fighterBId || null,
+      });
+    } catch (e) {
+      console.error('Failed to save fighters:', e);
+    }
+  }
+
   // ── START / FINISH ───────────────────────────────────────────────────────
 
   let startTime = $state<number | null>(null);
   let finishing = $state(false);
   let finishError = $state<string | null>(null);
+
+  export function triggerMark(): void {
+    if (startTime === null) {
+      startTime = currentTime;
+      finishError = null;
+    } else {
+      handleFinish();
+    }
+  }
 
   async function handleFinish() {
     if (startTime === null) return;
@@ -160,7 +183,7 @@
         style:color={activeFighterA ? resolveColor(activeFighterA.id, activeFighterA.color) : '#6fa0e0'}
         style:border-color={activeFighterA ? resolveColor(activeFighterA.id, activeFighterA.color) + '55' : 'rgba(82,134,224,0.3)'}
       >A</span>
-      <select class="fighter-sel" bind:value={fighterAId} aria-label="Боец A">
+      <select class="fighter-sel" bind:value={fighterAId} onchange={saveFighters} aria-label="Боец A">
         <option value="">— Боец A —</option>
         {#each $fighters as f (f.id)}
           <option value={f.id}>{f.display_name}</option>
@@ -174,7 +197,7 @@
         style:color={activeFighterB ? resolveColor(activeFighterB.id, activeFighterB.color) : '#e08080'}
         style:border-color={activeFighterB ? resolveColor(activeFighterB.id, activeFighterB.color) + '55' : 'rgba(224,82,82,0.3)'}
       >B</span>
-      <select class="fighter-sel" bind:value={fighterBId} aria-label="Боец B">
+      <select class="fighter-sel" bind:value={fighterBId} onchange={saveFighters} aria-label="Боец B">
         <option value="">— Боец B —</option>
         {#each $fighters as f (f.id)}
           <option value={f.id}>{f.display_name}</option>
