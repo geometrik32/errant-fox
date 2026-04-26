@@ -543,7 +543,6 @@ pub async fn get_preview_frame(
 
 pub async fn stream_video(
     State(state): State<AppState>,
-    _user: CurrentUser,
     Path(video_id): Path<String>,
     req_headers: HeaderMap,
 ) -> Result<axum::response::Response, AppError> {
