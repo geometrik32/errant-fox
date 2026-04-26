@@ -4,7 +4,7 @@ export interface User {
   display_name: string;
   is_admin: boolean;
   avatar_url: string;
-  color?: string;
+  color: string | null;
 }
 
 export interface Fighter {
@@ -12,7 +12,15 @@ export interface Fighter {
   username: string;
   display_name: string;
   avatar_url: string;
-  color: string;
+  color: string | null;
+  is_admin: boolean;
+}
+
+export function resolveColor(id: string, color: string | null | undefined): string {
+  if (color) return color;
+  let hash = 0;
+  for (const ch of id) hash = (hash * 31 + ch.charCodeAt(0)) & 0x7fffffff;
+  return `hsl(${hash % 360}, 55%, 48%)`;
 }
 
 export interface FighterBout {
@@ -40,6 +48,7 @@ export interface VideoFighter {
   id: string;
   display_name: string;
   avatar_url: string;
+  color: string | null;
 }
 
 export interface Video {

@@ -17,9 +17,22 @@ export async function getMe(): Promise<User> {
   return apiFetch<User>('/users/me');
 }
 
-export async function patchMe(data: { display_name?: string; password?: string }): Promise<User> {
+export async function patchMe(data: { display_name?: string; password?: string; color?: string }): Promise<User> {
   return apiFetch<User>('/users/me', {
     method: 'PATCH',
     body: JSON.stringify(data),
   });
+}
+
+export async function uploadMyAvatar(file: File): Promise<{ avatar_url: string }> {
+  const token = localStorage.getItem('ef_token');
+  const form = new FormData();
+  form.append('avatar', file);
+  const res = await fetch('/api/users/me/avatar', {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  if (!res.ok) throw new Error(`Ошибка ${res.status}: ${await res.text().catch(() => '')}`);
+  return res.json();
 }

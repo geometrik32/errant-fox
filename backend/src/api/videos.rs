@@ -24,6 +24,7 @@ pub struct VideoFighterDto {
     pub id: String,
     pub display_name: String,
     pub avatar_url: String,
+    pub color: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -108,6 +109,7 @@ fn fighter_dto(u: &User) -> VideoFighterDto {
         id: u.id.clone(),
         display_name: u.display_name.clone(),
         avatar_url: format!("/api/users/{}/avatar", u.id),
+        color: u.color.clone(),
     }
 }
 
@@ -488,7 +490,6 @@ pub async fn patch_video(
 
 pub async fn get_preview_frame(
     State(state): State<AppState>,
-    _user: CurrentUser,
     Path((video_id, frame)): Path<(String, u32)>,
 ) -> Result<axum::response::Response, AppError> {
     let db = state.db.clone();

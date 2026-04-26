@@ -1,5 +1,6 @@
 <script lang="ts">
   import { token, currentUser } from '../../stores';
+  import { resolveColor } from '../api/types';
   import CreateUserModal from '../admin/CreateUserModal.svelte';
   import TechniquesModal from '../admin/TechniquesModal.svelte';
   import ProfileModal from './ProfileModal.svelte';
@@ -44,11 +45,7 @@
     }
   });
 
-  let avatarFallback = $derived(
-    $currentUser?.display_name?.charAt(0).toUpperCase() ?? '?'
-  );
-
-  let avatarColor = $derived($currentUser?.color ?? '#1f3a57');
+  let avatarColor = $derived(resolveColor($currentUser?.id ?? '', $currentUser?.color ?? null));
 </script>
 
 <header class="header">
@@ -88,11 +85,11 @@
       aria-expanded={dropdownOpen}
     >
       <div class="avatar" style:background={avatarColor}>
-        {#if $currentUser?.avatar_url}
-          <img src={$currentUser.avatar_url} alt={$currentUser.display_name} />
-        {:else}
-          <span>{avatarFallback}</span>
-        {/if}
+        <svg class="avatar-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="1.5"/>
+          <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <img src={$currentUser?.avatar_url} alt={$currentUser?.display_name} onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
       </div>
     </button>
 
@@ -233,13 +230,18 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: #a0b4c8;
     flex-shrink: 0;
+    position: relative;
+  }
+
+  .avatar-icon {
+    position: absolute;
+    pointer-events: none;
   }
 
   .avatar img {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;

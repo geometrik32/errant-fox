@@ -8,7 +8,10 @@
 
   let { bouts, type }: Props = $props();
 
-  const ZONES = ['Голова', 'Тело', 'Рука правая', 'Рука левая', 'Нога правая', 'Нога левая'] as const;
+  const ZONES = [
+    'Голова', 'Шея', 'Плечи', 'Предплечья', 'Кисти',
+    'Тело', 'Таз', 'Бедро', 'Голень',
+  ] as const;
 
   let counts = $derived.by(() => {
     const map = new Map<string, number>(ZONES.map(z => [z, 0]));
@@ -27,14 +30,14 @@
 
   function opacity(zone: string): number {
     const c = counts.get(zone) ?? 0;
-    return c / maxCount * 0.9 + 0.1;
+    return c / maxCount * 0.85 + 0.12;
   }
 
   function fill(zone: string): string {
     return `rgba(219, 132, 31, ${opacity(zone).toFixed(2)})`;
   }
 
-  function countLabel(zone: string): number {
+  function cnt(zone: string): number {
     return counts.get(zone) ?? 0;
   }
 </script>
@@ -44,77 +47,79 @@
     {type === 'dealt' ? 'Нанесённый урон' : 'Полученный урон'}
   </div>
   <div class="silhouette-wrap">
-    <svg viewBox="0 0 160 290" xmlns="http://www.w3.org/2000/svg" class="svg">
-      <!-- Decorative outline (neck connector) -->
-      <line x1="80" y1="43" x2="80" y2="50" stroke="#1f3a57" stroke-width="8" />
 
-      <!-- Head / Голова -->
-      <circle cx="80" cy="24" r="19"
-        fill={fill('Голова')}
-        stroke="#2a4f73" stroke-width="1"
-        class="zone"
-      >
-        <title>Голова: {countLabel('Голова')}</title>
+    <svg viewBox="0 0 90 230" xmlns="http://www.w3.org/2000/svg" class="svg">
+
+      <!-- Голова -->
+      <circle cx="45" cy="14" r="12" fill={fill('Голова')} stroke="#2a4f73" stroke-width="1" class="zone">
+        <title>Голова: {cnt('Голова')}</title>
       </circle>
 
-      <!-- Body / Тело -->
-      <rect x="52" y="50" width="56" height="78" rx="4"
-        fill={fill('Тело')}
-        stroke="#2a4f73" stroke-width="1"
-        class="zone"
-      >
-        <title>Тело: {countLabel('Тело')}</title>
+      <!-- Шея -->
+      <rect x="38" y="27" width="14" height="10" rx="3" fill={fill('Шея')} stroke="#2a4f73" stroke-width="1" class="zone">
+        <title>Шея: {cnt('Шея')}</title>
       </rect>
 
-      <!-- Right arm / Рука правая (person's right = viewer's left) -->
-      <rect x="4" y="56" width="48" height="20" rx="5"
-        fill={fill('Рука правая')}
-        stroke="#2a4f73" stroke-width="1"
-        class="zone"
-      >
-        <title>Рука правая: {countLabel('Рука правая')}</title>
+      <!-- Плечи -->
+      <rect x="6" y="38" width="78" height="14" rx="5" fill={fill('Плечи')} stroke="#2a4f73" stroke-width="1" class="zone">
+        <title>Плечи: {cnt('Плечи')}</title>
       </rect>
 
-      <!-- Left arm / Рука левая (person's left = viewer's right) -->
-      <rect x="108" y="56" width="48" height="20" rx="5"
-        fill={fill('Рука левая')}
-        stroke="#2a4f73" stroke-width="1"
-        class="zone"
-      >
-        <title>Рука левая: {countLabel('Рука левая')}</title>
+      <!-- Тело -->
+      <rect x="26" y="53" width="38" height="52" rx="4" fill={fill('Тело')} stroke="#2a4f73" stroke-width="1" class="zone">
+        <title>Тело: {cnt('Тело')}</title>
       </rect>
 
-      <!-- Right leg / Нога правая -->
-      <rect x="55" y="132" width="24" height="100" rx="5"
-        fill={fill('Нога правая')}
-        stroke="#2a4f73" stroke-width="1"
-        class="zone"
-      >
-        <title>Нога правая: {countLabel('Нога правая')}</title>
+      <!-- Предплечья -->
+      <rect x="6" y="53" width="18" height="36" rx="4" fill={fill('Предплечья')} stroke="#2a4f73" stroke-width="1" class="zone">
+        <title>Предплечья: {cnt('Предплечья')}</title>
+      </rect>
+      <rect x="66" y="53" width="18" height="36" rx="4" fill={fill('Предплечья')} stroke="#2a4f73" stroke-width="1" class="zone">
+        <title>Предплечья: {cnt('Предплечья')}</title>
       </rect>
 
-      <!-- Left leg / Нога левая -->
-      <rect x="81" y="132" width="24" height="100" rx="5"
-        fill={fill('Нога левая')}
-        stroke="#2a4f73" stroke-width="1"
-        class="zone"
-      >
-        <title>Нога левая: {countLabel('Нога левая')}</title>
+      <!-- Кисти -->
+      <rect x="7" y="90" width="16" height="12" rx="4" fill={fill('Кисти')} stroke="#2a4f73" stroke-width="1" class="zone">
+        <title>Кисти: {cnt('Кисти')}</title>
+      </rect>
+      <rect x="67" y="90" width="16" height="12" rx="4" fill={fill('Кисти')} stroke="#2a4f73" stroke-width="1" class="zone">
+        <title>Кисти: {cnt('Кисти')}</title>
       </rect>
 
-      <!-- Count labels -->
-      <text x="80" y="28" text-anchor="middle" dominant-baseline="middle" class="label">{countLabel('Голова')}</text>
-      <text x="80" y="89" text-anchor="middle" dominant-baseline="middle" class="label">{countLabel('Тело')}</text>
-      <text x="28" y="67" text-anchor="middle" dominant-baseline="middle" class="label">{countLabel('Рука правая')}</text>
-      <text x="132" y="67" text-anchor="middle" dominant-baseline="middle" class="label">{countLabel('Рука левая')}</text>
-      <text x="67" y="182" text-anchor="middle" dominant-baseline="middle" class="label">{countLabel('Нога правая')}</text>
-      <text x="93" y="182" text-anchor="middle" dominant-baseline="middle" class="label">{countLabel('Нога левая')}</text>
+      <!-- Таз -->
+      <rect x="28" y="106" width="34" height="16" rx="3" fill={fill('Таз')} stroke="#2a4f73" stroke-width="1" class="zone">
+        <title>Таз: {cnt('Таз')}</title>
+      </rect>
+
+      <!-- Бедро -->
+      <rect x="28" y="124" width="15" height="44" rx="4" fill={fill('Бедро')} stroke="#2a4f73" stroke-width="1" class="zone">
+        <title>Бедро: {cnt('Бедро')}</title>
+      </rect>
+      <rect x="47" y="124" width="15" height="44" rx="4" fill={fill('Бедро')} stroke="#2a4f73" stroke-width="1" class="zone">
+        <title>Бедро: {cnt('Бедро')}</title>
+      </rect>
+
+      <!-- Голень -->
+      <rect x="28" y="170" width="15" height="44" rx="4" fill={fill('Голень')} stroke="#2a4f73" stroke-width="1" class="zone">
+        <title>Голень: {cnt('Голень')}</title>
+      </rect>
+      <rect x="47" y="170" width="15" height="44" rx="4" fill={fill('Голень')} stroke="#2a4f73" stroke-width="1" class="zone">
+        <title>Голень: {cnt('Голень')}</title>
+      </rect>
+
+      <!-- Labels on key zones -->
+      <text x="45" y="18" text-anchor="middle" dominant-baseline="middle" class="lbl">{cnt('Голова')}</text>
+      <text x="45" y="79" text-anchor="middle" dominant-baseline="middle" class="lbl">{cnt('Тело')}</text>
+      <text x="45" y="114" text-anchor="middle" dominant-baseline="middle" class="lbl">{cnt('Таз')}</text>
+      <text x="35" y="146" text-anchor="middle" dominant-baseline="middle" class="lbl">{cnt('Бедро')}</text>
+      <text x="35" y="192" text-anchor="middle" dominant-baseline="middle" class="lbl">{cnt('Голень')}</text>
+
     </svg>
 
     <!-- Legend -->
     <div class="legend">
       {#each ZONES as zone}
-        {@const c = countLabel(zone)}
+        {@const c = cnt(zone)}
         <div class="legend-row">
           <div class="legend-swatch" style:background={fill(zone)}></div>
           <span class="legend-zone">{zone}</span>
@@ -122,6 +127,7 @@
         </div>
       {/each}
     </div>
+
   </div>
 </div>
 
@@ -149,7 +155,7 @@
   }
 
   .svg {
-    width: 140px;
+    width: 110px;
     flex-shrink: 0;
   }
 
@@ -158,12 +164,10 @@
     transition: filter 0.1s;
   }
 
-  .zone:hover {
-    filter: brightness(1.25);
-  }
+  .zone:hover { filter: brightness(1.25); }
 
-  .label {
-    font-size: 9px;
+  .lbl {
+    font-size: 8px;
     fill: #e8edf2;
     font-weight: 600;
     pointer-events: none;
@@ -173,7 +177,7 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
     justify-content: center;
   }
 
@@ -184,8 +188,8 @@
   }
 
   .legend-swatch {
-    width: 12px;
-    height: 12px;
+    width: 10px;
+    height: 10px;
     border-radius: 2px;
     flex-shrink: 0;
     border: 1px solid rgba(219, 132, 31, 0.3);
@@ -193,15 +197,15 @@
 
   .legend-zone {
     flex: 1;
-    font-size: 0.76rem;
+    font-size: 0.74rem;
     color: #6b8aab;
   }
 
   .legend-count {
-    font-size: 0.76rem;
+    font-size: 0.74rem;
     font-weight: 600;
     color: #a0b4c8;
-    min-width: 16px;
+    min-width: 14px;
     text-align: right;
   }
 </style>

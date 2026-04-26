@@ -1,24 +1,22 @@
 <script lang="ts">
   import type { Video } from '../api/types';
+  import { resolveColor } from '../api/types';
 
   interface Props {
     video: Video;
     onopen?: (id: string) => void;
-    ontag?: (video: Video) => void;
   }
 
-  let { video, onopen, ontag }: Props = $props();
+  let { video, onopen }: Props = $props();
 
   let frame = $state(0);
+  let imgError = $state(false);
 
   function handleMouseMove(e: MouseEvent) {
     if (video.preview_count <= 1) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const x = e.clientX - rect.left;
-    frame = Math.min(
-      video.preview_count - 1,
-      Math.floor((x / rect.width) * video.preview_count)
-    );
+    frame = Math.min(video.preview_count - 1, Math.floor((x / rect.width) * video.preview_count));
   }
 
   function handleMouseLeave() {
@@ -26,23 +24,16 @@
   }
 
   function handleClick() {
-    if (video.is_tagged) {
-      onopen?.(video.id);
-    } else {
-      ontag?.(video);
-    }
+    onopen?.(video.id);
+  }
+
+  function handleImgError() {
+    imgError = true;
+    setTimeout(() => { imgError = false; }, 3000);
   }
 
   let previewSrc = $derived(
     video.preview_url.replace(/\/previews\/\d+$/, `/previews/${frame}`)
-  );
-
-  let formattedDate = $derived(
-    new Date(video.date + 'T00:00:00').toLocaleDateString('ru-RU', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    })
   );
 </script>
 
@@ -53,18 +44,16 @@
   onmouseleave={handleMouseLeave}
 >
   <div class="preview">
-    <img src={previewSrc} alt="" loading="lazy" />
+    {#if !imgError}
+      <img src={previewSrc} alt="" loading="lazy" onerror={handleImgError} />
+    {/if}
   </div>
 
   <div class="info">
     {#if video.is_tagged}
       <div class="fighters">
         <div class="fighter">
-          {#if video.fighter_a?.avatar_url}
-            <img class="avatar" src={video.fighter_a.avatar_url} alt={video.fighter_a.display_name} />
-          {:else}
-            <div class="avatar-fallback">{video.fighter_a?.display_name?.charAt(0) ?? '?'}</div>
-          {/if}
+          <div class="dot" style:background={resolveColor(video.fighter_a?.id ?? '', video.fighter_a?.color ?? null)}></div>
           <span class="name">{video.fighter_a?.display_name}</span>
         </div>
 
@@ -72,23 +61,17 @@
 
         <div class="fighter right">
           <span class="name">{video.fighter_b?.display_name}</span>
-          {#if video.fighter_b?.avatar_url}
-            <img class="avatar" src={video.fighter_b.avatar_url} alt={video.fighter_b.display_name} />
-          {:else}
-            <div class="avatar-fallback">{video.fighter_b?.display_name?.charAt(0) ?? '?'}</div>
-          {/if}
+          <div class="dot" style:background={resolveColor(video.fighter_b?.id ?? '', video.fighter_b?.color ?? null)}></div>
         </div>
       </div>
-      <div class="date">{formattedDate}</div>
     {:else}
       <div class="untagged">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5" />
           <path d="M12 8v4m0 4h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
         </svg>
-        <span>Заполните данные</span>
+        <span>Не размечено</span>
       </div>
-      <div class="date">{formattedDate}</div>
     {/if}
   </div>
 </button>
@@ -129,10 +112,9 @@
   }
 
   .info {
-    padding: 10px 12px;
+    padding: 8px 12px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
   }
 
   .fighters {
@@ -153,27 +135,10 @@
     justify-content: flex-end;
   }
 
-  .avatar {
-    width: 22px;
-    height: 22px;
+  .dot {
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
-    object-fit: cover;
-    flex-shrink: 0;
-    border: 1px solid #2a4f73;
-  }
-
-  .avatar-fallback {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: #1a3050;
-    border: 1px solid #2a4f73;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.65rem;
-    font-weight: 600;
-    color: #a0b4c8;
     flex-shrink: 0;
   }
 
@@ -191,11 +156,6 @@
     color: #DB841F;
     white-space: nowrap;
     flex-shrink: 0;
-  }
-
-  .date {
-    font-size: 0.72rem;
-    color: #4a6280;
   }
 
   .untagged {
