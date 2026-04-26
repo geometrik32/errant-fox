@@ -7,6 +7,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::{db::models::User, errors::AppError, middleware::auth::CurrentUser, state::AppState};
 
+fn generate_color(user_id: &str) -> String {
+    const PALETTE: &[&str] = &[
+        "#e05252", "#DB841F", "#d4c017", "#6aaa5e",
+        "#4a9e8a", "#4a8eaa", "#5272e0", "#8052e0",
+        "#aa52e0", "#e052aa", "#e07252", "#52aae0",
+    ];
+    let hash: usize = user_id.bytes().fold(0usize, |a, b| a.wrapping_add(b as usize));
+    PALETTE[hash % PALETTE.len()].to_string()
+}
+
 // ── JWT ───────────────────────────────────────────────────────────────────────
 
 #[derive(Serialize, Deserialize)]
@@ -45,6 +55,7 @@ pub struct UserDto {
     pub display_name: String,
     pub is_admin: bool,
     pub avatar_url: String,
+    pub color: String,
 }
 
 #[derive(Serialize)]
@@ -64,6 +75,7 @@ fn to_user_dto(u: &User) -> UserDto {
         display_name: u.display_name.clone(),
         is_admin: u.is_admin,
         avatar_url: format!("/api/users/{}/avatar", u.id),
+        color: u.color.clone().unwrap_or_else(|| generate_color(&u.id)),
     }
 }
 
@@ -109,7 +121,7 @@ pub async fn login(
     let password_input = body.password.clone();
 
     let user = tokio::task::spawn_blocking(move || {
-        use crate::db::schema::users::dsl::{username, users};
+        use crate::db::schema::users::dsl::{color as color_col, id, username, users};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -129,6 +141,18 @@ pub async fn login(
             return Err(AppError::Unauthorized("Invalid credentials".to_string()));
         }
 
+        // Ensure color is assigned
+        let user = if user.color.is_none() {
+            let new_color = generate_color(&user.id);
+            diesel::update(users.filter(id.eq(&user.id)))
+                .set(color_col.eq(&new_color))
+                .execute(&mut conn)
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+            User { color: Some(new_color), ..user }
+        } else {
+            user
+        };
+
         Ok(user)
     })
     .await
@@ -142,8 +166,31 @@ pub async fn login(
     }))
 }
 
-pub async fn get_me(CurrentUser(user): CurrentUser) -> Result<Json<UserMeDto>, AppError> {
-    Ok(Json(to_me_dto(&user)))
+pub async fn get_me(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<Json<UserMeDto>, AppError> {
+    if user.color.is_some() {
+        return Ok(Json(to_me_dto(&user)));
+    }
+
+    let new_color = generate_color(&user.id);
+    let user_id = user.id.clone();
+    let color_clone = new_color.clone();
+    let db = state.db.clone();
+
+    tokio::task::spawn_blocking(move || {
+        use crate::db::schema::users::dsl::{color as color_col, id, users};
+        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+        diesel::update(users.filter(id.eq(&user_id)))
+            .set(color_col.eq(&color_clone))
+            .execute(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    Ok(Json(to_me_dto(&User { color: Some(new_color), ..user })))
 }
 
 pub async fn patch_me(

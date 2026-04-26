@@ -2,6 +2,7 @@
   import { token, currentUser } from '../../stores';
   import CreateUserModal from '../admin/CreateUserModal.svelte';
   import TechniquesModal from '../admin/TechniquesModal.svelte';
+  import ProfileModal from './ProfileModal.svelte';
 
   interface Props {
     hash: string;
@@ -12,6 +13,7 @@
   let dropdownOpen = $state(false);
   let showCreateUser = $state(false);
   let showTechniques = $state(false);
+  let showProfile = $state(false);
 
   let activeNav = $derived(
     hash === '#/stats' ? 'stats' : 'gallery'
@@ -45,6 +47,8 @@
   let avatarFallback = $derived(
     $currentUser?.display_name?.charAt(0).toUpperCase() ?? '?'
   );
+
+  let avatarColor = $derived($currentUser?.color ?? '#1f3a57');
 </script>
 
 <header class="header">
@@ -83,11 +87,7 @@
       aria-label="Меню пользователя"
       aria-expanded={dropdownOpen}
     >
-      <svg class="settings-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" stroke-width="1.5"/>
-        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" stroke-width="1.5"/>
-      </svg>
-      <div class="avatar">
+      <div class="avatar" style:background={avatarColor}>
         {#if $currentUser?.avatar_url}
           <img src={$currentUser.avatar_url} alt={$currentUser.display_name} />
         {:else}
@@ -98,7 +98,7 @@
 
     {#if dropdownOpen}
       <div class="dropdown" role="menu">
-        <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; navigate('#/profile'); }}>
+        <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showProfile = true; }}>
           Профиль
         </button>
 
@@ -120,6 +120,10 @@
     {/if}
   </div>
 </header>
+
+{#if showProfile}
+  <ProfileModal onclose={() => { showProfile = false; }} />
+{/if}
 
 {#if showCreateUser}
   <CreateUserModal onclose={() => { showCreateUser = false; }} />
@@ -217,10 +221,6 @@
   .menu-trigger:hover {
     background: #1a3050;
     color: #a0b4c8;
-  }
-
-  .settings-icon {
-    flex-shrink: 0;
   }
 
   .avatar {
