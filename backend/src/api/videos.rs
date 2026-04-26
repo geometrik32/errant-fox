@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::{
-    db::models::{Bout, Comment, User, Video},
+    db::models::{Bout, Comment, CommentReaction, User, Video},
     errors::AppError,
     middleware::auth::CurrentUser,
     state::AppState,
@@ -74,6 +74,9 @@ pub struct CommentDto {
     pub text: String,
     pub reply_to_id: Option<i32>,
     pub created_at: String,
+    pub likes: i32,
+    pub dislikes: i32,
+    pub my_reaction: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -136,6 +139,7 @@ fn build_video_full(
     bouts: Vec<Bout>,
     comments: Vec<Comment>,
     users_map: &HashMap<String, User>,
+    reactions_map: &HashMap<i32, (i32, i32, Option<String>)>,
     stream_url: String,
 ) -> VideoFullDto {
     let fighter_a = video
@@ -166,6 +170,10 @@ fn build_video_full(
                     avatar_url: format!("/api/users/{}/avatar", c.author_id),
                     color: None,
                 });
+            let (likes, dislikes, my_reaction) = reactions_map
+                .get(&c.id)
+                .cloned()
+                .unwrap_or((0, 0, None));
             CommentDto {
                 id: c.id,
                 author,
@@ -173,6 +181,9 @@ fn build_video_full(
                 text: c.text.clone(),
                 reply_to_id: c.reply_to_id,
                 created_at: c.created_at.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+                likes,
+                dislikes,
+                my_reaction,
             }
         })
         .collect();
@@ -219,6 +230,25 @@ fn load_users_for_video(
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
     Ok(user_list.into_iter().map(|u| (u.id.clone(), u)).collect())
+}
+
+fn build_reactions_map(
+    reactions: Vec<CommentReaction>,
+    current_user_id: &str,
+) -> HashMap<i32, (i32, i32, Option<String>)> {
+    let mut map: HashMap<i32, (i32, i32, Option<String>)> = HashMap::new();
+    for r in reactions {
+        let entry = map.entry(r.comment_id).or_insert((0, 0, None));
+        if r.kind == "like" {
+            entry.0 += 1;
+        } else {
+            entry.1 += 1;
+        }
+        if r.user_id == current_user_id {
+            entry.2 = Some(r.kind.clone());
+        }
+    }
+    map
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
@@ -366,13 +396,14 @@ pub async fn list_videos(
 
 pub async fn get_video(
     State(state): State<AppState>,
-    _user: CurrentUser,
+    CurrentUser(user): CurrentUser,
     Path(video_id): Path<String>,
 ) -> Result<Json<VideoFullDto>, AppError> {
     let db = state.db.clone();
+    let user_id = user.id.clone();
 
     let (dto, seafile_path) = tokio::task::spawn_blocking(move || {
-        use crate::db::schema::{bouts, comments, videos};
+        use crate::db::schema::{bouts, comment_reactions, comments, videos};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -397,6 +428,17 @@ pub async fn get_video(
             .load::<Comment>(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
+        let comment_ids: Vec<i32> = video_comments.iter().map(|c| c.id).collect();
+        let reactions: Vec<CommentReaction> = if comment_ids.is_empty() {
+            vec![]
+        } else {
+            comment_reactions::table
+                .filter(comment_reactions::comment_id.eq_any(&comment_ids))
+                .load::<CommentReaction>(&mut conn)
+                .map_err(|e| AppError::Internal(e.to_string()))?
+        };
+        let reactions_map = build_reactions_map(reactions, &user_id);
+
         let users_map = load_users_for_video(&video, &video_comments, &mut conn)?;
 
         let dto = build_video_full(
@@ -404,6 +446,7 @@ pub async fn get_video(
             video_bouts,
             video_comments,
             &users_map,
+            &reactions_map,
             String::new(),
         );
 
@@ -419,14 +462,15 @@ pub async fn get_video(
 
 pub async fn patch_video(
     State(state): State<AppState>,
-    _user: CurrentUser,
+    CurrentUser(user): CurrentUser,
     Path(video_id): Path<String>,
     Json(body): Json<PatchVideoRequest>,
 ) -> Result<Json<VideoFullDto>, AppError> {
     let db = state.db.clone();
+    let user_id = user.id.clone();
 
     let (dto, seafile_path) = tokio::task::spawn_blocking(move || {
-        use crate::db::schema::{bouts, comments, videos};
+        use crate::db::schema::{bouts, comment_reactions, comments, videos};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -461,6 +505,17 @@ pub async fn patch_video(
             .load::<Comment>(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
+        let comment_ids: Vec<i32> = video_comments.iter().map(|c| c.id).collect();
+        let reactions: Vec<CommentReaction> = if comment_ids.is_empty() {
+            vec![]
+        } else {
+            comment_reactions::table
+                .filter(comment_reactions::comment_id.eq_any(&comment_ids))
+                .load::<CommentReaction>(&mut conn)
+                .map_err(|e| AppError::Internal(e.to_string()))?
+        };
+        let reactions_map = build_reactions_map(reactions, &user_id);
+
         let users_map = load_users_for_video(&video, &video_comments, &mut conn)?;
 
         let dto = build_video_full(
@@ -468,6 +523,7 @@ pub async fn patch_video(
             video_bouts,
             video_comments,
             &users_map,
+            &reactions_map,
             String::new(),
         );
 

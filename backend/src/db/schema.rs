@@ -1,4 +1,4 @@
-// @generated — matches migrations/0001_initial/up.sql
+// @generated — matches migrations/0001_initial + 0002_comment_reactions
 
 diesel::table! {
     users (id) {
@@ -64,10 +64,20 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    comment_reactions (comment_id, user_id) {
+        comment_id -> Integer,
+        user_id    -> Text,
+        kind       -> Text,
+    }
+}
+
 // Unambiguous FK joins (multi-FK paths use manual aliases in queries)
-diesel::joinable!(bouts    -> videos (video_id));
-diesel::joinable!(comments -> videos (video_id));
-diesel::joinable!(comments -> users  (author_id));
+diesel::joinable!(bouts             -> videos   (video_id));
+diesel::joinable!(comments          -> videos   (video_id));
+diesel::joinable!(comments          -> users    (author_id));
+diesel::joinable!(comment_reactions -> comments (comment_id));
+diesel::joinable!(comment_reactions -> users    (user_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     users,
@@ -75,4 +85,5 @@ diesel::allow_tables_to_appear_in_same_query!(
     techniques,
     bouts,
     comments,
+    comment_reactions,
 );

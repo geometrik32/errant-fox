@@ -8,7 +8,7 @@ use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    db::models::{Comment, NewComment, User},
+    db::models::{Comment, CommentReaction, NewComment, User},
     errors::AppError,
     middleware::auth::CurrentUser,
     state::AppState,
@@ -34,9 +34,12 @@ pub struct CommentResponse {
     pub created_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub edited_at: Option<String>,
+    pub likes: i32,
+    pub dislikes: i32,
+    pub my_reaction: Option<String>,
 }
 
-fn to_response(c: &Comment, author: &User) -> CommentResponse {
+fn to_response(c: &Comment, author: &User, likes: i32, dislikes: i32, my_reaction: Option<String>) -> CommentResponse {
     CommentResponse {
         id: c.id,
         author: CommentAuthorResponse {
@@ -51,7 +54,26 @@ fn to_response(c: &Comment, author: &User) -> CommentResponse {
         edited_at: c
             .edited_at
             .map(|t| t.format("%Y-%m-%dT%H:%M:%SZ").to_string()),
+        likes,
+        dislikes,
+        my_reaction,
     }
+}
+
+fn load_reactions(comment_id: i32, user_id: &str, conn: &mut diesel::SqliteConnection) -> Result<(i32, i32, Option<String>), AppError> {
+    use crate::db::schema::comment_reactions;
+    let reactions = comment_reactions::table
+        .filter(comment_reactions::comment_id.eq(comment_id))
+        .load::<CommentReaction>(conn)
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+    let mut likes = 0i32;
+    let mut dislikes = 0i32;
+    let mut my_reaction = None;
+    for r in &reactions {
+        if r.kind == "like" { likes += 1; } else { dislikes += 1; }
+        if r.user_id == user_id { my_reaction = Some(r.kind.clone()); }
+    }
+    Ok((likes, dislikes, my_reaction))
 }
 
 fn to_ws_comment(c: &Comment, author: &User) -> WsComment {
@@ -135,7 +157,7 @@ pub async fn post_comment(
         .ws_hub
         .send(WsEvent::NewComment(to_ws_comment(&comment, &user)));
 
-    Ok((StatusCode::CREATED, Json(to_response(&comment, &user))))
+    Ok((StatusCode::CREATED, Json(to_response(&comment, &user, 0, 0, None))))
 }
 
 pub async fn patch_comment(
@@ -148,7 +170,7 @@ pub async fn patch_comment(
     let user_id = user.id.clone();
     let new_text = body.text.clone();
 
-    let comment = tokio::task::spawn_blocking(move || {
+    let (comment, likes, dislikes, my_reaction) = tokio::task::spawn_blocking(move || {
         use crate::db::schema::comments;
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
@@ -174,15 +196,18 @@ pub async fn patch_comment(
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        comments::table
+        let updated = comments::table
             .filter(comments::id.eq(id))
             .first::<Comment>(&mut conn)
-            .map_err(|e| AppError::Internal(e.to_string()))
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let (likes, dislikes, my_reaction) = load_reactions(id, &user_id, &mut conn)?;
+        Ok::<_, AppError>((updated, likes, dislikes, my_reaction))
     })
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
-    Ok(Json(to_response(&comment, &user)))
+    Ok(Json(to_response(&comment, &user, likes, dislikes, my_reaction)))
 }
 
 pub async fn delete_comment(
@@ -213,6 +238,80 @@ pub async fn delete_comment(
         diesel::delete(comments::table.filter(comments::id.eq(id)))
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Ok(())
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+// ── Reactions ─────────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct ReactRequest {
+    pub kind: String,
+}
+
+pub async fn react_comment(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<i32>,
+    Json(body): Json<ReactRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    if body.kind != "like" && body.kind != "dislike" {
+        return Err(AppError::BadRequest("kind must be 'like' or 'dislike'".to_string()));
+    }
+    let db = state.db.clone();
+    let user_id = user.id.clone();
+    let kind = body.kind.clone();
+
+    tokio::task::spawn_blocking(move || {
+        use crate::db::schema::{comment_reactions, comments};
+        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let exists: bool = diesel::select(diesel::dsl::exists(
+            comments::table.filter(comments::id.eq(id)),
+        ))
+        .get_result(&mut conn)
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+        if !exists {
+            return Err(AppError::NotFound);
+        }
+
+        diesel::replace_into(comment_reactions::table)
+            .values(&CommentReaction { comment_id: id, user_id, kind })
+            .execute(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Ok(())
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn delete_react(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<i32>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let db = state.db.clone();
+    let user_id = user.id.clone();
+
+    tokio::task::spawn_blocking(move || {
+        use crate::db::schema::comment_reactions;
+        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+
+        diesel::delete(
+            comment_reactions::table
+                .filter(comment_reactions::comment_id.eq(id))
+                .filter(comment_reactions::user_id.eq(&user_id)),
+        )
+        .execute(&mut conn)
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
         Ok(())
     })

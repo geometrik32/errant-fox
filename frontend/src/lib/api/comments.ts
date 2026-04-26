@@ -27,3 +27,16 @@ export async function deleteComment(id: number): Promise<{ ok: boolean }> {
     method: 'DELETE',
   });
 }
+
+export async function reactComment(id: number, kind: 'like' | 'dislike'): Promise<void> {
+  await apiFetch<{ ok: boolean }>(`/comments/${id}/react`, {
+    method: 'POST',
+    body: JSON.stringify({ kind }),
+  });
+}
+
+export async function deleteReact(id: number): Promise<void> {
+  await apiFetch<{ ok: boolean }>(`/comments/${id}/react`, {
+    method: 'DELETE',
+  });
+}
