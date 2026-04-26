@@ -28,8 +28,12 @@
   }
 
   function handleImgError() {
-    imgError = true;
-    setTimeout(() => { imgError = false; }, 3000);
+    if (frame !== 0) {
+      frame = 0;
+    } else {
+      imgError = true;
+      setTimeout(() => { imgError = false; }, 3000);
+    }
   }
 
   let previewSrc = $derived(
