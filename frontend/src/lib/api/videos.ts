@@ -8,8 +8,8 @@ export interface VideoFilters {
 }
 
 export interface PatchVideoData {
-  fighter_a_id?: string;
-  fighter_b_id?: string;
+  fighter_a_id?: string | null;
+  fighter_b_id?: string | null;
 }
 
 export async function getVideos(filters?: VideoFilters): Promise<Video[]> {

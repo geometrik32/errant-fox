@@ -44,7 +44,7 @@
     onlooptoggle,
   }: Props = $props();
 
-  const SPEEDS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+  const SPEEDS = [0.15, 0.2, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5];
 
   function boutColor(b: Bout): string {
     if (b.score_a > b.score_b) return resolveColor(fighterA?.id ?? 'a', fighterA?.color ?? null);
@@ -180,11 +180,12 @@
 
       <select
         class="speed-sel"
+        value={SPEEDS.includes(speed) ? speed : 1}
         onchange={(e) => onspeedchange?.(parseFloat((e.target as HTMLSelectElement).value))}
         aria-label="Скорость воспроизведения"
       >
         {#each SPEEDS as s}
-          <option value={s} selected={s === speed}>{s}×</option>
+          <option value={s}>{s}×</option>
         {/each}
       </select>
 
