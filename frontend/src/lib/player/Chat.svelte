@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { currentUser } from '../../stores';
   import type { Comment } from '../api/types';
-  import { createComment, updateComment, deleteComment } from '../api/comments';
+  import { createComment, updateComment, deleteComment, reactComment, deleteReact } from '../api/comments';
 
   interface Props {
     videoId: string;
@@ -84,6 +84,28 @@
     if (!confirm('Удалить сообщение?')) return;
     await deleteComment(id);
     comments = comments.filter(c => c.id !== id);
+    oncommentschange?.(comments);
+  }
+
+  async function handleReact(c: (typeof comments)[0], kind: 'like' | 'dislike') {
+    const prev = c.my_reaction;
+    if (prev === kind) {
+      await deleteReact(c.id);
+      comments = comments.map(x => x.id !== c.id ? x : {
+        ...x,
+        my_reaction: null,
+        likes:    kind === 'like'    ? x.likes    - 1 : x.likes,
+        dislikes: kind === 'dislike' ? x.dislikes - 1 : x.dislikes,
+      });
+    } else {
+      await reactComment(c.id, kind);
+      comments = comments.map(x => x.id !== c.id ? x : {
+        ...x,
+        my_reaction: kind,
+        likes:    x.likes    + (kind === 'like'    ? 1 : 0) - (prev === 'like'    ? 1 : 0),
+        dislikes: x.dislikes + (kind === 'dislike' ? 1 : 0) - (prev === 'dislike' ? 1 : 0),
+      });
+    }
     oncommentschange?.(comments);
   }
 
@@ -173,6 +195,18 @@
         {/if}
 
         <div class="msg-footer">
+          <button
+            class="react-btn"
+            class:active={c.my_reaction === 'like'}
+            onclick={() => handleReact(c, 'like')}
+            title="Нравится"
+          >👍 {#if c.likes > 0}<span class="react-count">{c.likes}</span>{/if}</button>
+          <button
+            class="react-btn"
+            class:active={c.my_reaction === 'dislike'}
+            onclick={() => handleReact(c, 'dislike')}
+            title="Не нравится"
+          >👎 {#if c.dislikes > 0}<span class="react-count">{c.dislikes}</span>{/if}</button>
           <button class="reply-link" onclick={() => { replyTo = c; }}>Ответить</button>
           {#if $currentUser?.id === c.author.id}
             <button class="edit-link" onclick={() => startEdit(c)}>Редактировать</button>
@@ -454,4 +488,28 @@
   textarea:focus { border-color: #2a4f73; }
   textarea:disabled { opacity: 0.5; cursor: default; }
   textarea::placeholder { color: #3a5470; }
+
+  .react-btn {
+    background: none;
+    border: none;
+    font-size: 0.7rem;
+    cursor: pointer;
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: #3a5470;
+    line-height: 1.4;
+    transition: background 0.1s, color 0.1s;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .react-btn:hover { background: #0f2035; color: #6b8aab; }
+  .react-btn.active { color: #DB841F; }
+
+  .react-count {
+    font-size: 0.65rem;
+    font-variant-numeric: tabular-nums;
+    color: inherit;
+  }
 </style>

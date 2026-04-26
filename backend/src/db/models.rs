@@ -2,7 +2,7 @@ use chrono::{NaiveDate, NaiveDateTime};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use super::schema::{bouts, comments, techniques, users, videos};
+use super::schema::{bouts, comment_reactions, comments, techniques, users, videos};
 
 // ── users ─────────────────────────────────────────────────────────────────────
 
@@ -133,4 +133,14 @@ pub struct NewComment {
     pub timestamp_ms: i32,
     pub text: String,
     pub reply_to_id: Option<i32>,
+}
+
+// ── comment_reactions ─────────────────────────────────────────────────────────
+
+#[derive(Queryable, Insertable, Serialize, Deserialize, Debug, Clone)]
+#[diesel(table_name = comment_reactions)]
+pub struct CommentReaction {
+    pub comment_id: i32,
+    pub user_id: String,
+    pub kind: String,
 }

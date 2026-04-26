@@ -60,6 +60,10 @@ pub fn router(state: AppState) -> Router {
             "/api/comments/{id}",
             patch(comments::patch_comment).delete(comments::delete_comment),
         )
+        .route(
+            "/api/comments/{id}/react",
+            post(comments::react_comment).delete(comments::delete_react),
+        )
         // WebSocket
         .route("/ws", get(crate::ws::ws_handler))
         .with_state(state)

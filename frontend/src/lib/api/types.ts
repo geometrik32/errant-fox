@@ -85,6 +85,9 @@ export interface Comment {
   text: string;
   reply_to_id: number | null;
   created_at: string;
+  likes: number;
+  dislikes: number;
+  my_reaction: 'like' | 'dislike' | null;
 }
 
 export interface VideoFull {
