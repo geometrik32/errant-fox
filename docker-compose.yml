@@ -21,10 +21,20 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
     restart: unless-stopped
-    ports:
-      - "8081:80"
+#    ports:
+#      - "8081:80"
     depends_on:
       - backend
+    networks:
+      - default
+      - proxy
+    labels:
+      - traefik.docker.network=proxy
+      - traefik.enable=true
+      - traefik.http.routers.errantfox.entrypoints=websecure
+      - traefik.http.routers.errantfox.rule=Host(`errantfox.aat-terra.ru`)
+      - traefik.http.routers.errantfox.tls.certresolver=le-resolver
+      - traefik.http.services.errantfox.loadbalancer.server.port=80
 
 networks:
   proxy:

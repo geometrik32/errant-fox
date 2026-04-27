@@ -35,7 +35,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/admin/techniques", post(techniques::create_technique))
         .route(
             "/api/admin/techniques/{id}",
-            delete(techniques::delete_technique),
+            patch(techniques::rename_technique).delete(techniques::delete_technique),
         )
         // Videos
         .route("/api/videos", get(videos::list_videos))

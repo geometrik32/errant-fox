@@ -94,7 +94,7 @@
   async function handleDelete(id: number) {
     if (!confirm('Удалить сообщение?')) return;
     await deleteComment(id);
-    comments = comments.filter(c => c.id !== id);
+    comments = comments.filter(c => c.id !== id && c.reply_to_id !== id);
     oncommentschange?.(comments);
   }
 

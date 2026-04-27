@@ -25,10 +25,6 @@
   let loopRange: { start: number; end: number } | null = null;
   let looping = false;
   let zoom = $state(1);
-  let originX = $state(50);
-  let originY = $state(50);
-
-  // Pan state (middle-mouse drag)
   let panX = $state(0);
   let panY = $state(0);
   let panning = $state(false);
@@ -36,6 +32,12 @@
   let panStartY = 0;
   let panStartPanX = 0;
   let panStartPanY = 0;
+
+  // Detected fps, used for frame-step
+  let detectedFps = 25;
+
+  // Track middle-click for double-click reset
+  let lastMiddleClickTime = 0;
 
   $effect(() => { if (videoEl) videoEl.playbackRate = speed; });
   $effect(() => { if (videoEl) videoEl.volume = volume; });
@@ -54,12 +56,12 @@
 
   export function stepForward(): void {
     if (!videoEl) return;
-    videoEl.currentTime = Math.min(videoEl.duration || 0, videoEl.currentTime + 1 / 30);
+    videoEl.currentTime = Math.min(videoEl.duration || 0, videoEl.currentTime + 1 / detectedFps);
   }
 
   export function stepBackward(): void {
     if (!videoEl) return;
-    videoEl.currentTime = Math.max(0, videoEl.currentTime - 1 / 30);
+    videoEl.currentTime = Math.max(0, videoEl.currentTime - 1 / detectedFps);
   }
 
   export function setLoop(start: number, end: number): void {
@@ -100,7 +102,7 @@
   function fpsCallback(_now: number, meta: { mediaTime: number }): void {
     if (lastMediaTime >= 0) {
       const diff = meta.mediaTime - lastMediaTime;
-      if (diff > 0 && diff < 0.5) fpsSamples.push(diff);
+      if (diff > 0 && diff < 0.2) fpsSamples.push(diff);
     }
     lastMediaTime = meta.mediaTime;
 
@@ -109,6 +111,7 @@
     } else {
       const avg = fpsSamples.reduce((a, b) => a + b) / fpsSamples.length;
       const fps = Math.round(1 / avg);
+      detectedFps = fps;
       onfpschange?.(fps);
       fpsSamples = [];
       lastMediaTime = -1;
@@ -117,32 +120,43 @@
 
   function handlePlayForFps() {
     onplayingchange?.(true);
-    if (fpsSamples.length === 0 && videoEl) {
+    if (fpsSamples.length === 0 && videoEl && 'requestVideoFrameCallback' in videoEl) {
       videoEl.requestVideoFrameCallback(fpsCallback);
     }
   }
 
+  let wrapEl: HTMLDivElement | null = $state(null);
+
   function handleWheel(e: WheelEvent) {
     e.preventDefault();
-    const prevZoom = zoom;
-    zoom = Math.max(1, Math.min(4, zoom + (e.deltaY < 0 ? 0.1 : -0.1)));
+    const oldZoom = zoom;
+    const newZoom = Math.max(1, Math.min(4, zoom + (e.deltaY < 0 ? 0.15 : -0.15)));
+    if (newZoom === oldZoom) return;
 
-    if (videoEl) {
-      const r = videoEl.getBoundingClientRect();
-      originX = ((e.clientX - r.left) / r.width) * 100;
-      originY = ((e.clientY - r.top) / r.height) * 100;
+    if (wrapEl) {
+      const r = wrapEl.getBoundingClientRect();
+      const cx = e.clientX - r.left;
+      const cy = e.clientY - r.top;
+      panX = cx - (cx - panX) * newZoom / oldZoom;
+      panY = cy - (cy - panY) * newZoom / oldZoom;
     }
 
-    // Reset pan when fully zoomed out
+    zoom = newZoom;
     if (zoom === 1) { panX = 0; panY = 0; }
-
-    void prevZoom;
   }
 
   function handleMousedown(e: MouseEvent) {
-    // Middle mouse button = button 1
     if (e.button !== 1) return;
     e.preventDefault();
+
+    const now = Date.now();
+    if (now - lastMiddleClickTime < 400) {
+      resetZoom();
+      lastMiddleClickTime = 0;
+      return;
+    }
+    lastMiddleClickTime = now;
+
     panning = true;
     panStartX = e.clientX;
     panStartY = e.clientY;
@@ -177,7 +191,7 @@
   }
 </script>
 
-<div class="vp-wrap">
+<div class="vp-wrap" bind:this={wrapEl}>
   <!-- svelte-ignore a11y_media_has_caption -->
   <video
     bind:this={videoEl}
@@ -187,12 +201,11 @@
     onplay={handlePlayForFps}
     onpause={handlePause}
     onclick={handleClick}
-    ondblclick={resetZoom}
     onmousedown={handleMousedown}
     onwheel={handleWheel}
     class="video"
     style:transform="translate({panX}px, {panY}px) scale({zoom})"
-    style:transform-origin="{originX}% {originY}%"
+    style:transform-origin="0 0"
     style:cursor={panning ? 'grabbing' : zoom > 1.05 ? 'grab' : 'pointer'}
     preload="metadata"
   ></video>

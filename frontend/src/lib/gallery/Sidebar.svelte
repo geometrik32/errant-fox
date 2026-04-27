@@ -12,13 +12,14 @@
   interface Props {
     videos: Video[];
     onfilter?: (filter: FilterEvent) => void;
+    initialFilter?: FilterEvent;
   }
 
-  let { videos, onfilter }: Props = $props();
+  let { videos, onfilter, initialFilter }: Props = $props();
 
-  let selectedIds = $state<Set<string>>(new Set());
-  let dateFrom = $state('');
-  let dateTo = $state('');
+  let selectedIds = $state<Set<string>>(new Set(initialFilter?.fighter_ids ?? []));
+  let dateFrom = $state(initialFilter?.date_from ?? '');
+  let dateTo = $state(initialFilter?.date_to ?? '');
   let collapsed = $state(false);
   let dateMode = $state<'year' | 'classic'>('year');
   let calYear = $state(new Date().getFullYear());

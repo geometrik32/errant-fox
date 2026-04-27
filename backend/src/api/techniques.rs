@@ -67,6 +67,47 @@ pub async fn create_technique(
     Ok((StatusCode::CREATED, Json(created)))
 }
 
+#[derive(Deserialize)]
+pub struct RenameTechniqueRequest {
+    pub name: String,
+}
+
+pub async fn rename_technique(
+    State(state): State<AppState>,
+    CurrentUser(current): CurrentUser,
+    Path(technique_id): Path<i32>,
+    Json(body): Json<RenameTechniqueRequest>,
+) -> Result<Json<Technique>, AppError> {
+    if !current.is_admin {
+        return Err(AppError::Forbidden);
+    }
+
+    let db = state.db.clone();
+    let updated = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::techniques::dsl::{id, name, techniques};
+
+        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let rows = diesel::update(techniques.filter(id.eq(technique_id)))
+            .set(name.eq(&body.name))
+            .execute(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        if rows == 0 {
+            return Err(AppError::NotFound);
+        }
+
+        techniques
+            .filter(id.eq(technique_id))
+            .first::<Technique>(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    Ok(Json(updated))
+}
+
 pub async fn delete_technique(
     State(state): State<AppState>,
     CurrentUser(current): CurrentUser,

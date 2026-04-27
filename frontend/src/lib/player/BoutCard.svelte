@@ -2,14 +2,16 @@
   import { untrack } from 'svelte';
   import { techniques } from '../../stores';
   import type { Bout, VideoFighter } from '../api/types';
+  import { resolveColor } from '../api/types';
   import { updateBout } from '../api/bouts';
   import HitZonePicker from './HitZonePicker.svelte';
   import { deleteBout } from '../api/bouts';
 
-  type ResultType = 'hit' | 'miss' | 'blocked';
+  type ResultType = 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike';
 
   interface Props {
     bout: Bout;
+    boutIndex: number;
     fighters: [VideoFighter | null, VideoFighter | null];
     expanded: boolean;
     currentTime: number;
@@ -20,7 +22,15 @@
     ondelete?: () => void;
   }
 
-  let { bout, fighters, expanded, currentTime, onexpand, oncollapse, onmarkdirty, onupdate, ondelete }: Props = $props();
+  let { bout, boutIndex, fighters, expanded, currentTime, onexpand, oncollapse, onmarkdirty, onupdate, ondelete }: Props = $props();
+
+  let winnerColor = $derived(
+    bout.score_a > bout.score_b
+      ? resolveColor(fighters[0]?.id ?? 'a', fighters[0]?.color ?? null)
+      : bout.score_b > bout.score_a
+        ? resolveColor(fighters[1]?.id ?? 'b', fighters[1]?.color ?? null)
+        : null
+  );
 
   // ── Form state ──────────────────────────────────────────────────────────────
 
@@ -139,7 +149,7 @@
   let deleting = $state(false);
 
   async function handleDelete() {
-    if (!confirm(`Удалить Сход ${bout.order_index}?`)) return;
+    if (!confirm(`Удалить Сход ${boutIndex}?`)) return;
     deleting = true;
     try {
       await deleteBout(bout.id);
@@ -166,9 +176,13 @@
 
 {#if !expanded}
   <!-- ── Collapsed ── -->
-  <button class="card card--collapsed" onclick={onexpand}>
+  <button
+    class="card card--collapsed"
+    style={winnerColor ? `border-left: 3px solid ${winnerColor}; background: color-mix(in srgb, ${winnerColor} 10%, #0d1e35)` : ''}
+    onclick={onexpand}
+  >
     <span class="card-label">
-      Сход {bout.order_index}
+      Сход {boutIndex}
       <span class="time">({fmtMs(bout.time_start_ms)} — {fmtMs(bout.time_end_ms)})</span>
     </span>
     <span class="card-score">{bout.score_a} : {bout.score_b}</span>
@@ -185,11 +199,12 @@
       class="card-header"
       role="button"
       tabindex="0"
+      style={winnerColor ? `background: color-mix(in srgb, ${winnerColor} 15%, #0d1e35); border-bottom-color: color-mix(in srgb, ${winnerColor} 30%, #1a3050)` : ''}
       onclick={handleCollapse}
       onkeydown={(e) => e.key === 'Enter' && handleCollapse()}
     >
       <span class="card-label">
-        Сход {bout.order_index}
+        Сход {boutIndex}
         <span class="time">({fmtMs(bout.time_start_ms)} — {fmtMs(bout.time_end_ms)})</span>
       </span>
       <span class="card-score">{scoreA} : {scoreB}</span>
@@ -242,6 +257,8 @@
             <label><input type="radio" bind:group={resA} value="hit" /> Попал</label>
             <label><input type="radio" bind:group={resA} value="miss" /> Промахнулся</label>
             <label><input type="radio" bind:group={resA} value="blocked" /> Заблокировали</label>
+            <label><input type="radio" bind:group={resA} value="late" /> Опоздал</label>
+            <label><input type="radio" bind:group={resA} value="no_strike" /> Не бил</label>
           </div>
         </div>
       </div>
@@ -279,6 +296,8 @@
             <label><input type="radio" bind:group={resB} value="hit" /> Попал</label>
             <label><input type="radio" bind:group={resB} value="miss" /> Промахнулся</label>
             <label><input type="radio" bind:group={resB} value="blocked" /> Заблокировали</label>
+            <label><input type="radio" bind:group={resB} value="late" /> Опоздал</label>
+            <label><input type="radio" bind:group={resB} value="no_strike" /> Не бил</label>
           </div>
         </div>
       </div>

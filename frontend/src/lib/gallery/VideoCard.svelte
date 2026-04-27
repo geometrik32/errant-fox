@@ -9,43 +9,30 @@
 
   let { video, onopen }: Props = $props();
 
-  let frame = $state(0);
   let imgError = $state(false);
-
-  function handleMouseMove(e: MouseEvent) {
-    if (video.preview_count <= 1) return;
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    frame = Math.min(video.preview_count - 1, Math.floor((x / rect.width) * video.preview_count));
-  }
-
-  function handleMouseLeave() {
-    frame = 0;
-  }
 
   function handleClick() {
     onopen?.(video.id);
   }
 
-  function handleImgError() {
-    if (frame !== 0) {
-      frame = 0;
-    } else {
-      imgError = true;
-      setTimeout(() => { imgError = false; }, 3000);
+  function handleAuxClick(e: MouseEvent) {
+    if (e.button === 1) {
+      e.preventDefault();
+      window.open(`#/player/${video.id}`, '_blank');
     }
   }
 
-  let previewSrc = $derived(
-    video.preview_url.replace(/\/previews\/\d+$/, `/previews/${frame}`)
-  );
+  function handleImgError() {
+    imgError = true;
+  }
+
+  let previewSrc = $derived(video.preview_url);
 </script>
 
 <button
   class="card"
   onclick={handleClick}
-  onmousemove={handleMouseMove}
-  onmouseleave={handleMouseLeave}
+  onauxclick={handleAuxClick}
 >
   <div class="preview">
     {#if !imgError}

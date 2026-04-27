@@ -138,6 +138,7 @@
             {video}
             {currentTime}
             onboutschange={(b) => { liveBouts = b; }}
+            onseekrequest={(ms, endMs) => { player?.seekTo(ms); player?.pause(); player?.setLoop(ms, endMs); }}
           />
         </div>
       {/if}
@@ -188,6 +189,7 @@
         {fps}
         onseek={(ms) => player?.seekTo(ms)}
         onloop={({ start, end }) => player?.setLoop(start, end)}
+        onboutclick={(id) => { judgingPanel?.expandBout(id); }}
         onplay={() => player?.togglePlay()}
         onstepback={() => player?.stepBackward()}
         onstepforward={() => player?.stepForward()}

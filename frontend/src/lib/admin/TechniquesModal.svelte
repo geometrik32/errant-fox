@@ -1,6 +1,6 @@
 <script lang="ts">
   import { techniques } from '../../stores';
-  import { createTechnique, deleteTechnique } from '../api/techniques';
+  import { createTechnique, renameTechnique, deleteTechnique } from '../api/techniques';
 
   interface Props {
     onclose?: () => void;
@@ -12,6 +12,8 @@
   let adding = $state(false);
   let addError = $state('');
   let deleteErrors: Record<number, string> = $state({});
+  let editingId = $state<number | null>(null);
+  let editName = $state('');
 
   let canAdd = $derived(newName.trim().length > 0 && !adding);
 
@@ -30,7 +32,25 @@
     }
   }
 
-  async function remove(id: number) {
+  function startEdit(id: number, name: string) {
+    editingId = id;
+    editName = name;
+  }
+
+  async function saveEdit(id: number) {
+    const name = editName.trim();
+    if (!name) { editingId = null; return; }
+    try {
+      const updated = await renameTechnique(id, name);
+      techniques.update((list) => list.map(t => t.id === id ? updated : t));
+      editingId = null;
+    } catch (e) {
+      addError = e instanceof Error ? e.message : 'Ошибка переименования';
+    }
+  }
+
+  async function remove(id: number, name: string) {
+    if (!confirm(`Удалить технику «${name}»?\n\nЕсли техника записана в сходах, данные о ней там сотрутся.`)) return;
     deleteErrors = { ...deleteErrors, [id]: '' };
     try {
       await deleteTechnique(id);
@@ -39,7 +59,7 @@
       const msg = e instanceof Error ? e.message : 'Ошибка';
       deleteErrors = {
         ...deleteErrors,
-        [id]: msg.includes('409') ? 'Техника используется в сходах' : msg,
+        [id]: msg.includes('409') ? 'Используется в сходах — удалите привязку' : msg,
       };
     }
   }
@@ -71,21 +91,43 @@
       {:else}
         {#each $techniques as t (t.id)}
           <div class="technique-row">
-            <span class="technique-name">{t.name}</span>
-            <div class="row-right">
-              {#if deleteErrors[t.id]}
-                <span class="row-error">{deleteErrors[t.id]}</span>
-              {/if}
-              <button
-                class="btn-delete"
-                onclick={() => remove(t.id)}
-                aria-label="Удалить технику {t.name}"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
-            </div>
+            {#if editingId === t.id}
+              <input
+                class="edit-inp"
+                type="text"
+                bind:value={editName}
+                onkeydown={(e) => { if (e.key === 'Enter') saveEdit(t.id); if (e.key === 'Escape') editingId = null; }}
+                autofocus
+              />
+              <button class="btn-save-edit" onclick={() => saveEdit(t.id)}>✓</button>
+              <button class="btn-cancel-edit" onclick={() => { editingId = null; }}>✕</button>
+            {:else}
+              <span class="technique-name">{t.name}</span>
+              <div class="row-right">
+                {#if deleteErrors[t.id]}
+                  <span class="row-error">{deleteErrors[t.id]}</span>
+                {/if}
+                <button
+                  class="btn-edit"
+                  onclick={() => startEdit(t.id, t.name)}
+                  aria-label="Переименовать {t.name}"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+                <button
+                  class="btn-delete"
+                  onclick={() => remove(t.id, t.name)}
+                  aria-label="Удалить технику {t.name}"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+            {/if}
           </div>
         {/each}
       {/if}
@@ -200,6 +242,49 @@
   .row-error {
     font-size: 0.75rem;
     color: #e05252;
+  }
+
+  .edit-inp {
+    flex: 1;
+    background: #060e18;
+    border: 1px solid #2a4f73;
+    border-radius: 4px;
+    color: #e8edf2;
+    font-size: 0.88rem;
+    padding: 4px 8px;
+    outline: none;
+  }
+
+  .btn-save-edit, .btn-cancel-edit {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    transition: background 0.12s;
+  }
+
+  .btn-save-edit { color: #52d47a; }
+  .btn-save-edit:hover { background: rgba(82, 212, 122, 0.12); }
+  .btn-cancel-edit { color: #e05252; }
+  .btn-cancel-edit:hover { background: rgba(224, 82, 82, 0.1); }
+
+  .btn-edit {
+    background: none;
+    border: none;
+    color: #4a6280;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    transition: color 0.12s, background 0.12s;
+  }
+
+  .btn-edit:hover {
+    color: #DB841F;
+    background: rgba(219, 132, 31, 0.1);
   }
 
   .btn-delete {

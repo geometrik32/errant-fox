@@ -60,10 +60,7 @@
 <header class="header">
   <!-- Left: logo -->
   <button class="logo" onclick={() => navigate('#/gallery')}>
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M12 2L3 7v10l9 5 9-5V7L12 2z" stroke="#DB841F" stroke-width="1.5" stroke-linejoin="round"/>
-      <path d="M12 2v20M3 7l9 5 9-5" stroke="#DB841F" stroke-width="1.5" stroke-linejoin="round"/>
-    </svg>
+    <img src="/logo.png" alt="" class="logo-img" aria-hidden="true" />
     <span>Errant Fox</span>
   </button>
 
@@ -217,10 +214,17 @@
     background: rgba(219, 132, 31, 0.12);
   }
 
+  .logo-img {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+  }
+
   /* User menu */
   .user-menu {
     position: relative;
     flex-shrink: 0;
+    margin-left: auto;
   }
 
   .menu-trigger {
