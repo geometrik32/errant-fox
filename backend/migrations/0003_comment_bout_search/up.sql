@@ -1,0 +1,1 @@
+ALTER TABLE comments ADD COLUMN bout_id INTEGER REFERENCES bouts(id);

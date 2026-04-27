@@ -21,6 +21,7 @@
     onspeedchange?: (speed: number) => void;
     onvolumechange?: (volume: number) => void;
     onlooptoggle?: () => void;
+    fps?: number;
   }
 
   let {
@@ -34,6 +35,7 @@
     looping = false,
     speed = 1,
     volume = 1,
+    fps = 25,
     onseek,
     onloop,
     onplay,
@@ -45,6 +47,17 @@
   }: Props = $props();
 
   const SPEEDS = [0.15, 0.2, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5];
+
+  let preMuteVolume = $state(1);
+
+  function toggleMute() {
+    if (volume > 0.01) {
+      preMuteVolume = volume;
+      onvolumechange?.(0);
+    } else {
+      onvolumechange?.(preMuteVolume > 0.01 ? preMuteVolume : 1);
+    }
+  }
 
   function boutColor(b: Bout): string {
     if (b.score_a > b.score_b) return resolveColor(fighterA?.id ?? 'a', fighterA?.color ?? null);
@@ -60,6 +73,13 @@
     const m = Math.floor(sec / 60);
     const s = Math.floor(sec % 60);
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  function fmtWithFrame(sec: number): string {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    const f = Math.floor((sec % 1) * fps);
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}:${String(f).padStart(2, '0')}`;
   }
 
   let progressEl: HTMLDivElement | null = $state(null);
@@ -193,17 +213,18 @@
 
     <div class="ctrl-group ctrl-group--right">
 
-      <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
-      <label class="vol-wrap">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-          <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" fill="currentColor" stroke="none"/>
-          {#if volume > 0.01}
-            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-          {/if}
-          {#if volume > 0.5}
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-          {/if}
-        </svg>
+      <div class="vol-wrap">
+        <button class="vol-icon-btn" onclick={toggleMute} aria-label={volume > 0.01 ? 'Выключить звук' : 'Включить звук'}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" fill="currentColor" stroke="none"/>
+            {#if volume > 0.01}
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+            {/if}
+            {#if volume > 0.5}
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+            {/if}
+          </svg>
+        </button>
         <input
           type="range"
           class="vol-slider"
@@ -214,10 +235,10 @@
           oninput={(e) => onvolumechange?.(parseFloat((e.target as HTMLInputElement).value))}
           aria-label="Громкость"
         />
-      </label>
+      </div>
 
       <time class="time-disp" datetime="PT{Math.round(currentTime)}S">
-        {fmt(currentTime)} / {fmt(duration)}
+        {fmtWithFrame(currentTime)} / {fmt(duration)}
       </time>
 
     </div>
@@ -409,7 +430,25 @@
     align-items: center;
     gap: 6px;
     color: #5a7a96;
+  }
+
+  .vol-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: #5a7a96;
     cursor: pointer;
+    padding: 3px;
+    border-radius: 4px;
+    transition: color 0.12s, background 0.12s;
+    flex-shrink: 0;
+  }
+
+  .vol-icon-btn:hover {
+    color: #d0dde8;
+    background: #0f2035;
   }
 
   .vol-slider {
@@ -447,7 +486,7 @@
     font-variant-numeric: tabular-nums;
     color: #5a7a96;
     white-space: nowrap;
-    min-width: 96px;
+    min-width: 116px;
     text-align: right;
   }
 </style>

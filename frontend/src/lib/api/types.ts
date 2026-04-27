@@ -88,6 +88,7 @@ export interface Comment {
   likes: number;
   dislikes: number;
   my_reaction: 'like' | 'dislike' | null;
+  bout_id?: number | null;
 }
 
 export interface VideoFull {
@@ -110,4 +111,18 @@ export interface VideoShort {
   id: string;
   date: string;
   preview_url: string;
+}
+
+export interface SearchResult {
+  comment_id: number;
+  comment_text: string;
+  author_id: string;
+  author_name: string;
+  timestamp_ms: number;
+  video_id: string;
+  video_date: string;
+  fighter_a_name: string | null;
+  fighter_b_name: string | null;
+  bout_id: number | null;
+  bout_order_index: number | null;
 }

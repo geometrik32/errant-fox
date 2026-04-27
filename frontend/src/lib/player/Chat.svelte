@@ -20,6 +20,17 @@
   let sending = $state(false);
   let listEl: HTMLDivElement;
 
+  let sortedComments = $derived.by(() => {
+    const topLevel = comments.filter(c => c.reply_to_id === null).sort((a, b) => a.id - b.id);
+    const result: Comment[] = [];
+    for (const c of topLevel) {
+      result.push(c);
+      const replies = comments.filter(r => r.reply_to_id === c.id).sort((a, b) => a.id - b.id);
+      result.push(...replies);
+    }
+    return result;
+  });
+
   let editingId = $state<number | null>(null);
   let editText = $state('');
 
@@ -47,7 +58,7 @@
     try {
       const created = await createComment({
         video_id: videoId,
-        timestamp_ms: Math.round(currentTime * 1000),
+        timestamp_ms: replyTo ? replyTo.timestamp_ms : Math.round(currentTime * 1000),
         text: t,
         reply_to_id: replyTo?.id ?? null,
       });
@@ -157,7 +168,7 @@
 
   <!-- Message list -->
   <div class="list" bind:this={listEl}>
-    {#each comments as c (c.id)}
+    {#each sortedComments as c (c.id)}
       <div class="msg" style={c.reply_to_id !== null ? 'margin-left: 16px' : ''}>
         <div class="msg-head">
           <div class="avatar">

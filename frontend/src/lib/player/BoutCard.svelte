@@ -4,6 +4,7 @@
   import type { Bout, VideoFighter } from '../api/types';
   import { updateBout } from '../api/bouts';
   import HitZonePicker from './HitZonePicker.svelte';
+  import { deleteBout } from '../api/bouts';
 
   type ResultType = 'hit' | 'miss' | 'blocked';
 
@@ -11,13 +12,15 @@
     bout: Bout;
     fighters: [VideoFighter | null, VideoFighter | null];
     expanded: boolean;
+    currentTime: number;
     onexpand: () => void;
     oncollapse: () => void;
     onmarkdirty: (dirty: boolean) => void;
     onupdate: (updated: Bout) => void;
+    ondelete?: () => void;
   }
 
-  let { bout, fighters, expanded, onexpand, oncollapse, onmarkdirty, onupdate }: Props = $props();
+  let { bout, fighters, expanded, currentTime, onexpand, oncollapse, onmarkdirty, onupdate, ondelete }: Props = $props();
 
   // ── Form state ──────────────────────────────────────────────────────────────
 
@@ -133,6 +136,21 @@
     oncollapse?.();
   }
 
+  let deleting = $state(false);
+
+  async function handleDelete() {
+    if (!confirm(`Удалить Сход ${bout.order_index}?`)) return;
+    deleting = true;
+    try {
+      await deleteBout(bout.id);
+      ondelete?.();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Ошибка удаления');
+    } finally {
+      deleting = false;
+    }
+  }
+
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
   function fmtMs(ms: number): string {
@@ -180,14 +198,14 @@
 
     <!-- Time range row -->
     <div class="time-row">
-      <div class="time-field">
-        <span class="field-lbl">Начало (мс)</span>
-        <input class="time-inp" type="number" min="0" bind:value={timeStartMs} aria-label="Начало схода" />
-      </div>
-      <div class="time-field">
-        <span class="field-lbl">Конец (мс)</span>
-        <input class="time-inp" type="number" min="0" bind:value={timeEndMs} aria-label="Конец схода" />
-      </div>
+      <button class="time-cap-btn" onclick={() => { timeStartMs = Math.round(currentTime * 1000); }} aria-label="Захватить начало схода">
+        <span class="time-cap-label">Начало</span>
+        <span class="time-cap-value">{fmtMs(timeStartMs)}</span>
+      </button>
+      <button class="time-cap-btn" onclick={() => { timeEndMs = Math.round(currentTime * 1000); }} aria-label="Захватить конец схода">
+        <span class="time-cap-label">Конец</span>
+        <span class="time-cap-value">{fmtMs(timeEndMs)}</span>
+      </button>
     </div>
 
     <!-- Two-column fighter form -->
@@ -276,6 +294,11 @@
         {saving ? 'Сохранение…' : 'Сохранить'}
       </button>
       <button class="btn-collapse" onclick={handleCollapse}>Свернуть</button>
+      <button class="btn-delete" onclick={handleDelete} disabled={deleting} aria-label="Удалить сход">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14H6L5,6"/><path d="M10,11v6"/><path d="M14,11v6"/><path d="M9,6V4h6v2"/>
+        </svg>
+      </button>
     </div>
 
   </div>
@@ -372,34 +395,41 @@
   /* ── Time row ───────────────────────────────────────────────────────────── */
   .time-row {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     padding: 8px 10px 0;
   }
 
-  .time-field {
+  .time-cap-btn {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 3px;
-  }
-
-  .time-inp {
-    width: 100%;
-    text-align: center;
+    align-items: center;
+    gap: 2px;
+    padding: 5px 4px;
     background: #0a1628;
     border: 1px solid #1a3050;
     border-radius: 4px;
-    color: #a0b4c8;
-    font-size: 0.78rem;
-    padding: 4px 6px;
-    outline: none;
-    -moz-appearance: textfield;
+    cursor: pointer;
+    transition: border-color 0.1s, background 0.1s;
   }
 
-  .time-inp::-webkit-inner-spin-button,
-  .time-inp::-webkit-outer-spin-button { -webkit-appearance: none; }
+  .time-cap-btn:hover {
+    border-color: #DB841F;
+    background: rgba(219, 132, 31, 0.08);
+  }
 
-  .time-inp:focus { border-color: #2a4f73; }
+  .time-cap-label {
+    font-size: 0.62rem;
+    color: #4a6280;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .time-cap-value {
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+    color: #a0b4c8;
+  }
 
   /* ── Fighter grid ───────────────────────────────────────────────────────── */
   .fighters-grid {
@@ -591,5 +621,31 @@
     background: #0f2035;
     border-color: #2a4f73;
     color: #d0dde8;
+  }
+
+  .btn-delete {
+    flex: none;
+    width: 30px;
+    padding: 6px 0;
+    border-radius: 4px;
+    background: rgba(224, 82, 82, 0.08);
+    border: 1px solid rgba(224, 82, 82, 0.25);
+    color: #a05050;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+  }
+
+  .btn-delete:hover:not(:disabled) {
+    background: rgba(224, 82, 82, 0.2);
+    border-color: rgba(224, 82, 82, 0.5);
+    color: #e05252;
+  }
+
+  .btn-delete:disabled {
+    opacity: 0.4;
+    cursor: default;
   }
 </style>

@@ -62,20 +62,13 @@
     return result;
   });
 
-  let maxCount = $derived(Math.max(...[...counts.values()], 1));
-
   // SVG viewBox is 0 0 90 222, dot coords are 0-1 fractions of that
   const VW = 90;
   const VH = 222;
 
-  function opacity(zone: string): number {
-    const c = counts.get(zone) ?? 0;
-    return c === 0 ? 0.08 : c / maxCount * 0.75 + 0.15;
-  }
-
   function fill(zone: string): string {
-    if (selectedZone && selectedZone === zone) return 'rgba(219,132,31,0.6)';
-    return `rgba(219, 132, 31, ${opacity(zone).toFixed(2)})`;
+    if (selectedZone && selectedZone === zone) return 'rgba(219,132,31,0.3)';
+    return 'transparent';
   }
 
   function strokeColor(zone: string): string {

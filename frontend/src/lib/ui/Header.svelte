@@ -4,6 +4,7 @@
   import CreateUserModal from '../admin/CreateUserModal.svelte';
   import TechniquesModal from '../admin/TechniquesModal.svelte';
   import ProfileModal from './ProfileModal.svelte';
+  import SearchPanel from './SearchPanel.svelte';
 
   interface Props {
     hash: string;
@@ -17,8 +18,16 @@
   let showProfile = $state(false);
 
   let activeNav = $derived(
-    hash === '#/stats' ? 'stats' : 'gallery'
+    hash === '#/stats' ? 'stats' : hash === '#/search' ? 'search' : 'gallery'
   );
+
+  let showSearch = $state(false);
+  let searchQuery = $state('');
+
+  function toggleSearch() {
+    showSearch = !showSearch;
+    if (!showSearch) searchQuery = '';
+  }
 
   function navigate(path: string) {
     window.location.hash = path;
@@ -58,21 +67,28 @@
     <span>Errant Fox</span>
   </button>
 
-  <!-- Center: nav -->
+  <!-- Center: nav (absolutely centered) -->
   <nav class="nav">
     <button
       class="nav-btn"
       class:active={activeNav === 'gallery'}
-      onclick={() => navigate('#/gallery')}
+      onclick={() => { navigate('#/gallery'); showSearch = false; }}
     >
       Видео
     </button>
     <button
       class="nav-btn"
       class:active={activeNav === 'stats'}
-      onclick={() => navigate('#/stats')}
+      onclick={() => { navigate('#/stats'); showSearch = false; }}
     >
       Бойцы
+    </button>
+    <button
+      class="nav-btn"
+      class:active={showSearch}
+      onclick={toggleSearch}
+    >
+      Поиск
     </button>
   </nav>
 
@@ -117,6 +133,10 @@
     {/if}
   </div>
 </header>
+
+{#if showSearch}
+  <SearchPanel onclose={() => { showSearch = false; searchQuery = ''; }} />
+{/if}
 
 {#if showProfile}
   <ProfileModal onclose={() => { showProfile = false; }} />
@@ -166,11 +186,12 @@
     color: #DB841F;
   }
 
-  /* Center nav */
+  /* Center nav — absolutely centered regardless of logo/avatar widths */
   .nav {
-    flex: 1;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
-    justify-content: center;
     gap: 4px;
   }
 

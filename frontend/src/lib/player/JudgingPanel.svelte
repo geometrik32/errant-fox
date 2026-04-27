@@ -105,6 +105,12 @@
     bouts = bouts.map(b => b.id === updated.id ? updated : b);
   }
 
+  function handleBoutDelete(id: number) {
+    bouts = bouts.filter(b => b.id !== id);
+    if (expandedBoutId === id) expandedBoutId = null;
+    onboutschange?.(bouts);
+  }
+
   // ── Derived lists & scores ───────────────────────────────────────────────
 
   let sortedBouts = $derived([...bouts].sort((a, b) => a.order_index - b.order_index));
@@ -176,33 +182,31 @@
 
   <!-- ── Fighter selects ──────────────────────────────────────────────────── -->
   <div class="fighters-section">
-    <div class="fighter-row">
-      <span
-        class="fighter-side"
-        style:background={activeFighterA ? resolveColor(activeFighterA.id, activeFighterA.color) + '33' : 'rgba(82,134,224,0.2)'}
-        style:color={activeFighterA ? resolveColor(activeFighterA.id, activeFighterA.color) : '#6fa0e0'}
-        style:border-color={activeFighterA ? resolveColor(activeFighterA.id, activeFighterA.color) + '55' : 'rgba(82,134,224,0.3)'}
-      >A</span>
-      <select class="fighter-sel" bind:value={fighterAId} onchange={saveFighters} aria-label="Боец A">
-        <option value="">— Боец A —</option>
-        {#each $fighters as f (f.id)}
-          <option value={f.id}>{f.display_name}</option>
-        {/each}
-      </select>
-    </div>
-    <div class="fighter-row">
-      <span
-        class="fighter-side"
-        style:background={activeFighterB ? resolveColor(activeFighterB.id, activeFighterB.color) + '33' : 'rgba(224,82,82,0.2)'}
-        style:color={activeFighterB ? resolveColor(activeFighterB.id, activeFighterB.color) : '#e08080'}
-        style:border-color={activeFighterB ? resolveColor(activeFighterB.id, activeFighterB.color) + '55' : 'rgba(224,82,82,0.3)'}
-      >B</span>
-      <select class="fighter-sel" bind:value={fighterBId} onchange={saveFighters} aria-label="Боец B">
-        <option value="">— Боец B —</option>
-        {#each $fighters as f (f.id)}
-          <option value={f.id}>{f.display_name}</option>
-        {/each}
-      </select>
+    <div class="fighters-row">
+      <div class="fighter-slot">
+        <span
+          class="fighter-dot"
+          style:background={activeFighterA ? resolveColor(activeFighterA.id, activeFighterA.color) : '#6fa0e0'}
+        ></span>
+        <select class="fighter-sel" bind:value={fighterAId} onchange={saveFighters} aria-label="Боец A">
+          <option value="">— Боец A —</option>
+          {#each $fighters as f (f.id)}
+            <option value={f.id}>{f.display_name}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="fighter-slot">
+        <span
+          class="fighter-dot"
+          style:background={activeFighterB ? resolveColor(activeFighterB.id, activeFighterB.color) : '#e08080'}
+        ></span>
+        <select class="fighter-sel" bind:value={fighterBId} onchange={saveFighters} aria-label="Боец B">
+          <option value="">— Боец B —</option>
+          {#each $fighters as f (f.id)}
+            <option value={f.id}>{f.display_name}</option>
+          {/each}
+        </select>
+      </div>
     </div>
   </div>
 
@@ -240,11 +244,13 @@
       <BoutCard
         {bout}
         fighters={[activeFighterA, activeFighterB]}
+        {currentTime}
         expanded={expandedBoutId === bout.id}
         onexpand={() => handleExpand(bout.id)}
         oncollapse={handleCollapse}
         onmarkdirty={(d) => handleMarkDirty(bout.id, d)}
         onupdate={handleBoutUpdate}
+        ondelete={() => handleBoutDelete(bout.id)}
       />
     {:else}
       <div class="empty">Нет сходов</div>
@@ -271,34 +277,28 @@
 
   /* ── Fighter selects ────────────────────────────────────────────────────── */
   .fighters-section {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 10px 10px 8px;
+    padding: 8px 10px;
     border-bottom: 1px solid #1a3050;
   }
 
-  .fighter-row {
-    display: flex;
-    align-items: center;
+  .fighters-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 6px;
   }
 
-  .fighter-side {
-    width: 18px;
-    height: 18px;
-    border-radius: 3px;
-    font-size: 0.7rem;
-    font-weight: 700;
+  .fighter-slot {
     display: flex;
     align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    letter-spacing: 0;
+    gap: 5px;
+    min-width: 0;
   }
 
-  .fighter-side {
-    border: 1px solid;
+  .fighter-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
   }
 
   .fighter-sel {

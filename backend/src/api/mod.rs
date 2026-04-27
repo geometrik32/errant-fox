@@ -56,6 +56,7 @@ pub fn router(state: AppState) -> Router {
         )
         // Comments
         .route("/api/comments", post(comments::post_comment))
+        .route("/api/comments/search", get(comments::search_comments))
         .route(
             "/api/comments/{id}",
             patch(comments::patch_comment).delete(comments::delete_comment),

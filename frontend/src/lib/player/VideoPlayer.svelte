@@ -7,6 +7,7 @@
     ondurationchange?: (d: number) => void;
     onplayingchange?: (p: boolean) => void;
     onloopingchange?: (l: boolean) => void;
+    onfpschange?: (fps: number) => void;
   }
 
   let {
@@ -17,6 +18,7 @@
     ondurationchange,
     onplayingchange,
     onloopingchange,
+    onfpschange,
   }: Props = $props();
 
   let videoEl: HTMLVideoElement;
@@ -89,8 +91,36 @@
     if (videoEl) ondurationchange?.(videoEl.duration);
   }
 
-  function handlePlay() { onplayingchange?.(true); }
   function handlePause() { onplayingchange?.(false); }
+
+  // FPS detection — measure first 16 frame intervals after play
+  let fpsSamples: number[] = [];
+  let lastMediaTime = -1;
+
+  function fpsCallback(_now: number, meta: { mediaTime: number }): void {
+    if (lastMediaTime >= 0) {
+      const diff = meta.mediaTime - lastMediaTime;
+      if (diff > 0 && diff < 0.5) fpsSamples.push(diff);
+    }
+    lastMediaTime = meta.mediaTime;
+
+    if (fpsSamples.length < 16) {
+      videoEl?.requestVideoFrameCallback(fpsCallback);
+    } else {
+      const avg = fpsSamples.reduce((a, b) => a + b) / fpsSamples.length;
+      const fps = Math.round(1 / avg);
+      onfpschange?.(fps);
+      fpsSamples = [];
+      lastMediaTime = -1;
+    }
+  }
+
+  function handlePlayForFps() {
+    onplayingchange?.(true);
+    if (fpsSamples.length === 0 && videoEl) {
+      videoEl.requestVideoFrameCallback(fpsCallback);
+    }
+  }
 
   function handleWheel(e: WheelEvent) {
     e.preventDefault();
@@ -154,7 +184,7 @@
     {src}
     ontimeupdate={handleTimeUpdate}
     ondurationchange={handleDurationChange}
-    onplay={handlePlay}
+    onplay={handlePlayForFps}
     onpause={handlePause}
     onclick={handleClick}
     ondblclick={resetZoom}
