@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import type { Comment } from './types';
+import type { Comment, SearchResult } from './types';
 
 export interface CreateCommentData {
   video_id: string;
@@ -39,4 +39,8 @@ export async function deleteReact(id: number): Promise<void> {
   await apiFetch<{ ok: boolean }>(`/comments/${id}/react`, {
     method: 'DELETE',
   });
+}
+
+export async function searchComments(q: string): Promise<SearchResult[]> {
+  return apiFetch<SearchResult[]>(`/comments/search?q=${encodeURIComponent(q)}`);
 }

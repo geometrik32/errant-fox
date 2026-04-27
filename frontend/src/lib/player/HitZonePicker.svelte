@@ -1,4 +1,4 @@
-<script lang="ts">
+<script module lang="ts">
   export const HIT_ZONES = [
     'Голова', 'Шея',
     'Плечо пр.', 'Предплечье пр.', 'Кисть пр.',
@@ -9,7 +9,9 @@
   ] as const;
 
   export type HitZone = typeof HIT_ZONES[number];
+</script>
 
+<script lang="ts">
   interface Props {
     value: string;
     onchange?: (value: string) => void;
@@ -24,6 +26,15 @@
     return value.split(':')[0];
   }
 
+  function parseCoords(): { x: number; y: number } | null {
+    const parts = value.split(':');
+    if (parts.length < 3) return null;
+    const x = parseFloat(parts[1]);
+    const y = parseFloat(parts[2]);
+    if (isNaN(x) || isNaN(y)) return null;
+    return { x, y };
+  }
+
   function handleZoneClick(e: MouseEvent, zone: string) {
     if (currentZone() === zone) {
       onchange?.('');
@@ -36,15 +47,12 @@
   }
 
   function fill(zone: string) {
-    return currentZone() === zone ? '#DB841F' : '#1a3a5c';
+    return currentZone() === zone ? 'rgba(219,132,31,0.22)' : '#1a3a5c';
   }
 
   function stroke(zone: string) {
     return currentZone() === zone ? '#e8941f' : '#2a4f73';
   }
-
-  // SVG viewBox: 0 0 90 222
-  // Layout matches the user's diagram (16 zones, bilateral arms/legs)
 </script>
 
 <div class="picker">
@@ -194,8 +202,12 @@
       aria-label="Стопа лев." aria-pressed={currentZone() === 'Стопа лев.'}
     ><title>Стопа лев.</title></rect>
 
+    <!-- Hit dot at click position -->
     {#if currentZone()}
-      <text x="45" y="217" text-anchor="middle" class="selected-label">{currentZone()}</text>
+      {@const dot = parseCoords()}
+      {#if dot}
+        <circle cx={dot.x * 90} cy={dot.y * 222} r="3.5" fill="#e02020" pointer-events="none" />
+      {/if}
     {/if}
 
   </svg>
@@ -208,7 +220,7 @@
   }
 
   .svg {
-    width: 80px;
+    width: 120px;
     flex-shrink: 0;
     overflow: visible;
   }
@@ -221,12 +233,5 @@
 
   .zone:hover {
     filter: brightness(1.4);
-  }
-
-  .selected-label {
-    font-size: 6px;
-    fill: #DB841F;
-    font-weight: 600;
-    pointer-events: none;
   }
 </style>

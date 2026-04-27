@@ -1,4 +1,4 @@
-// @generated — matches migrations/0001_initial + 0002_comment_reactions
+// @generated — matches migrations/0001_initial + 0002_comment_reactions + 0003_comment_bout_search
 
 diesel::table! {
     users (id) {
@@ -61,6 +61,7 @@ diesel::table! {
         reply_to_id  -> Nullable<Integer>,
         created_at   -> Timestamp,
         edited_at    -> Nullable<Timestamp>,
+        bout_id      -> Nullable<Integer>,
     }
 }
 
@@ -76,6 +77,7 @@ diesel::table! {
 diesel::joinable!(bouts             -> videos   (video_id));
 diesel::joinable!(comments          -> videos   (video_id));
 diesel::joinable!(comments          -> users    (author_id));
+diesel::joinable!(comments          -> bouts    (bout_id));
 diesel::joinable!(comment_reactions -> comments (comment_id));
 diesel::joinable!(comment_reactions -> users    (user_id));
 

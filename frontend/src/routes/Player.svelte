@@ -23,6 +23,7 @@
   let looping = $state(false);
   let speed = $state(1);
   let volume = $state(1);
+  let fps = $state(25);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let player: any = $state(null);
@@ -152,6 +153,7 @@
           ondurationchange={(d) => { duration = d; }}
           onplayingchange={(p) => { playing = p; }}
           onloopingchange={(l) => { looping = l; }}
+          onfpschange={(f) => { fps = f; }}
         />
       </div>
 
@@ -183,6 +185,7 @@
         {looping}
         {speed}
         {volume}
+        {fps}
         onseek={(ms) => player?.seekTo(ms)}
         onloop={({ start, end }) => player?.setLoop(start, end)}
         onplay={() => player?.togglePlay()}

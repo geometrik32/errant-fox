@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     Json,
 };
@@ -37,6 +37,7 @@ pub struct CommentResponse {
     pub likes: i32,
     pub dislikes: i32,
     pub my_reaction: Option<String>,
+    pub bout_id: Option<i32>,
 }
 
 fn to_response(c: &Comment, author: &User, likes: i32, dislikes: i32, my_reaction: Option<String>) -> CommentResponse {
@@ -57,6 +58,7 @@ fn to_response(c: &Comment, author: &User, likes: i32, dislikes: i32, my_reactio
         likes,
         dislikes,
         my_reaction,
+        bout_id: c.bout_id,
     }
 }
 
@@ -90,6 +92,7 @@ fn to_ws_comment(c: &Comment, author: &User) -> WsComment {
         reply_to_id: c.reply_to_id,
         created_at: c.created_at.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
         edited_at: None,
+        bout_id: c.bout_id,
     }
 }
 
@@ -133,6 +136,19 @@ pub async fn post_comment(
             return Err(AppError::NotFound);
         }
 
+        // Auto-detect which bout (if any) contains this timestamp
+        let bout_id: Option<i32> = {
+            use crate::db::schema::bouts;
+            bouts::table
+                .filter(bouts::video_id.eq(&body.video_id))
+                .filter(bouts::time_start_ms.le(body.timestamp_ms))
+                .filter(bouts::time_end_ms.ge(body.timestamp_ms))
+                .select(bouts::id)
+                .first::<i32>(&mut conn)
+                .optional()
+                .unwrap_or(None)
+        };
+
         diesel::insert_into(comments::table)
             .values(&NewComment {
                 video_id: body.video_id.clone(),
@@ -140,6 +156,7 @@ pub async fn post_comment(
                 timestamp_ms: body.timestamp_ms,
                 text: body.text.clone(),
                 reply_to_id: body.reply_to_id,
+                bout_id,
             })
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -291,6 +308,99 @@ pub async fn react_comment(
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+// ── Search ────────────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct SearchQuery {
+    pub q: String,
+}
+
+#[derive(Serialize)]
+pub struct SearchResult {
+    pub comment_id: i32,
+    pub comment_text: String,
+    pub author_id: String,
+    pub author_name: String,
+    pub timestamp_ms: i32,
+    pub video_id: String,
+    pub video_date: String,
+    pub fighter_a_name: Option<String>,
+    pub fighter_b_name: Option<String>,
+    pub bout_id: Option<i32>,
+    pub bout_order_index: Option<i32>,
+}
+
+pub async fn search_comments(
+    State(state): State<AppState>,
+    CurrentUser(_user): CurrentUser,
+    Query(params): Query<SearchQuery>,
+) -> Result<Json<Vec<SearchResult>>, AppError> {
+    let db = state.db.clone();
+    let q = format!("%{}%", params.q);
+
+    let results = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::{bouts, comments, users, videos};
+
+        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // Load matching comments with author (SQLite LIKE is case-insensitive for ASCII)
+        let rows = comments::table
+            .inner_join(users::table.on(comments::author_id.eq(users::id)))
+            .inner_join(videos::table.on(comments::video_id.eq(videos::id)))
+            .filter(comments::text.like(&q))
+            .select((
+                comments::id,
+                comments::text,
+                comments::timestamp_ms,
+                comments::video_id,
+                comments::bout_id,
+                users::id,
+                users::display_name,
+                videos::date,
+                videos::fighter_a_id,
+                videos::fighter_b_id,
+            ))
+            .limit(50)
+            .load::<(i32, String, i32, String, Option<i32>, String, String, chrono::NaiveDate, Option<String>, Option<String>)>(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let mut out = Vec::with_capacity(rows.len());
+        for (cid, ctext, ts, vid, bout_id, uid, uname, vdate, fa_id, fb_id) in rows {
+            // Resolve fighter display names
+            let fa_name = if let Some(ref id) = fa_id {
+                users::table.filter(users::id.eq(id)).select(users::display_name).first::<String>(&mut conn).ok()
+            } else { None };
+            let fb_name = if let Some(ref id) = fb_id {
+                users::table.filter(users::id.eq(id)).select(users::display_name).first::<String>(&mut conn).ok()
+            } else { None };
+
+            let bout_order = if let Some(bid) = bout_id {
+                bouts::table.filter(bouts::id.eq(bid)).select(bouts::order_index).first::<i32>(&mut conn).ok()
+            } else { None };
+
+            out.push(SearchResult {
+                comment_id: cid,
+                comment_text: ctext,
+                author_id: uid,
+                author_name: uname,
+                timestamp_ms: ts,
+                video_id: vid,
+                video_date: vdate.to_string(),
+                fighter_a_name: fa_name,
+                fighter_b_name: fb_name,
+                bout_id,
+                bout_order_index: bout_order,
+            });
+        }
+
+        Ok::<_, AppError>(out)
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    Ok(Json(results))
 }
 
 pub async fn delete_react(
