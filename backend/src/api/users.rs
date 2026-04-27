@@ -87,6 +87,7 @@ fn to_me_dto(u: &User) -> UserMeDto {
 
 #[derive(Deserialize)]
 pub struct PatchMeRequest {
+    pub username: Option<String>,
     pub display_name: Option<String>,
     pub password: Option<String>,
     pub color: Option<String>,
@@ -258,10 +259,11 @@ pub async fn patch_me(
     let user_id = user.id.clone();
 
     let updated = tokio::task::spawn_blocking(move || {
-        use crate::db::schema::users::dsl::{color, display_name, id, password_hash, users};
+        use crate::db::schema::users::dsl::{color, display_name, id, password_hash, username, users};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
 
+        let new_username = body.username.unwrap_or(user.username);
         let new_name = body.display_name.unwrap_or(user.display_name);
         let new_hash = if let Some(pw) = body.password {
             bcrypt::hash(&pw, bcrypt::DEFAULT_COST)
@@ -273,6 +275,7 @@ pub async fn patch_me(
 
         diesel::update(users.filter(id.eq(&user_id)))
             .set((
+                username.eq(&new_username),
                 display_name.eq(&new_name),
                 password_hash.eq(&new_hash),
                 color.eq(&new_color),

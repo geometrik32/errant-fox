@@ -11,9 +11,10 @@
     video: VideoFull;
     currentTime: number;
     onboutschange?: (bouts: Bout[]) => void;
+    onseekrequest?: (ms: number, endMs: number) => void;
   }
 
-  let { video, currentTime, onboutschange }: Props = $props();
+  let { video, currentTime, onboutschange, onseekrequest }: Props = $props();
 
   // ── Local bouts state ────────────────────────────────────────────────────
 
@@ -72,6 +73,10 @@
       bouts = [...bouts, created];
       onboutschange?.(bouts);
       startTime = null;
+      expandedBoutId = created.id;
+      requestAnimationFrame(() => {
+        if (boutsListEl) boutsListEl.scrollTop = boutsListEl.scrollHeight;
+      });
     } catch (e) {
       finishError = e instanceof Error ? e.message : 'Ошибка создания схода';
     } finally {
@@ -89,6 +94,14 @@
       if (!confirm('Есть несохранённые изменения. Свернуть текущую карточку?')) return;
     }
     expandedBoutId = id;
+    const b = bouts.find(b => b.id === id);
+    if (b) onseekrequest?.(b.time_start_ms, b.time_end_ms);
+  }
+
+  export function expandBout(id: number) {
+    expandedBoutId = id;
+    const el = boutsListEl?.querySelector(`[data-bout-id="${id}"]`);
+    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
   function handleCollapse() {
@@ -103,6 +116,7 @@
 
   function handleBoutUpdate(updated: Bout) {
     bouts = bouts.map(b => b.id === updated.id ? updated : b);
+    onboutschange?.(bouts);
   }
 
   function handleBoutDelete(id: number) {
@@ -110,6 +124,8 @@
     if (expandedBoutId === id) expandedBoutId = null;
     onboutschange?.(bouts);
   }
+
+  let boutsListEl: HTMLDivElement | null = $state(null);
 
   // ── Derived lists & scores ───────────────────────────────────────────────
 
@@ -166,6 +182,41 @@
     w?.close();
   });
 
+  // ── Custom fighter dropdowns ─────────────────────────────────────────────
+
+  let openDropdown = $state<'a' | 'b' | null>(null);
+
+  function toggleDropdown(slot: 'a' | 'b') {
+    openDropdown = openDropdown === slot ? null : slot;
+  }
+
+  function selectFighter(slot: 'a' | 'b', id: string) {
+    if (slot === 'a') fighterAId = id;
+    else fighterBId = id;
+    openDropdown = null;
+    saveFighters();
+  }
+
+  function handleDropdownKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') openDropdown = null;
+  }
+
+  function handleDropdownClickOutside(e: MouseEvent) {
+    const target = e.target as HTMLElement;
+    if (!target.closest('.fighter-slot')) openDropdown = null;
+  }
+
+  $effect(() => {
+    if (openDropdown !== null) {
+      document.addEventListener('click', handleDropdownClickOutside);
+      document.addEventListener('keydown', handleDropdownKeydown);
+      return () => {
+        document.removeEventListener('click', handleDropdownClickOutside);
+        document.removeEventListener('keydown', handleDropdownKeydown);
+      };
+    }
+  });
+
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   function fmtSec(sec: number): string {
@@ -183,30 +234,43 @@
   <!-- ── Fighter selects ──────────────────────────────────────────────────── -->
   <div class="fighters-section">
     <div class="fighters-row">
-      <div class="fighter-slot">
-        <span
-          class="fighter-dot"
-          style:background={activeFighterA ? resolveColor(activeFighterA.id, activeFighterA.color) : '#6fa0e0'}
-        ></span>
-        <select class="fighter-sel" bind:value={fighterAId} onchange={saveFighters} aria-label="Боец A">
-          <option value="">— Боец A —</option>
-          {#each $fighters as f (f.id)}
-            <option value={f.id}>{f.display_name}</option>
-          {/each}
-        </select>
-      </div>
-      <div class="fighter-slot">
-        <span
-          class="fighter-dot"
-          style:background={activeFighterB ? resolveColor(activeFighterB.id, activeFighterB.color) : '#e08080'}
-        ></span>
-        <select class="fighter-sel" bind:value={fighterBId} onchange={saveFighters} aria-label="Боец B">
-          <option value="">— Боец B —</option>
-          {#each $fighters as f (f.id)}
-            <option value={f.id}>{f.display_name}</option>
-          {/each}
-        </select>
-      </div>
+      {#each (['a', 'b'] as const) as slot}
+        {@const activeF = slot === 'a' ? activeFighterA : activeFighterB}
+        {@const defaultColor = slot === 'a' ? '#6fa0e0' : '#e08080'}
+        {@const dotColor = activeF ? resolveColor(activeF.id, activeF.color) : defaultColor}
+        {@const label = slot === 'a' ? '— Боец A —' : '— Боец B —'}
+        <div class="fighter-slot">
+          <button
+            class="fighter-btn"
+            onclick={(e) => { e.stopPropagation(); toggleDropdown(slot); }}
+            aria-label={label}
+          >
+            <span class="fighter-dot" style:background={dotColor}></span>
+            <span class="fighter-btn-name">{activeF?.display_name ?? label}</span>
+            <svg class="fighter-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none">
+              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+          {#if openDropdown === slot}
+            <div class="fighter-dropdown">
+              <button class="fighter-opt" onclick={() => selectFighter(slot, '')}>
+                <span class="fighter-opt-dot" style:background="transparent; border: 1px solid #3a5470"></span>
+                <span>— Не выбран —</span>
+              </button>
+              {#each $fighters as f (f.id)}
+                <button
+                  class="fighter-opt"
+                  class:selected={slot === 'a' ? fighterAId === f.id : fighterBId === f.id}
+                  onclick={() => selectFighter(slot, f.id)}
+                >
+                  <span class="fighter-opt-dot" style:background={resolveColor(f.id, f.color)}></span>
+                  <span>{f.display_name}</span>
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/each}
     </div>
   </div>
 
@@ -239,19 +303,22 @@
   {/if}
 
   <!-- ── Bouts list ────────────────────────────────────────────────────────── -->
-  <div class="bouts-list">
-    {#each sortedBouts as bout (bout.id)}
-      <BoutCard
-        {bout}
-        fighters={[activeFighterA, activeFighterB]}
-        {currentTime}
-        expanded={expandedBoutId === bout.id}
-        onexpand={() => handleExpand(bout.id)}
-        oncollapse={handleCollapse}
-        onmarkdirty={(d) => handleMarkDirty(bout.id, d)}
-        onupdate={handleBoutUpdate}
-        ondelete={() => handleBoutDelete(bout.id)}
-      />
+  <div class="bouts-list" bind:this={boutsListEl}>
+    {#each sortedBouts as bout, i (bout.id)}
+      <div data-bout-id={bout.id}>
+        <BoutCard
+          {bout}
+          boutIndex={i + 1}
+          fighters={[activeFighterA, activeFighterB]}
+          {currentTime}
+          expanded={expandedBoutId === bout.id}
+          onexpand={() => handleExpand(bout.id)}
+          oncollapse={handleCollapse}
+          onmarkdirty={(d) => handleMarkDirty(bout.id, d)}
+          onupdate={handleBoutUpdate}
+          ondelete={() => handleBoutDelete(bout.id)}
+        />
+      </div>
     {:else}
       <div class="empty">Нет сходов</div>
     {/each}
@@ -288,36 +355,84 @@
   }
 
   .fighter-slot {
-    display: flex;
-    align-items: center;
-    gap: 5px;
+    position: relative;
+    flex: 1;
     min-width: 0;
   }
 
   .fighter-dot {
-    width: 10px;
-    height: 10px;
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
     flex-shrink: 0;
   }
 
-  .fighter-sel {
-    flex: 1;
+  .fighter-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
     background: #0d1e35;
     border: 1px solid #1a3050;
     border-radius: 4px;
     color: #a0b4c8;
     font-size: 0.78rem;
     padding: 4px 6px;
-    outline: none;
     cursor: pointer;
     transition: border-color 0.1s;
+    text-align: left;
   }
 
-  .fighter-sel:hover,
-  .fighter-sel:focus {
-    border-color: #2a4f73;
-    color: #d0dde8;
+  .fighter-btn:hover { border-color: #2a4f73; color: #d0dde8; }
+
+  .fighter-btn-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .fighter-chevron {
+    flex-shrink: 0;
+    color: #3a5470;
+  }
+
+  .fighter-dropdown {
+    position: absolute;
+    top: calc(100% + 3px);
+    left: 0;
+    right: 0;
+    background: #0d1e35;
+    border: 1px solid #2a4f73;
+    border-radius: 5px;
+    z-index: 50;
+    overflow: hidden;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+  }
+
+  .fighter-opt {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 6px 8px;
+    background: none;
+    border: none;
+    color: #a0b4c8;
+    font-size: 0.78rem;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.1s, color 0.1s;
+  }
+
+  .fighter-opt:hover { background: #1a3050; color: #d0dde8; }
+  .fighter-opt.selected { background: rgba(219,132,31,0.12); color: #DB841F; }
+
+  .fighter-opt-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
   }
 
   /* ── Controls ───────────────────────────────────────────────────────────── */

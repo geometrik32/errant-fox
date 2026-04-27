@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { currentUser } from '../../stores';
+  import { currentUser, fighters } from '../../stores';
   import { patchMe, uploadMyAvatar } from '../api/auth';
+  import { getFighters } from '../api/fighters';
   import { resolveColor } from '../api/types';
 
   interface Props {
@@ -9,6 +10,7 @@
 
   let { onclose }: Props = $props();
 
+  let username = $state($currentUser?.username ?? '');
   let displayName = $state($currentUser?.display_name ?? '');
   let color = $state($currentUser?.color ?? '');
   let newPassword = $state('');
@@ -47,19 +49,24 @@
 
     saving = true;
     try {
-      const data: { display_name?: string; password?: string; color?: string } = {};
+      const data: { username?: string; display_name?: string; password?: string; color?: string } = {};
+      if (username !== $currentUser?.username) data.username = username;
       if (displayName !== $currentUser?.display_name) data.display_name = displayName;
       if (newPassword) data.password = newPassword;
       if (color && color !== $currentUser?.color) data.color = color;
 
+      const colorChanged = !!data.color;
+
       if (Object.keys(data).length > 0) {
         const updated = await patchMe(data);
         currentUser.set(updated);
+        if (colorChanged) {
+          fighters.set(await getFighters());
+        }
       }
 
       if (avatarFile) {
         await uploadMyAvatar(avatarFile);
-        // force avatar reload by bumping the url with a cache-bust
         currentUser.update(u => u ? { ...u, avatar_url: u.avatar_url + '?t=' + Date.now() } : u);
       }
 
@@ -111,15 +118,14 @@
       <!-- Avatar -->
       <label class="avatar-wrap" title="Нажмите для загрузки аватарки">
         <div class="avatar-preview" style:background={effectiveColor}>
+          <svg class="avatar-fallback" width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="1.5"/>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
           {#if avatarPreview}
             <img src={avatarPreview} alt="preview" />
           {:else if $currentUser?.avatar_url}
-            <img src={$currentUser.avatar_url} alt={$currentUser.display_name} />
-          {:else}
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="1.5"/>
-              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
+            <img src={$currentUser.avatar_url} alt={$currentUser.display_name} onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
           {/if}
         </div>
         <span class="avatar-hint">Загрузить фото</span>
@@ -128,7 +134,7 @@
 
       <div class="field">
         <label for="username">Логин</label>
-        <input id="username" type="text" value={$currentUser?.username ?? ''} disabled />
+        <input id="username" type="text" bind:value={username} autocomplete="username" required />
       </div>
 
       <div class="field">
@@ -252,13 +258,20 @@
     align-items: center;
     justify-content: center;
     transition: filter 0.15s;
+    position: relative;
   }
 
   .avatar-wrap:hover .avatar-preview {
     filter: brightness(0.75);
   }
 
+  .avatar-fallback {
+    position: absolute;
+  }
+
   .avatar-preview img {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;

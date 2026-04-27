@@ -14,10 +14,10 @@ export interface UpdateBoutData {
   score_b?: number;
   technique_a_id?: number | null;
   hit_zone_a?: string | null;
-  result_a?: 'hit' | 'miss' | 'blocked' | null;
+  result_a?: 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | null;
   technique_b_id?: number | null;
   hit_zone_b?: string | null;
-  result_b?: 'hit' | 'miss' | 'blocked' | null;
+  result_b?: 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | null;
 }
 
 export async function createBout(data: CreateBoutData): Promise<Bout> {

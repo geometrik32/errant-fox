@@ -132,6 +132,9 @@
             <option value="">Все</option>
             <option value="hit">Попал</option>
             <option value="miss">Промах</option>
+            <option value="blocked">Заблокировали</option>
+            <option value="late">Опоздал</option>
+            <option value="no_strike">Не бил</option>
           </select>
         </th>
         {/if}
@@ -155,6 +158,9 @@
             <option value="">Все</option>
             <option value="hit">Попал</option>
             <option value="miss">Промах</option>
+            <option value="blocked">Заблокировали</option>
+            <option value="late">Опоздал</option>
+            <option value="no_strike">Не бил</option>
           </select>
         </th>
         {/if}
@@ -179,18 +185,26 @@
           {#if visibleCols.has('my_tech')}<td class="td">{bout.my_technique_name ?? '—'}</td>{/if}
           {#if visibleCols.has('my_result')}
           <td class="td">
-            <span class="result-badge" class:hit={bout.my_result === 'hit'} class:miss={bout.my_result === 'miss'}>
-              {bout.my_result === 'hit' ? 'Попал' : 'Промах'}
-            </span>
+            <span class="result-badge"
+              class:hit={bout.my_result === 'hit'}
+              class:miss={bout.my_result === 'miss'}
+              class:blocked={bout.my_result === 'blocked'}
+              class:late={bout.my_result === 'late'}
+              class:no-strike={bout.my_result === 'no_strike'}
+            >{bout.my_result === 'hit' ? 'Попал' : bout.my_result === 'blocked' ? 'Заблокировали' : bout.my_result === 'late' ? 'Опоздал' : bout.my_result === 'no_strike' ? 'Не бил' : 'Промах'}</span>
           </td>
           {/if}
           {#if visibleCols.has('my_zone')}<td class="td zone-cell">{(bout.my_hit_zone ?? '').split(':')[0] || '—'}</td>{/if}
           {#if visibleCols.has('opp_tech')}<td class="td">{bout.opponent_technique_name ?? '—'}</td>{/if}
           {#if visibleCols.has('opp_result')}
           <td class="td">
-            <span class="result-badge" class:hit={bout.opponent_result === 'hit'} class:miss={bout.opponent_result === 'miss'}>
-              {bout.opponent_result === 'hit' ? 'Попал' : 'Промах'}
-            </span>
+            <span class="result-badge"
+              class:hit={bout.opponent_result === 'hit'}
+              class:miss={bout.opponent_result === 'miss'}
+              class:blocked={bout.opponent_result === 'blocked'}
+              class:late={bout.opponent_result === 'late'}
+              class:no-strike={bout.opponent_result === 'no_strike'}
+            >{bout.opponent_result === 'hit' ? 'Попал' : bout.opponent_result === 'blocked' ? 'Заблокировали' : bout.opponent_result === 'late' ? 'Опоздал' : bout.opponent_result === 'no_strike' ? 'Не бил' : 'Промах'}</span>
           </td>
           {/if}
           {#if visibleCols.has('opp_zone')}<td class="td zone-cell">{(bout.opponent_hit_zone ?? '').split(':')[0] || '—'}</td>{/if}
@@ -347,6 +361,21 @@
   .result-badge.miss {
     background: rgba(224, 82, 82, 0.1);
     color: #e05252;
+  }
+
+  .result-badge.blocked {
+    background: rgba(140, 100, 200, 0.12);
+    color: #a07cd8;
+  }
+
+  .result-badge.late {
+    background: rgba(200, 160, 40, 0.12);
+    color: #c8a028;
+  }
+
+  .result-badge.no-strike {
+    background: rgba(90, 120, 150, 0.12);
+    color: #6b8aab;
   }
 
   .td--nav {

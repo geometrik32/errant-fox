@@ -15,6 +15,7 @@
     volume?: number;
     onseek?: (timestamp_ms: number) => void;
     onloop?: (range: { start: number; end: number }) => void;
+    onboutclick?: (boutId: number) => void;
     onplay?: () => void;
     onstepback?: () => void;
     onstepforward?: () => void;
@@ -38,6 +39,7 @@
     fps = 25,
     onseek,
     onloop,
+    onboutclick,
     onplay,
     onstepback,
     onstepforward,
@@ -152,7 +154,7 @@
       <button
         class="bout-seg"
         style="left: {boutL(b)}%; width: {boutW(b)}%; --color: {boutColor(b)}"
-        onclick={() => onloop?.({ start: b.time_start_ms, end: b.time_end_ms })}
+        onclick={() => { onloop?.({ start: b.time_start_ms, end: b.time_end_ms }); onboutclick?.(b.id); }}
         aria-label="Сход {i + 1} — зациклить"
         title="Сход {i + 1}"
       ></button>

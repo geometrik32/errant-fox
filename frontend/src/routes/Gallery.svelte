@@ -10,11 +10,22 @@
   let loading = $state(true);
   let errorMsg = $state('');
 
+  const FILTER_KEY = 'ef_gallery_filter';
+  const SCROLL_KEY = 'ef_gallery_scroll';
+
+  function loadSavedFilter() {
+    try {
+      const raw = sessionStorage.getItem(FILTER_KEY);
+      if (raw) return JSON.parse(raw) as { fighter_ids: string[]; date_from: string; date_to: string };
+    } catch { /* ignore */ }
+    return { fighter_ids: [], date_from: '', date_to: '' };
+  }
+
   let activeFilter = $state<{
     fighter_ids: string[];
     date_from: string;
     date_to: string;
-  }>({ fighter_ids: [], date_from: '', date_to: '' });
+  }>(loadSavedFilter());
 
   async function loadVideos() {
     loading = true;
@@ -53,10 +64,12 @@
 
   function handleFilter(filter: { fighter_ids: string[]; date_from: string; date_to: string }) {
     activeFilter = filter;
+    sessionStorage.setItem(FILTER_KEY, JSON.stringify(filter));
     applyFilter();
   }
 
   function handleOpen(id: string) {
+    sessionStorage.setItem(SCROLL_KEY, String(window.scrollY));
     window.location.hash = '#/player/' + id;
   }
 
@@ -97,7 +110,13 @@
   }
 
   onMount(() => {
-    loadVideos();
+    loadVideos().then(() => {
+      const saved = sessionStorage.getItem(SCROLL_KEY);
+      if (saved) {
+        requestAnimationFrame(() => { window.scrollTo(0, parseInt(saved)); });
+        sessionStorage.removeItem(SCROLL_KEY);
+      }
+    });
     connectWS();
     return () => {
       const socket = ws;
@@ -113,7 +132,9 @@
   <div class="state error">{errorMsg}</div>
 {:else}
   <div class="gallery">
-    <Sidebar videos={allVideos} onfilter={handleFilter} />
+    <div class="sidebar-sticky">
+      <Sidebar videos={allVideos} onfilter={handleFilter} initialFilter={activeFilter} />
+    </div>
     <div class="content">
       <VideoGrid videos={filteredVideos} onopen={handleOpen} />
     </div>
@@ -125,6 +146,15 @@
     display: flex;
     gap: 16px;
     align-items: flex-start;
+  }
+
+  .sidebar-sticky {
+    position: sticky;
+    top: 56px;
+    max-height: calc(100vh - 56px);
+    overflow-y: auto;
+    flex-shrink: 0;
+    align-self: flex-start;
   }
 
   .content {

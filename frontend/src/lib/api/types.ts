@@ -37,11 +37,11 @@ export interface FighterBout {
   my_technique_id: number | null;
   my_technique_name: string | null;
   my_hit_zone: string | null;
-  my_result: 'hit' | 'miss';
+  my_result: 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | null;
   opponent_technique_id: number | null;
   opponent_technique_name: string | null;
   opponent_hit_zone: string | null;
-  opponent_result: 'hit' | 'miss';
+  opponent_result: 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | null;
 }
 
 export interface VideoFighter {
@@ -72,10 +72,10 @@ export interface Bout {
   score_b: number;
   technique_a_id: number | null;
   hit_zone_a: string | null;
-  result_a: 'hit' | 'miss' | 'blocked' | null;
+  result_a: 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | null;
   technique_b_id: number | null;
   hit_zone_b: string | null;
-  result_b: 'hit' | 'miss' | 'blocked' | null;
+  result_b: 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | null;
 }
 
 export interface Comment {
