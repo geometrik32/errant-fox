@@ -18,15 +18,15 @@
     filters: TableFilters;
     opponents: Array<{ id: string; name: string }>;
     onfilter: (f: TableFilters) => void;
-    onnavigate: (videoId: string) => void;
+    onnavigate: (videoId: string, timeStartMs?: number) => void;
   }
 
   let { bouts, filters, opponents, onfilter, onnavigate }: Props = $props();
 
   // Visible column config
-  type ColKey = 'date' | 'opponent' | 'score' | 'my_tech' | 'my_result' | 'my_zone' | 'opp_tech' | 'opp_result' | 'opp_zone';
+  type ColKey = 'date' | 'bout_time' | 'opponent' | 'score' | 'my_tech' | 'my_result' | 'my_zone' | 'opp_tech' | 'opp_result' | 'opp_zone';
   const COL_LABELS: Record<ColKey, string> = {
-    date: 'Дата', opponent: 'Оппонент', score: 'Счёт',
+    date: 'Дата', bout_time: 'Время', opponent: 'Оппонент', score: 'Счёт',
     my_tech: 'Мой приём', my_result: 'Мой рез.', my_zone: 'Моя зона',
     opp_tech: 'Приём опп.', opp_result: 'Рез. опп.', opp_zone: 'Зона опп.',
   };
@@ -59,6 +59,13 @@
 
   function formatDate(d: string) {
     return d ? d.slice(0, 10) : '';
+  }
+
+  function fmtMs(ms: number): string {
+    const t = Math.floor(ms / 1000);
+    const m = Math.floor(t / 60);
+    const s = t % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   }
 </script>
 
@@ -94,6 +101,12 @@
           <input class="filter-input" type="date" value={filters.date}
             oninput={(e) => setFilter('date', (e.target as HTMLInputElement).value)}
             onclick={(e) => e.stopPropagation()} />
+        </th>
+        {/if}
+        {#if visibleCols.has('bout_time')}
+        <th class="th sortable" onclick={() => toggleSort('time_start_ms')}>
+          <span>Время <span class="sort-icon">{sortIcon('time_start_ms')}</span></span>
+          <div class="filter-spacer"></div>
         </th>
         {/if}
         {#if visibleCols.has('opponent')}
@@ -174,6 +187,7 @@
       {#each bouts as bout (bout.id)}
         <tr class="body-row">
           {#if visibleCols.has('date')}<td class="td">{formatDate(bout.video_date)}</td>{/if}
+          {#if visibleCols.has('bout_time')}<td class="td bout-time">{fmtMs(bout.time_start_ms)} — {fmtMs(bout.time_end_ms)}</td>{/if}
           {#if visibleCols.has('opponent')}<td class="td">{bout.opponent_name}</td>{/if}
           {#if visibleCols.has('score')}
           <td class="td score">
@@ -209,7 +223,7 @@
           {/if}
           {#if visibleCols.has('opp_zone')}<td class="td zone-cell">{(bout.opponent_hit_zone ?? '').split(':')[0] || '—'}</td>{/if}
           <td class="td td--nav">
-            <button class="nav-btn" onclick={() => onnavigate(bout.video_id)} title="Открыть видео">→</button>
+            <button class="nav-btn" onclick={() => onnavigate(bout.video_id, bout.time_start_ms)} title="Открыть видео">→</button>
           </td>
         </tr>
       {/each}
@@ -470,5 +484,12 @@
   .zone-cell {
     font-size: 0.78rem;
     color: #6b8aab;
+  }
+
+  .bout-time {
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    color: #5a7a96;
+    white-space: nowrap;
   }
 </style>

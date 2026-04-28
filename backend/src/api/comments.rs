@@ -237,7 +237,7 @@ pub async fn delete_comment(
     let is_admin = user.is_admin;
 
     tokio::task::spawn_blocking(move || {
-        use crate::db::schema::comments;
+        use crate::db::schema::{comment_reactions, comments};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -252,6 +252,35 @@ pub async fn delete_comment(
             return Err(AppError::Forbidden);
         }
 
+        // Collect IDs of all replies to this comment
+        let reply_ids: Vec<i32> = comments::table
+            .filter(comments::reply_to_id.eq(id))
+            .select(comments::id)
+            .load::<i32>(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // Delete reactions for replies
+        if !reply_ids.is_empty() {
+            diesel::delete(
+                comment_reactions::table.filter(comment_reactions::comment_id.eq_any(&reply_ids)),
+            )
+            .execute(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+        }
+
+        // Delete reply comments
+        diesel::delete(comments::table.filter(comments::reply_to_id.eq(id)))
+            .execute(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // Delete reactions for the original comment
+        diesel::delete(
+            comment_reactions::table.filter(comment_reactions::comment_id.eq(id)),
+        )
+        .execute(&mut conn)
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // Delete the original comment
         diesel::delete(comments::table.filter(comments::id.eq(id)))
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;

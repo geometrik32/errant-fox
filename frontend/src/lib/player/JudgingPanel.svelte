@@ -10,11 +10,12 @@
   interface Props {
     video: VideoFull;
     currentTime: number;
+    playing?: boolean;
     onboutschange?: (bouts: Bout[]) => void;
     onseekrequest?: (ms: number, endMs: number) => void;
   }
 
-  let { video, currentTime, onboutschange, onseekrequest }: Props = $props();
+  let { video, currentTime, playing = false, onboutschange, onseekrequest }: Props = $props();
 
   // ── Local bouts state ────────────────────────────────────────────────────
 
@@ -129,7 +130,7 @@
 
   // ── Derived lists & scores ───────────────────────────────────────────────
 
-  let sortedBouts = $derived([...bouts].sort((a, b) => a.order_index - b.order_index));
+  let sortedBouts = $derived([...bouts].sort((a, b) => a.time_start_ms - b.time_start_ms));
   let totalScoreA = $derived(bouts.reduce((s, b) => s + b.score_a, 0));
   let totalScoreB = $derived(bouts.reduce((s, b) => s + b.score_b, 0));
 

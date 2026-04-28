@@ -33,8 +33,14 @@
   );
 
   let playerId = $derived(
-    hash.startsWith('#/player/') ? hash.slice('#/player/'.length) : ''
+    hash.startsWith('#/player/') ? hash.slice('#/player/'.length).split('?')[0] : ''
   );
+
+  let initialTimeMs = $derived.by(() => {
+    if (!hash.startsWith('#/player/')) return 0;
+    const match = hash.match(/[?&]t=(\d+)/);
+    return match ? parseInt(match[1], 10) : 0;
+  });
 </script>
 
 {#if !$token}
@@ -48,7 +54,9 @@
       {:else if routeName === 'stats'}
         <Stats />
       {:else if routeName === 'player' && playerId}
-        <Player videoId={playerId} />
+        {#key playerId + '-' + initialTimeMs}
+        <Player videoId={playerId} {initialTimeMs} />
+        {/key}
       {/if}
     </main>
   </div>
