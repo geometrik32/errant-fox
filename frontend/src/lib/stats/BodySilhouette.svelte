@@ -62,9 +62,9 @@
     return result;
   });
 
-  // SVG viewBox is 0 0 90 240, dot coords are 0-1 fractions of that
-  const VW = 90;
-  const VH = 240;
+  // SVG viewBox is 0 0 350 1055, dot coords are 0-1 fractions of that
+  const VW = 350;
+  const VH = 1055;
 
   function fill(zone: string): string {
     if (selectedZone && selectedZone === zone) return 'rgba(219,132,31,0.3)';
@@ -90,86 +90,86 @@
   </div>
   <div class="silhouette-wrap">
 
-    <svg viewBox="0 0 90 240" xmlns="http://www.w3.org/2000/svg" class="svg">
+    <svg viewBox="0 0 350 1055" xmlns="http://www.w3.org/2000/svg" class="svg">
 
       <!-- Голова -->
-      <rect x="29" y="1" width="32" height="28" rx="6"
-        fill={fill('Голова')} stroke={strokeColor('Голова')} stroke-width="1" class="zone"
+      <rect x="113" y="0" width="125" height="125" rx="20"
+        fill={fill('Голова')} stroke={strokeColor('Голова')} stroke-width="2" class="zone"
         onclick={() => handleZoneClick('Голова')}><title>Голова: {cnt('Голова')}</title></rect>
 
       <!-- Шея -->
-      <rect x="36" y="30" width="18" height="10" rx="3"
-        fill={fill('Шея')} stroke={strokeColor('Шея')} stroke-width="1" class="zone"
+      <rect x="130" y="130" width="90" height="45" rx="20"
+        fill={fill('Шея')} stroke={strokeColor('Шея')} stroke-width="2" class="zone"
         onclick={() => handleZoneClick('Шея')}><title>Шея: {cnt('Шея')}</title></rect>
 
       <!-- Тело -->
-      <rect x="28" y="41" width="34" height="54" rx="4"
-        fill={fill('Тело')} stroke={strokeColor('Тело')} stroke-width="1" class="zone"
+      <rect x="80" y="180" width="190" height="290" rx="20"
+        fill={fill('Тело')} stroke={strokeColor('Тело')} stroke-width="2" class="zone"
         onclick={() => handleZoneClick('Тело')}><title>Тело: {cnt('Тело')}</title></rect>
 
       <!-- Таз -->
-      <rect x="28" y="96" width="34" height="28" rx="4"
-        fill={fill('Таз')} stroke={strokeColor('Таз')} stroke-width="1" class="zone"
+      <rect x="80" y="475" width="190" height="100" rx="20"
+        fill={fill('Таз')} stroke={strokeColor('Таз')} stroke-width="2" class="zone"
         onclick={() => handleZoneClick('Таз')}><title>Таз: {cnt('Таз')}</title></rect>
 
       <!-- Плечо пр. -->
-      <rect x="4" y="41" width="23" height="30" rx="4"
-        fill={fill('Плечо пр.')} stroke={strokeColor('Плечо пр.')} stroke-width="1" class="zone"
+      <rect x="0" y="180" width="70" height="195" rx="20"
+        fill={fill('Плечо пр.')} stroke={strokeColor('Плечо пр.')} stroke-width="2" class="zone"
         onclick={() => handleZoneClick('Плечо пр.')}><title>Плечо пр.: {cnt('Плечо пр.')}</title></rect>
 
       <!-- Предплечье пр. -->
-      <rect x="2" y="72" width="23" height="34" rx="4"
-        fill={fill('Предплечье пр.')} stroke={strokeColor('Предплечье пр.')} stroke-width="1" class="zone"
+      <rect x="0" y="380" width="70" height="195" rx="20"
+        fill={fill('Предплечье пр.')} stroke={strokeColor('Предплечье пр.')} stroke-width="2" class="zone"
         onclick={() => handleZoneClick('Предплечье пр.')}><title>Предплечье пр.: {cnt('Предплечье пр.')}</title></rect>
 
       <!-- Кисть пр. -->
-      <rect x="2" y="107" width="23" height="14" rx="3"
-        fill={fill('Кисть пр.')} stroke={strokeColor('Кисть пр.')} stroke-width="1" class="zone"
+      <rect x="0" y="580" width="70" height="70" rx="20"
+        fill={fill('Кисть пр.')} stroke={strokeColor('Кисть пр.')} stroke-width="2" class="zone"
         onclick={() => handleZoneClick('Кисть пр.')}><title>Кисть пр.: {cnt('Кисть пр.')}</title></rect>
 
       <!-- Плечо лев. -->
-      <rect x="63" y="41" width="23" height="30" rx="4"
-        fill={fill('Плечо лев.')} stroke={strokeColor('Плечо лев.')} stroke-width="1" class="zone"
+      <rect x="280" y="180" width="70" height="195" rx="20"
+        fill={fill('Плечо лев.')} stroke={strokeColor('Плечо лев.')} stroke-width="2" class="zone"
         onclick={() => handleZoneClick('Плечо лев.')}><title>Плечо лев.: {cnt('Плечо лев.')}</title></rect>
 
       <!-- Предплечье лев. -->
-      <rect x="65" y="72" width="23" height="34" rx="4"
-        fill={fill('Предплечье лев.')} stroke={strokeColor('Предплечье лев.')} stroke-width="1" class="zone"
+      <rect x="280" y="380" width="70" height="195" rx="20"
+        fill={fill('Предплечье лев.')} stroke={strokeColor('Предплечье лев.')} stroke-width="2" class="zone"
         onclick={() => handleZoneClick('Предплечье лев.')}><title>Предплечье лев.: {cnt('Предплечье лев.')}</title></rect>
 
       <!-- Кисть лев. -->
-      <rect x="65" y="107" width="23" height="14" rx="3"
-        fill={fill('Кисть лев.')} stroke={strokeColor('Кисть лев.')} stroke-width="1" class="zone"
+      <rect x="280" y="580" width="70" height="70" rx="20"
+        fill={fill('Кисть лев.')} stroke={strokeColor('Кисть лев.')} stroke-width="2" class="zone"
         onclick={() => handleZoneClick('Кисть лев.')}><title>Кисть лев.: {cnt('Кисть лев.')}</title></rect>
 
       <!-- Бедро пр. -->
-      <rect x="27" y="125" width="16" height="45" rx="4"
-        fill={fill('Бедро пр.')} stroke={strokeColor('Бедро пр.')} stroke-width="1" class="zone"
+      <rect x="80" y="580" width="90" height="210" rx="20"
+        fill={fill('Бедро пр.')} stroke={strokeColor('Бедро пр.')} stroke-width="2" class="zone"
         onclick={() => handleZoneClick('Бедро пр.')}><title>Бедро пр.: {cnt('Бедро пр.')}</title></rect>
 
       <!-- Голень пр. -->
-      <rect x="27" y="171" width="16" height="42" rx="4"
-        fill={fill('Голень пр.')} stroke={strokeColor('Голень пр.')} stroke-width="1" class="zone"
+      <rect x="80" y="795" width="90" height="210" rx="20"
+        fill={fill('Голень пр.')} stroke={strokeColor('Голень пр.')} stroke-width="2" class="zone"
         onclick={() => handleZoneClick('Голень пр.')}><title>Голень пр.: {cnt('Голень пр.')}</title></rect>
 
       <!-- Стопа пр. -->
-      <rect x="27" y="214" width="16" height="14" rx="3"
-        fill={fill('Стопа пр.')} stroke={strokeColor('Стопа пр.')} stroke-width="1" class="zone"
+      <rect x="80" y="1010" width="90" height="45" rx="20"
+        fill={fill('Стопа пр.')} stroke={strokeColor('Стопа пр.')} stroke-width="2" class="zone"
         onclick={() => handleZoneClick('Стопа пр.')}><title>Стопа пр.: {cnt('Стопа пр.')}</title></rect>
 
       <!-- Бедро лев. -->
-      <rect x="47" y="125" width="16" height="45" rx="4"
-        fill={fill('Бедро лев.')} stroke={strokeColor('Бедро лев.')} stroke-width="1" class="zone"
+      <rect x="180" y="580" width="90" height="210" rx="20"
+        fill={fill('Бедро лев.')} stroke={strokeColor('Бедро лев.')} stroke-width="2" class="zone"
         onclick={() => handleZoneClick('Бедро лев.')}><title>Бедро лев.: {cnt('Бедро лев.')}</title></rect>
 
       <!-- Голень лев. -->
-      <rect x="47" y="171" width="16" height="42" rx="4"
-        fill={fill('Голень лев.')} stroke={strokeColor('Голень лев.')} stroke-width="1" class="zone"
+      <rect x="180" y="795" width="90" height="210" rx="20"
+        fill={fill('Голень лев.')} stroke={strokeColor('Голень лев.')} stroke-width="2" class="zone"
         onclick={() => handleZoneClick('Голень лев.')}><title>Голень лев.: {cnt('Голень лев.')}</title></rect>
 
       <!-- Стопа лев. -->
-      <rect x="47" y="214" width="16" height="14" rx="3"
-        fill={fill('Стопа лев.')} stroke={strokeColor('Стопа лев.')} stroke-width="1" class="zone"
+      <rect x="180" y="1010" width="90" height="45" rx="20"
+        fill={fill('Стопа лев.')} stroke={strokeColor('Стопа лев.')} stroke-width="2" class="zone"
         onclick={() => handleZoneClick('Стопа лев.')}><title>Стопа лев.: {cnt('Стопа лев')}</title></rect>
 
       <!-- Hit dots at stored coordinates -->
@@ -177,9 +177,9 @@
         <circle
           cx={dot.x * VW}
           cy={dot.y * VH}
-          r="2.5"
-          fill="#DB841F"
-          opacity="0.7"
+          r="8"
+          fill="#e02020"
+          opacity="0.6"
           pointer-events="none"
         />
       {/each}
