@@ -5,7 +5,7 @@ use tokio::process::Command;
 
 use crate::{db::DbPool, errors::AppError};
 
-const N_FRAMES: u32 = 10;
+const N_FRAMES: u32 = 1;
 
 async fn get_duration(url: &str) -> f64 {
     let out = Command::new("ffprobe")
@@ -36,28 +36,28 @@ pub async fn generate_previews(
         .await
         .map_err(|e| AppError::Internal(format!("create_dir_all: {e}")))?;
 
+    // We'll use 1.jpg as the filename (ffmpeg %d starts from 1)
     let output_pattern = output_dir
         .join("%d.jpg")
         .to_string_lossy()
         .into_owned();
 
-    // Get video duration to compute even frame interval
+    // Get video duration to seek to the middle
     let duration = get_duration(download_url).await;
-    // interval = duration / N so frames land at 0, interval, 2*interval, ...
-    let interval = (duration / N_FRAMES as f64).max(0.5);
-    // fps=1/interval means one output frame every `interval` seconds
-    let vf = format!("fps=1/{interval:.3},scale=480:-1");
+    let seek_time = duration / 2.0;
 
     let output = Command::new("ffmpeg")
         .arg("-y")
+        .arg("-ss")
+        .arg(format!("{:.3}", seek_time))
         .arg("-i")
         .arg(download_url)
         .arg("-vf")
-        .arg(&vf)
-        .arg("-frames:v")
-        .arg(N_FRAMES.to_string())
+        .arg("scale=480:-1")
+        .arg("-vframes")
+        .arg("1")
         .arg("-start_number")
-        .arg("0")
+        .arg("1")
         .arg(&output_pattern)
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
