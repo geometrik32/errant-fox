@@ -44,8 +44,14 @@
   }
 
   function navigate(r: SearchResult) {
-    const hash = `#/player/${r.video_id}`;
-    window.location.hash = hash;
+    const hash = `#/player/${r.video_id}?t=${r.timestamp_ms}`;
+    // Force navigation even if we're on the same video — reset the hash to trigger hashchange
+    if (window.location.hash === hash) {
+      window.location.hash = '';
+      requestAnimationFrame(() => { window.location.hash = hash; });
+    } else {
+      window.location.hash = hash;
+    }
     onclose?.();
   }
 

@@ -9,8 +9,9 @@
 
   interface Props {
     videoId: string;
+    initialTimeMs?: number;
   }
-  let { videoId }: Props = $props();
+  let { videoId, initialTimeMs = 0 }: Props = $props();
 
   let video = $state<VideoFull | null>(null);
   let loading = $state(true);
@@ -58,6 +59,13 @@
       loadError = e instanceof Error ? e.message : 'Ошибка загрузки видео';
     } finally {
       loading = false;
+    }
+  });
+
+  // Seek to initial time after player is ready
+  $effect(() => {
+    if (player && initialTimeMs > 0 && !loading && video) {
+      player.seekTo(initialTimeMs);
     }
   });
 
@@ -137,8 +145,9 @@
             bind:this={judgingPanel}
             {video}
             {currentTime}
+            {playing}
             onboutschange={(b) => { liveBouts = b; }}
-            onseekrequest={(ms, endMs) => { player?.seekTo(ms); player?.pause(); player?.setLoop(ms, endMs); }}
+            onseekrequest={(ms, endMs) => { player?.seekTo(ms); if (!playing) { player?.pause(); } player?.setLoop(ms, endMs); }}
           />
         </div>
       {/if}
@@ -188,7 +197,7 @@
         {volume}
         {fps}
         onseek={(ms) => player?.seekTo(ms)}
-        onloop={({ start, end }) => player?.setLoop(start, end)}
+        onloop={({ start, end }) => { player?.seekTo(start); player?.setLoop(start, end); }}
         onboutclick={(id) => { judgingPanel?.expandBout(id); }}
         onplay={() => player?.togglePlay()}
         onstepback={() => player?.stepBackward()}

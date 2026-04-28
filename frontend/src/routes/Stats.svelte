@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { fighters } from '../stores';
+  import { onMount } from 'svelte';
+  import { fighters, currentUser } from '../stores';
   import { getFighterBouts } from '../lib/api/fighters';
   import { resolveColor } from '../lib/api/types';
   import FighterSidebar from '../lib/stats/FighterSidebar.svelte';
@@ -110,12 +111,22 @@
     }
   }
 
+  // Auto-select the fighter matching the current user on mount
+  onMount(() => {
+    const me = $currentUser;
+    if (me && !selectedFighter) {
+      const myFighter = $fighters.find(f => f.id === me.id);
+      if (myFighter) selectFighter(myFighter);
+    }
+  });
+
   function handleFilter(filters: TableFilters) {
     tableFilters = filters;
   }
 
-  function handleNavigate(videoId: string) {
-    window.location.hash = '#/player/' + videoId;
+  function handleNavigate(videoId: string, timeStartMs?: number) {
+    const t = timeStartMs ? `?t=${timeStartMs}` : '';
+    window.location.hash = '#/player/' + videoId + t;
   }
 
   function formatDate(d: string): string {

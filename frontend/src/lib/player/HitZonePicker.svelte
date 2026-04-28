@@ -56,7 +56,7 @@
 </script>
 
 <div class="picker">
-  <svg bind:this={svgEl} viewBox="0 0 90 222" xmlns="http://www.w3.org/2000/svg" class="svg" aria-label="Зона поражения">
+  <svg bind:this={svgEl} viewBox="0 0 90 240" xmlns="http://www.w3.org/2000/svg" class="svg" aria-label="Зона поражения">
 
     <!-- 1. Голова -->
     <rect x="29" y="1" width="32" height="28" rx="6"
@@ -77,7 +77,7 @@
     ><title>Шея</title></rect>
 
     <!-- 3. Плечо пр. (viewer left = fighter right) -->
-    <rect x="4" y="41" width="23" height="28" rx="4"
+    <rect x="4" y="41" width="23" height="30" rx="4"
       fill={fill('Плечо пр.')} stroke={stroke('Плечо пр.')} stroke-width="1"
       class="zone" role="button" tabindex="0"
       onclick={(e) => handleZoneClick(e, 'Плечо пр.')}
@@ -86,7 +86,7 @@
     ><title>Плечо пр.</title></rect>
 
     <!-- 4. Предплечье пр. -->
-    <rect x="4" y="70" width="18" height="30" rx="4"
+    <rect x="2" y="72" width="23" height="34" rx="4"
       fill={fill('Предплечье пр.')} stroke={stroke('Предплечье пр.')} stroke-width="1"
       class="zone" role="button" tabindex="0"
       onclick={(e) => handleZoneClick(e, 'Предплечье пр.')}
@@ -95,7 +95,7 @@
     ><title>Предплечье пр.</title></rect>
 
     <!-- 5. Кисть пр. -->
-    <rect x="5" y="101" width="15" height="12" rx="3"
+    <rect x="2" y="107" width="23" height="14" rx="3"
       fill={fill('Кисть пр.')} stroke={stroke('Кисть пр.')} stroke-width="1"
       class="zone" role="button" tabindex="0"
       onclick={(e) => handleZoneClick(e, 'Кисть пр.')}
@@ -113,7 +113,7 @@
     ><title>Тело</title></rect>
 
     <!-- 10. Таз -->
-    <rect x="28" y="96" width="34" height="18" rx="3"
+    <rect x="28" y="96" width="34" height="28" rx="3"
       fill={fill('Таз')} stroke={stroke('Таз')} stroke-width="1"
       class="zone" role="button" tabindex="0"
       onclick={(e) => handleZoneClick(e, 'Таз')}
@@ -122,7 +122,7 @@
     ><title>Таз</title></rect>
 
     <!-- 6. Плечо лев. (viewer right = fighter left) -->
-    <rect x="63" y="41" width="23" height="28" rx="4"
+    <rect x="63" y="41" width="23" height="30" rx="4"
       fill={fill('Плечо лев.')} stroke={stroke('Плечо лев.')} stroke-width="1"
       class="zone" role="button" tabindex="0"
       onclick={(e) => handleZoneClick(e, 'Плечо лев.')}
@@ -131,7 +131,7 @@
     ><title>Плечо лев.</title></rect>
 
     <!-- 7. Предплечье лев. -->
-    <rect x="68" y="70" width="18" height="30" rx="4"
+    <rect x="65" y="72" width="23" height="34" rx="4"
       fill={fill('Предплечье лев.')} stroke={stroke('Предплечье лев.')} stroke-width="1"
       class="zone" role="button" tabindex="0"
       onclick={(e) => handleZoneClick(e, 'Предплечье лев.')}
@@ -140,7 +140,7 @@
     ><title>Предплечье лев.</title></rect>
 
     <!-- 8. Кисть лев. -->
-    <rect x="70" y="101" width="15" height="12" rx="3"
+    <rect x="65" y="107" width="23" height="14" rx="3"
       fill={fill('Кисть лев.')} stroke={stroke('Кисть лев.')} stroke-width="1"
       class="zone" role="button" tabindex="0"
       onclick={(e) => handleZoneClick(e, 'Кисть лев.')}
@@ -149,7 +149,7 @@
     ><title>Кисть лев.</title></rect>
 
     <!-- 11. Бедро пр. -->
-    <rect x="27" y="115" width="16" height="42" rx="4"
+    <rect x="27" y="125" width="16" height="45" rx="4"
       fill={fill('Бедро пр.')} stroke={stroke('Бедро пр.')} stroke-width="1"
       class="zone" role="button" tabindex="0"
       onclick={(e) => handleZoneClick(e, 'Бедро пр.')}
@@ -158,7 +158,7 @@
     ><title>Бедро пр.</title></rect>
 
     <!-- 12. Голень пр. -->
-    <rect x="27" y="158" width="16" height="40" rx="4"
+    <rect x="27" y="171" width="16" height="42" rx="4"
       fill={fill('Голень пр.')} stroke={stroke('Голень пр.')} stroke-width="1"
       class="zone" role="button" tabindex="0"
       onclick={(e) => handleZoneClick(e, 'Голень пр.')}
@@ -167,7 +167,7 @@
     ><title>Голень пр.</title></rect>
 
     <!-- 13. Стопа пр. -->
-    <rect x="27" y="199" width="16" height="12" rx="3"
+    <rect x="27" y="214" width="16" height="14" rx="3"
       fill={fill('Стопа пр.')} stroke={stroke('Стопа пр.')} stroke-width="1"
       class="zone" role="button" tabindex="0"
       onclick={(e) => handleZoneClick(e, 'Стопа пр.')}
@@ -176,7 +176,7 @@
     ><title>Стопа пр.</title></rect>
 
     <!-- 14. Бедро лев. -->
-    <rect x="47" y="115" width="16" height="42" rx="4"
+    <rect x="47" y="125" width="16" height="45" rx="4"
       fill={fill('Бедро лев.')} stroke={stroke('Бедро лев.')} stroke-width="1"
       class="zone" role="button" tabindex="0"
       onclick={(e) => handleZoneClick(e, 'Бедро лев.')}
@@ -185,7 +185,7 @@
     ><title>Бедро лев.</title></rect>
 
     <!-- 15. Голень лев. -->
-    <rect x="47" y="158" width="16" height="40" rx="4"
+    <rect x="47" y="171" width="16" height="42" rx="4"
       fill={fill('Голень лев.')} stroke={stroke('Голень лев.')} stroke-width="1"
       class="zone" role="button" tabindex="0"
       onclick={(e) => handleZoneClick(e, 'Голень лев.')}
@@ -194,7 +194,7 @@
     ><title>Голень лев.</title></rect>
 
     <!-- 16. Стопа лев. -->
-    <rect x="47" y="199" width="16" height="12" rx="3"
+    <rect x="47" y="214" width="16" height="14" rx="3"
       fill={fill('Стопа лев.')} stroke={stroke('Стопа лев.')} stroke-width="1"
       class="zone" role="button" tabindex="0"
       onclick={(e) => handleZoneClick(e, 'Стопа лев.')}
@@ -206,7 +206,7 @@
     {#if currentZone()}
       {@const dot = parseCoords()}
       {#if dot}
-        <circle cx={dot.x * 90} cy={dot.y * 222} r="3.5" fill="#e02020" pointer-events="none" />
+        <circle cx={dot.x * 90} cy={dot.y * 240} r="3.5" fill="#e02020" pointer-events="none" />
       {/if}
     {/if}
 

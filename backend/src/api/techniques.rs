@@ -119,9 +119,21 @@ pub async fn delete_technique(
 
     let db = state.db.clone();
     tokio::task::spawn_blocking(move || {
+        use crate::db::schema::bouts;
         use crate::db::schema::techniques::dsl::{id, techniques};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // Null out technique references in bouts before deleting
+        diesel::update(bouts::table.filter(bouts::technique_a_id.eq(technique_id)))
+            .set(bouts::technique_a_id.eq::<Option<i32>>(None))
+            .execute(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        diesel::update(bouts::table.filter(bouts::technique_b_id.eq(technique_id)))
+            .set(bouts::technique_b_id.eq::<Option<i32>>(None))
+            .execute(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
 
         let deleted = diesel::delete(techniques.filter(id.eq(technique_id)))
             .execute(&mut conn)
