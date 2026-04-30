@@ -48,10 +48,10 @@ pub async fn generate_previews(
 
     let output = Command::new("ffmpeg")
         .arg("-y")
-        .arg("-ss")
-        .arg(format!("{:.3}", seek_time))
         .arg("-i")
         .arg(download_url)
+        .arg("-ss")
+        .arg(format!("{:.3}", seek_time))
         .arg("-vf")
         .arg("scale=480:-1")
         .arg("-vframes")
@@ -87,6 +87,6 @@ pub async fn generate_previews(
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
-    tracing::info!("previews generated for {log_id} (duration={duration:.1}s, interval={interval:.3}s)");
+    tracing::info!("previews generated for {log_id} (duration={duration:.1}s)");
     Ok(())
 }
