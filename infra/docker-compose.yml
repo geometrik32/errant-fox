@@ -1,13 +1,13 @@
 services:
   backend:
     build:
-      context: .
-      dockerfile: Dockerfile.backend
+      context: ..
+      dockerfile: infra/Dockerfile.backend
     restart: unless-stopped
     volumes:
-      - ./data:/data
+      - ../data:/data
     env_file:
-      - .env
+      - ../.env
     environment:
       DATABASE_URL: /data/db/errant_fox.db
       PREVIEWS_DIR: /data/previews
@@ -18,8 +18,8 @@ services:
 
   frontend:
     build:
-      context: .
-      dockerfile: Dockerfile.frontend
+      context: ..
+      dockerfile: infra/Dockerfile.frontend
     restart: unless-stopped
 #    ports:
 #      - "8081:80"
