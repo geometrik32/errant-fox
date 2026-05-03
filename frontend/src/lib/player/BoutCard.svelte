@@ -7,7 +7,7 @@
   import HitZonePicker from './HitZonePicker.svelte';
   import { deleteBout } from '../api/bouts';
 
-  type ResultType = 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike';
+  type ResultType = 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | 'disqualification' | 'afterblow';
 
   interface Props {
     bout: Bout;
@@ -161,6 +161,24 @@
     }
   }
 
+  // ── Technique tooltip ────────────────────────────────────────────────────────
+
+  let tooltipTimer: ReturnType<typeof setTimeout> | null = null;
+  let showTooltip = $state<'a' | 'b' | null>(null);
+
+  let techADescription = $derived($techniques.find(t => t.id === techAId)?.description ?? null);
+  let techBDescription = $derived($techniques.find(t => t.id === techBId)?.description ?? null);
+
+  function startTooltip(side: 'a' | 'b') {
+    if (tooltipTimer) clearTimeout(tooltipTimer);
+    tooltipTimer = setTimeout(() => { showTooltip = side; }, 1000);
+  }
+
+  function stopTooltip() {
+    if (tooltipTimer) { clearTimeout(tooltipTimer); tooltipTimer = null; }
+    showTooltip = null;
+  }
+
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
   function fmtMs(ms: number): string {
@@ -238,12 +256,23 @@
 
         <div class="field">
           <span class="field-lbl">Техника</span>
-          <select class="field-sel" bind:value={techAId}>
-            <option value={null}>—</option>
-            {#each $techniques as t (t.id)}
-              <option value={t.id}>{t.name}</option>
-            {/each}
-          </select>
+          <div class="tech-wrap"
+            onmouseenter={() => startTooltip('a')}
+            onmouseleave={stopTooltip}
+          >
+            <select class="field-sel" bind:value={techAId}>
+              <option value={null}>—</option>
+              {#each $techniques as t (t.id)}
+                <option value={t.id}>{t.name}</option>
+              {/each}
+            </select>
+            {#if showTooltip === 'a' && techADescription}
+              <div class="tech-tooltip">
+                <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                {@html techADescription}
+              </div>
+            {/if}
+          </div>
         </div>
 
         <div class="field">
@@ -253,13 +282,15 @@
 
         <div class="field">
           <span class="field-lbl">Результат</span>
-          <div class="radios">
-            <label><input type="radio" bind:group={resA} value="hit" /> Попал</label>
-            <label><input type="radio" bind:group={resA} value="miss" /> Промахнулся</label>
-            <label><input type="radio" bind:group={resA} value="blocked" /> Заблокировали</label>
-            <label><input type="radio" bind:group={resA} value="late" /> Опоздал</label>
-            <label><input type="radio" bind:group={resA} value="no_strike" /> Не бил</label>
-          </div>
+          <select class="field-sel" bind:value={resA}>
+            <option value="hit">Попал</option>
+            <option value="miss">Промахнулся</option>
+            <option value="blocked">Заблокировали</option>
+            <option value="late">Опоздал</option>
+            <option value="no_strike">Не бил</option>
+            <option value="disqualification">Неквалификация</option>
+            <option value="afterblow">Афтерблоу</option>
+          </select>
         </div>
       </div>
 
@@ -277,12 +308,23 @@
 
         <div class="field">
           <span class="field-lbl">Техника</span>
-          <select class="field-sel" bind:value={techBId}>
-            <option value={null}>—</option>
-            {#each $techniques as t (t.id)}
-              <option value={t.id}>{t.name}</option>
-            {/each}
-          </select>
+          <div class="tech-wrap"
+            onmouseenter={() => startTooltip('b')}
+            onmouseleave={stopTooltip}
+          >
+            <select class="field-sel" bind:value={techBId}>
+              <option value={null}>—</option>
+              {#each $techniques as t (t.id)}
+                <option value={t.id}>{t.name}</option>
+              {/each}
+            </select>
+            {#if showTooltip === 'b' && techBDescription}
+              <div class="tech-tooltip">
+                <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                {@html techBDescription}
+              </div>
+            {/if}
+          </div>
         </div>
 
         <div class="field">
@@ -292,13 +334,15 @@
 
         <div class="field">
           <span class="field-lbl">Результат</span>
-          <div class="radios">
-            <label><input type="radio" bind:group={resB} value="hit" /> Попал</label>
-            <label><input type="radio" bind:group={resB} value="miss" /> Промахнулся</label>
-            <label><input type="radio" bind:group={resB} value="blocked" /> Заблокировали</label>
-            <label><input type="radio" bind:group={resB} value="late" /> Опоздал</label>
-            <label><input type="radio" bind:group={resB} value="no_strike" /> Не бил</label>
-          </div>
+          <select class="field-sel" bind:value={resB}>
+            <option value="hit">Попал</option>
+            <option value="miss">Промахнулся</option>
+            <option value="blocked">Заблокировали</option>
+            <option value="late">Опоздал</option>
+            <option value="no_strike">Не бил</option>
+            <option value="disqualification">Неквалификация</option>
+            <option value="afterblow">Афтерблоу</option>
+          </select>
         </div>
       </div>
 
@@ -564,25 +608,44 @@
     color: #d0dde8;
   }
 
-  /* ── Radios ─────────────────────────────────────────────────────────────── */
-  .radios {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
+  /* ── Technique tooltip ──────────────────────────────────────────────────── */
+  .tech-wrap {
+    position: relative;
   }
 
-  .radios label {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 0.76rem;
-    color: #8aa0b8;
-    cursor: pointer;
+  .tech-tooltip {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 0;
+    z-index: 300;
+    background: #0a1628;
+    border: 1px solid #2a4f73;
+    border-radius: 6px;
+    padding: 10px 12px;
+    width: 260px;
+    max-height: 220px;
+    overflow-y: auto;
+    font-size: 0.78rem;
+    color: #a0b4c8;
+    line-height: 1.55;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
   }
 
-  .radios input[type="radio"] {
-    accent-color: #DB841F;
-    cursor: pointer;
+  .tech-tooltip :global(img) {
+    max-width: 100%;
+    border-radius: 3px;
+    margin: 4px 0;
+  }
+
+  .tech-tooltip :global(iframe) {
+    max-width: 100%;
+    border-radius: 3px;
+    margin: 4px 0;
+  }
+
+  .tech-tooltip :global(p) {
+    margin: 0 0 6px;
   }
 
   /* ── Error ──────────────────────────────────────────────────────────────── */

@@ -4,24 +4,25 @@
 
   interface Props {
     bouts: FighterBout[];
+    videoLabels?: Map<string, string>;
   }
 
-  let { bouts }: Props = $props();
+  let { bouts, videoLabels = new Map() }: Props = $props();
 
   let canvas = $state<HTMLCanvasElement | undefined>(undefined);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let chart: any = null;
   // aggregate per-video win/loss
   function computeVideoResults(bouts: FighterBout[]) {
-    const videoMap = new Map<string, { date: string; my: number; opp: number }>();
+    const videoMap = new Map<string, { video_id: string; date: string; my: number; opp: number }>();
     for (const b of bouts) {
       const v = videoMap.get(b.video_id);
       if (v) { v.my += b.my_score; v.opp += b.opponent_score; }
-      else videoMap.set(b.video_id, { date: b.video_date, my: b.my_score, opp: b.opponent_score });
+      else videoMap.set(b.video_id, { video_id: b.video_id, date: b.video_date, my: b.my_score, opp: b.opponent_score });
     }
     return [...videoMap.values()]
       .sort((a, b) => a.date.localeCompare(b.date))
-      .map(v => ({ date: v.date, result: v.my > v.opp ? 1 : v.my < v.opp ? -1 : 0 }));
+      .map(v => ({ video_id: v.video_id, date: v.date, result: v.my > v.opp ? 1 : v.my < v.opp ? -1 : 0 }));
   }
 
   let winRate = $derived.by(() => {
@@ -34,7 +35,7 @@
   $effect(() => {
     if (!canvas) return;
     const results = computeVideoResults(bouts);
-    const labels = results.map(r => r.date);
+    const labels = results.map(r => videoLabels.get(r.video_id) ?? r.date);
     const data = results.map(r => r.result);
 
     import('chart.js').then(({ Chart, registerables }) => {

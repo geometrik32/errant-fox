@@ -95,6 +95,10 @@
       e.preventDefault();
       const s = speed === 2 ? 1 : 2;
       speed = s; player?.setSpeed(s);
+    } else if (e.code === 'KeyG') {
+      e.preventDefault();
+      showJudging = !showJudging;
+      showChat = !showChat;
     }
   }
 </script>
@@ -147,7 +151,7 @@
             {currentTime}
             {playing}
             onboutschange={(b) => { liveBouts = b; }}
-            onseekrequest={(ms, endMs) => { player?.seekTo(ms); if (!playing) { player?.pause(); } player?.setLoop(ms, endMs); }}
+            onseekrequest={(ms, endMs) => { player?.setLoop(ms, endMs, playing); }}
           />
         </div>
       {/if}

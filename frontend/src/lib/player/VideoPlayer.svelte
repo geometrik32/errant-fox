@@ -56,20 +56,22 @@
 
   export function stepForward(): void {
     if (!videoEl) return;
-    videoEl.currentTime = Math.min(videoEl.duration || 0, videoEl.currentTime + 1 / detectedFps);
+    const frame = Math.round(videoEl.currentTime * detectedFps);
+    videoEl.currentTime = Math.min(videoEl.duration || 0, (frame + 1) / detectedFps);
   }
 
   export function stepBackward(): void {
     if (!videoEl) return;
-    videoEl.currentTime = Math.max(0, videoEl.currentTime - 1 / detectedFps);
+    const frame = Math.round(videoEl.currentTime * detectedFps);
+    videoEl.currentTime = Math.max(0, (frame - 1) / detectedFps);
   }
 
-  export function setLoop(start: number, end: number): void {
+  export function setLoop(start: number, end: number, autoPlay = true): void {
     loopRange = { start, end };
     looping = true;
     onloopingchange?.(true);
     seekTo(start);
-    play();
+    if (autoPlay) play();
   }
 
   export function setSpeed(s: number): void { if (videoEl) videoEl.playbackRate = s; }

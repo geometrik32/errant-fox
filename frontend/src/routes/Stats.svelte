@@ -11,6 +11,7 @@
   import ScoreChart from '../lib/stats/ScoreChart.svelte';
   import BodySilhouette from '../lib/stats/BodySilhouette.svelte';
   import type { Fighter, FighterBout } from '../lib/api/types';
+  import { buildVideoLabels } from '../lib/api/types';
   import type { TableFilters } from '../lib/stats/HistoryTable.svelte';
 
   let selectedFighter = $state<Fighter | null>(null);
@@ -87,6 +88,10 @@
     for (const b of rawBouts) map.set(b.opponent_id, b.opponent_name);
     return [...map.entries()].map(([id, name]) => ({ id, name }));
   });
+
+  let videoLabels = $derived(
+    selectedFighter ? buildVideoLabels(rawBouts, selectedFighter.display_name) : new Map<string, string>()
+  );
 
   let firstBoutDate = $derived(
     rawBouts.length > 0
@@ -177,8 +182,8 @@
       <!-- Charts row -->
       <div class="charts-row">
         <FrequencyChart bouts={filteredBouts} />
-        <ResultsChart bouts={filteredBouts} />
-        <ScoreChart bouts={filteredBouts} />
+        <ResultsChart bouts={filteredBouts} {videoLabels} />
+        <ScoreChart bouts={filteredBouts} {videoLabels} />
       </div>
 
       <!-- Body silhouettes -->
@@ -194,6 +199,7 @@
           bouts={filteredBouts}
           filters={tableFilters}
           {opponents}
+          {videoLabels}
           onfilter={handleFilter}
           onnavigate={handleNavigate}
         />

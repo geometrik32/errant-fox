@@ -80,7 +80,7 @@
   function fmtWithFrame(sec: number): string {
     const m = Math.floor(sec / 60);
     const s = Math.floor(sec % 60);
-    const f = Math.round((sec % 1) * fps);
+    const f = Math.floor((sec % 1) * fps);
     const padLen = String(fps).length < 3 ? 3 : String(fps).length;
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}:${String(f).padStart(padLen, '0')}`;
   }
