@@ -11,26 +11,26 @@
   let { bouts, onfilter }: Props = $props();
 
   let recentOpponents = $derived.by(() => {
-    // Sort bouts by date descending
-    const sorted = [...bouts].sort((a, b) => b.video_date.localeCompare(a.video_date));
-    
-    const uniqueMap = new Map<string, { id: string, name: string, scoreDiff: number, wins: number, losses: number, total: number }>();
-    for (const b of sorted) {
-      if (!uniqueMap.has(b.opponent_id)) {
-        uniqueMap.set(b.opponent_id, {
-          id: b.opponent_id,
-          name: b.opponent_name,
-          scoreDiff: 0,
-          wins: 0,
-          losses: 0,
-          total: 0
-        });
+    // Group bouts by (opponent_id, video_id) to get per-fight scores
+    type FightKey = string;
+    const fights = new Map<FightKey, { oppId: string; oppName: string; myScore: number; oppScore: number }>();
+    for (const b of bouts) {
+      const key: FightKey = `${b.opponent_id}::${b.video_id}`;
+      const f = fights.get(key);
+      if (f) { f.myScore += b.my_score; f.oppScore += b.opponent_score; }
+      else fights.set(key, { oppId: b.opponent_id, oppName: b.opponent_name, myScore: b.my_score, oppScore: b.opponent_score });
+    }
+
+    const uniqueMap = new Map<string, { id: string; name: string; scoreDiff: number; wins: number; losses: number; total: number }>();
+    for (const { oppId, oppName, myScore, oppScore } of fights.values()) {
+      if (!uniqueMap.has(oppId)) {
+        uniqueMap.set(oppId, { id: oppId, name: oppName, scoreDiff: 0, wins: 0, losses: 0, total: 0 });
       }
-      const opp = uniqueMap.get(b.opponent_id)!;
+      const opp = uniqueMap.get(oppId)!;
       opp.total += 1;
-      opp.scoreDiff += (b.my_score - b.opponent_score);
-      if (b.my_score > b.opponent_score) opp.wins += 1;
-      else if (b.my_score < b.opponent_score) opp.losses += 1;
+      opp.scoreDiff += myScore - oppScore;
+      if (myScore > oppScore) opp.wins += 1;
+      else if (myScore < oppScore) opp.losses += 1;
     }
 
     return [...uniqueMap.values()].map(opp => {

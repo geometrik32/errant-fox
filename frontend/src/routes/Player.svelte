@@ -49,6 +49,9 @@
   let showJudging = $state(true);
   let showChat = $state(true);
 
+  // Comment highlight driven by timeline marker click
+  let highlightedCommentId = $state<number | null>(null);
+
   onMount(async () => {
     try {
       video = await getVideo(videoId);
@@ -178,6 +181,7 @@
             {videoId}
             comments={video.comments}
             {currentTime}
+            highlightedId={highlightedCommentId}
             onseek={(ms) => { player?.seekTo(ms); player?.pause(); }}
             oncommentschange={(c) => { liveComments = c; }}
           />
@@ -203,6 +207,7 @@
         onseek={(ms) => player?.seekTo(ms)}
         onloop={({ start, end }) => { player?.seekTo(start); player?.setLoop(start, end); }}
         onboutclick={(id) => { judgingPanel?.expandBout(id); }}
+        oncommentclick={(id) => { highlightedCommentId = id; if (!showChat) showChat = true; }}
         onplay={() => player?.togglePlay()}
         onstepback={() => player?.stepBackward()}
         onstepforward={() => player?.stepForward()}

@@ -36,6 +36,9 @@
   // Detected fps, used for frame-step
   let detectedFps = 25;
 
+  // Integer frame target during stepping — bypasses browser's imprecise currentTime
+  let stepFrameTarget: number | null = null;
+
   // Track middle-click for double-click reset
   let lastMiddleClickTime = 0;
 
@@ -43,6 +46,7 @@
   $effect(() => { if (videoEl) videoEl.volume = volume; });
 
   export function seekTo(ms: number): void {
+    stepFrameTarget = null; // leave step mode on manual seek
     if (videoEl) videoEl.currentTime = ms / 1000;
   }
 
@@ -56,14 +60,22 @@
 
   export function stepForward(): void {
     if (!videoEl) return;
-    const frame = Math.round(videoEl.currentTime * detectedFps);
-    videoEl.currentTime = Math.min(videoEl.duration || 0, (frame + 1) / detectedFps);
+    if (stepFrameTarget === null)
+      stepFrameTarget = Math.round(videoEl.currentTime * detectedFps);
+    stepFrameTarget++;
+    const t = Math.min(videoEl.duration || 0, stepFrameTarget / detectedFps);
+    videoEl.currentTime = t;
+    ontimeupdate?.(t); // report intended time, not what the browser snaps to
   }
 
   export function stepBackward(): void {
     if (!videoEl) return;
-    const frame = Math.round(videoEl.currentTime * detectedFps);
-    videoEl.currentTime = Math.max(0, (frame - 1) / detectedFps);
+    if (stepFrameTarget === null)
+      stepFrameTarget = Math.round(videoEl.currentTime * detectedFps);
+    stepFrameTarget = Math.max(0, stepFrameTarget - 1);
+    const t = stepFrameTarget / detectedFps;
+    videoEl.currentTime = t;
+    ontimeupdate?.(t);
   }
 
   export function setLoop(start: number, end: number, autoPlay = true): void {
@@ -85,9 +97,12 @@
 
   function handleTimeUpdate() {
     if (!videoEl) return;
-    ontimeupdate?.(videoEl.currentTime);
+    // During frame stepping, we already emit ontimeupdate with the intended frame time.
+    // Suppress the browser's imprecise timeupdate so the frame counter doesn't flicker.
+    if (stepFrameTarget === null) ontimeupdate?.(videoEl.currentTime);
     if (looping && loopRange && videoEl.currentTime * 1000 >= loopRange.end) {
       videoEl.currentTime = loopRange.start / 1000;
+      stepFrameTarget = null;
     }
   }
 
@@ -121,6 +136,7 @@
   }
 
   function handlePlayForFps() {
+    stepFrameTarget = null; // leave step mode when playback resumes
     onplayingchange?.(true);
     if (fpsSamples.length === 0 && videoEl && 'requestVideoFrameCallback' in videoEl) {
       videoEl.requestVideoFrameCallback(fpsCallback);

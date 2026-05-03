@@ -56,7 +56,8 @@
             pointBorderWidth: 2,
             pointRadius: 6,
             pointHoverRadius: 8,
-            tension: 0.4,
+            tension: 0.5,
+            cubicInterpolationMode: 'monotone',
             fill: false,
           }],
         },
@@ -66,7 +67,7 @@
           onClick: (e, elements) => {
             if (elements.length > 0 && onfilter) {
               const index = elements[0].index;
-              const date = rawData[index].video_date;
+              const date = results[index].date;
               if (date) onfilter(date);
             }
           },
