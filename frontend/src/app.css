@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
+  color-scheme: light;
   /* Светлая тема (default) */
   --bg-gradient: linear-gradient(135deg, #e5e7eb 0%, #fef3c7 100%);
   --surface: rgba(255, 255, 255, 0.65);
@@ -28,6 +29,7 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   /* Темная тема */
   --bg-gradient: linear-gradient(135deg, #111827 0%, #1f2937 100%);
   --surface: rgba(31, 41, 55, 0.65);
@@ -157,6 +159,11 @@ p {
 .input-glass:focus {
   border-color: var(--accent-yellow);
   box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.2);
+}
+
+select.input-glass option, select.filter-input option {
+  background: var(--surface-solid);
+  color: var(--text-primary);
 }
 
 /* Scrollbar styling */

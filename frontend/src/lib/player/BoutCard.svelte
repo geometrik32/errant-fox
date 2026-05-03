@@ -595,6 +595,16 @@
   .field-sel {
     width: 100%;
     padding: 6px 8px;
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    outline: none;
+    transition: var(--transition);
+  }
+
+  .field-sel:focus {
+    border-color: var(--accent-yellow);
   }
 
   /* ── Technique tooltip ──────────────────────────────────────────────────── */

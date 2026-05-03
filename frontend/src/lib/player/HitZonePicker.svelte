@@ -47,11 +47,11 @@
   }
 
   function fill(zone: string) {
-    return currentZone() === zone ? 'rgba(219,132,31,0.22)' : 'var(--surface-hover)';
+    return currentZone() === zone ? 'rgba(219,132,31,0.3)' : 'var(--surface-solid)';
   }
 
   function stroke(zone: string) {
-    return currentZone() === zone ? 'var(--accent-yellow)' : 'var(--border-color)';
+    return currentZone() === zone ? 'var(--accent-yellow)' : 'var(--text-secondary)';
   }
 </script>
 
