@@ -28,7 +28,11 @@
       "WebFetch(domain:docs.seafile.com)",
       "Bash(curl -s -w '\\\\nHTTP_STATUS:%{http_code}' -H 'Authorization: Seafile 1d12d16fdcef05c2be5598a033f120c4aa04e54e' 'http://192.168.3.27:8082/api2/repos/3981eb27-f4c1-4c6d-a05e-5448ee140b8f/dir/?p=/')",
       "Bash(cargo build *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "PowerShell(Get-ChildItem -Path \"E:\\\\00_Curent project\\\\Errant Fox\" -Force | Select-Object Name, @{Name=\"Type\";Expression={if\\($_.PSIsContainer\\){\"DIR\"}else{\"FILE\"}}} | Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem -Path \"E:\\\\00_Curent project\\\\Errant Fox\\\\backend\\\\src\" -Recurse -Directory | ForEach-Object {$_.FullName -replace [regex]::Escape\\(\"E:\\\\00_Curent project\\\\Errant Fox\\\\backend\\\\src\"\\), \"src\"} | Sort-Object)",
+      "PowerShell(Get-ChildItem -Path \"E:\\\\00_Curent project\\\\Errant Fox\\\\frontend\\\\src\" -Recurse -Directory | ForEach-Object {$_.FullName -replace [regex]::Escape\\(\"E:\\\\00_Curent project\\\\Errant Fox\\\\frontend\\\\src\"\\), \"src\"} | Sort-Object)",
+      "PowerShell(Get-ChildItem -Path \"E:\\\\00_Curent project\\\\Errant Fox\\\\scripts\" -File | ForEach-Object {$_.Name})"
     ]
   }
 }
