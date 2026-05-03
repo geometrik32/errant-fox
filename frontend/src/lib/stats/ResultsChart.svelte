@@ -123,9 +123,12 @@
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
-    padding: 20px;
+    padding: 24px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
   }
 
   .chart-header {
@@ -137,12 +140,10 @@
   }
 
   .chart-title {
-    font-size: 0.8rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-secondary);
-    margin-bottom: 2px;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 4px 0;
   }
 
   .win-rate {
@@ -177,7 +178,8 @@
   }
 
   .chart-body {
-    height: 180px;
+    flex: 1;
+    min-height: 240px;
     position: relative;
   }
 
