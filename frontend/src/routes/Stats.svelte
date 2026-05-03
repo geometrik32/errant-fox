@@ -308,6 +308,7 @@
     gap: 16px;
     cursor: pointer;
     position: relative;
+    z-index: 100;
     user-select: none;
     transition: var(--transition);
   }

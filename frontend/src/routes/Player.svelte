@@ -239,8 +239,8 @@
   .panel-toggles {
     position: absolute;
     top: 8px;
-    left: 16px;
-    transform: none;
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
     gap: 8px;
     z-index: 10;
@@ -282,7 +282,7 @@
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
+    border-radius: 0;
     box-shadow: var(--shadow-md);
   }
 
@@ -308,7 +308,7 @@
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
+    border-radius: 0;
     box-shadow: var(--shadow-md);
     overflow: hidden;
   }

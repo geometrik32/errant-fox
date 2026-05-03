@@ -365,6 +365,8 @@
   .msg-footer {
     display: flex;
     gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
   }
 
   .reply-link, .edit-link, .del-link {
