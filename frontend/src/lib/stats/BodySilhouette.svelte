@@ -91,7 +91,24 @@
   </div>
   <div class="silhouette-wrap">
 
-    <!-- Left Legend removed -->
+    <!-- Left Legend -->
+    <div class="legend left-legend">
+      {#each LEFT_ZONES as zone}
+        {@const c = cnt(zone)}
+        <!-- svelte-ignore a11y_interactive_supports_focus -->
+        <div
+          class="legend-row"
+          class:selected={selectedZone === zone}
+          role="button"
+          tabindex="0"
+          onclick={() => handleZoneClick(zone)}
+          onkeydown={(e) => e.key === 'Enter' && handleZoneClick(zone)}
+        >
+          <span class="legend-zone">{zone}</span>
+          <span class="legend-count">{c}</span>
+        </div>
+      {/each}
+    </div>
 
     <svg viewBox="0 0 350 1055" xmlns="http://www.w3.org/2000/svg" class="svg">
 
@@ -191,7 +208,7 @@
 
     <!-- Right Legend -->
     <div class="legend right-legend">
-      {#each ZONES as zone}
+      {#each RIGHT_ZONES as zone}
         {@const c = cnt(zone)}
         <!-- svelte-ignore a11y_interactive_supports_focus -->
         <div
@@ -202,8 +219,8 @@
           onclick={() => handleZoneClick(zone)}
           onkeydown={(e) => e.key === 'Enter' && handleZoneClick(zone)}
         >
-          <span class="legend-zone">{zone}</span>
           <span class="legend-count">{c}</span>
+          <span class="legend-zone">{zone}</span>
         </div>
       {/each}
     </div>
@@ -242,9 +259,18 @@
     margin: 0;
   }
 
+  .legend {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: stretch;
+    min-width: 100px;
+    flex: 1;
+  }
+
   .silhouette-wrap {
     display: flex;
-    align-items: center;
+    align-items: stretch; /* Make children stretch to match height */
     justify-content: center;
     gap: 16px;
   }
@@ -260,14 +286,6 @@
   }
 
   .zone:hover { filter: brightness(1.3); }
-
-  .legend {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    align-items: stretch;
-    min-width: 130px;
-  }
 
   .legend-row {
     display: flex;
