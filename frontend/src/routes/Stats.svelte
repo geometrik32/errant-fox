@@ -158,26 +158,28 @@
     {:else if errorMsg}
       <div class="error">{errorMsg}</div>
     {:else}
-      <!-- Fighter header -->
-      <div class="fighter-header">
-        <div class="avatar-wrap" style:background={resolveColor(selectedFighter.id, selectedFighter.color)}>
-          <svg class="avatar-icon" width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="1.5"/>
-            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
-          <img class="avatar-img" src={selectedFighter.avatar_url} alt={selectedFighter.display_name}
-            onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+      <!-- Fighter header & Quick stats -->
+      <div class="dashboard-top">
+        <div class="fighter-hero glass-card">
+          <div class="avatar-wrap" style:background={resolveColor(selectedFighter.id, selectedFighter.color)}>
+            <svg class="avatar-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="1.5"/>
+              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <img class="avatar-img" src={selectedFighter.avatar_url} alt={selectedFighter.display_name}
+              onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          </div>
+          <div class="fighter-info">
+            <div class="greeting">Статистика бойца</div>
+            <div class="fighter-name">{selectedFighter.display_name}</div>
+            {#if firstBoutDate}
+              <div class="fighter-since">с {formatDate(firstBoutDate)}</div>
+            {/if}
+          </div>
         </div>
-        <div class="fighter-info">
-          <div class="fighter-name">{selectedFighter.display_name}</div>
-          {#if firstBoutDate}
-            <div class="fighter-since">с {formatDate(firstBoutDate)}</div>
-          {/if}
-        </div>
-      </div>
 
-      <!-- Quick stats -->
-      <QuickStats bouts={filteredBouts} />
+        <QuickStats bouts={filteredBouts} />
+      </div>
 
       <!-- Charts row -->
       <div class="charts-row">
@@ -253,24 +255,33 @@
   .error   { color: #e05252; }
 
   /* Fighter header */
-  .fighter-header {
+  .dashboard-top {
     display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 20px 24px;
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .fighter-hero {
+    flex: 0 0 280px;
+    padding: 30px 24px;
     background: var(--surface);
     backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 16px;
   }
 
   .avatar-wrap {
-    width: 54px;
-    height: 54px;
+    width: 90px;
+    height: 90px;
     border-radius: 50%;
-    border: 2px solid rgba(255,255,255,0.2);
+    border: 3px solid rgba(255,255,255,0.2);
     flex-shrink: 0;
     position: relative;
     display: flex;
@@ -282,6 +293,7 @@
   .avatar-icon {
     position: absolute;
     pointer-events: none;
+    opacity: 0.6;
   }
 
   .avatar-img {
@@ -292,16 +304,25 @@
     object-fit: cover;
   }
 
+  .greeting {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
+
   .fighter-name {
-    font-size: 1.4rem;
+    font-size: 1.6rem;
     font-weight: 700;
     color: var(--text-primary);
+    line-height: 1.2;
   }
 
   .fighter-since {
     font-size: 0.9rem;
     color: var(--text-secondary);
-    margin-top: 2px;
+    margin-top: 4px;
   }
 
   /* Charts 3-column grid */
@@ -336,6 +357,20 @@
   @media (max-width: 1024px) {
     .stats-layout {
       flex-direction: column;
+    }
+    .dashboard-top {
+      flex-direction: column;
+    }
+    .fighter-hero {
+      flex: none;
+      flex-direction: row;
+      text-align: left;
+      justify-content: flex-start;
+      padding: 20px;
+    }
+    .avatar-wrap {
+      width: 60px;
+      height: 60px;
     }
     .charts-row, .silhouettes-row {
       grid-template-columns: 1fr;

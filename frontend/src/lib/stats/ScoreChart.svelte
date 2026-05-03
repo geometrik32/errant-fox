@@ -39,12 +39,14 @@
           datasets: [{
             label: 'Очки',
             data,
-            borderColor: '#DB841F',
-            backgroundColor: 'rgba(219, 132, 31, 0.12)',
-            pointBackgroundColor: '#DB841F',
+            borderColor: '#fbbf24',
+            backgroundColor: 'rgba(251, 191, 36, 0.2)',
+            pointBackgroundColor: '#ffffff',
+            pointBorderColor: '#fbbf24',
+            pointBorderWidth: 2,
             pointRadius: 4,
             pointHoverRadius: 6,
-            tension: 0.3,
+            tension: 0.4,
             fill: true,
           }],
         },
@@ -63,13 +65,15 @@
           },
           scales: {
             x: {
-              ticks: { color: '#4a6280', font: { size: 11 }, maxRotation: 45 },
-              grid: { color: '#142338' },
+              ticks: { color: '#6b7280', font: { family: 'Inter', size: 11 }, maxRotation: 0 },
+              grid: { display: false },
+              border: { display: false }
             },
             y: {
               beginAtZero: true,
-              ticks: { color: '#4a6280', stepSize: 1 },
-              grid: { color: '#142338' },
+              ticks: { display: false },
+              grid: { display: false },
+              border: { display: false }
             },
           },
         },

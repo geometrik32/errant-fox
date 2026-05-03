@@ -67,12 +67,12 @@
   const VH = 1055;
 
   function fill(zone: string): string {
-    if (selectedZone && selectedZone === zone) return 'rgba(219,132,31,0.3)';
-    return 'transparent';
+    if (selectedZone && selectedZone === zone) return 'rgba(219,132,31,0.4)';
+    return 'var(--surface-solid)';
   }
 
   function strokeColor(zone: string): string {
-    return selectedZone === zone ? 'var(--accent-yellow)' : 'var(--border-color)';
+    return selectedZone === zone ? 'var(--accent-yellow)' : 'var(--text-secondary)';
   }
 
   function cnt(zone: string): number {
@@ -281,11 +281,11 @@
   }
 
   .legend-swatch {
-    width: 10px;
-    height: 10px;
-    border-radius: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
     flex-shrink: 0;
-    border: 1px solid rgba(219, 132, 31, 0.3);
+    border: 1px solid var(--text-secondary);
   }
 
   .legend-zone {
