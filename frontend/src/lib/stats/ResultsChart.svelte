@@ -48,12 +48,14 @@
           datasets: [{
             label: 'Результат',
             data,
-            borderColor: '#DB841F',
-            backgroundColor: 'rgba(219, 132, 31, 0.08)',
-            pointBackgroundColor: data.map(v => v === 1 ? '#4caf82' : v === -1 ? '#e05252' : '#4a6280'),
-            pointRadius: 5,
-            pointHoverRadius: 7,
-            tension: 0.2,
+            borderColor: '#6b7280',
+            backgroundColor: 'transparent',
+            pointBackgroundColor: data.map(v => v === 1 ? '#10b981' : v === -1 ? '#ef4444' : '#fbbf24'),
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 2,
+            pointRadius: 6,
+            pointHoverRadius: 8,
+            tension: 0.4,
             fill: false,
           }],
         },
@@ -75,18 +77,16 @@
           },
           scales: {
             x: {
-              ticks: { color: '#4a6280', font: { size: 11 }, maxRotation: 45 },
-              grid: { color: '#142338' },
+              ticks: { color: '#6b7280', font: { family: 'Inter', size: 11 }, maxRotation: 0 },
+              grid: { display: false },
+              border: { display: false }
             },
             y: {
               min: -1.5,
               max: 1.5,
-              ticks: {
-                color: '#4a6280',
-                stepSize: 1,
-                callback: (v) => v === 1 ? 'Победа' : v === -1 ? 'Поражение' : '',
-              },
-              grid: { color: '#142338' },
+              ticks: { display: false },
+              grid: { display: false },
+              border: { display: false }
             },
           },
         },

@@ -50,10 +50,12 @@
           datasets: [{
             label: 'Боёв',
             data,
-            backgroundColor: 'rgba(219, 132, 31, 0.6)',
-            borderColor: '#DB841F',
-            borderWidth: 1,
-            borderRadius: 3,
+            backgroundColor: 'rgba(251, 191, 36, 0.85)', /* accent-yellow */
+            borderColor: '#fbbf24',
+            borderWidth: 0,
+            borderRadius: 16,
+            barThickness: 'flex',
+            maxBarThickness: 40
           }],
         },
         options: {
@@ -71,13 +73,15 @@
           },
           scales: {
             x: {
-              ticks: { color: '#4a6280', font: { size: 11 }, maxRotation: 45 },
-              grid: { color: '#142338' },
+              ticks: { color: '#6b7280', font: { family: 'Inter', size: 11 }, maxRotation: 0 },
+              grid: { display: false },
+              border: { display: false }
             },
             y: {
               beginAtZero: true,
-              ticks: { color: '#4a6280', stepSize: 1 },
-              grid: { color: '#142338' },
+              ticks: { display: false },
+              grid: { display: false },
+              border: { display: false }
             },
           },
         },
