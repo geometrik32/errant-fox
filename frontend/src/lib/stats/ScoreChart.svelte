@@ -5,9 +5,10 @@
   interface Props {
     bouts: FighterBout[];
     videoLabels?: Map<string, string>;
+    onfilter?: (date: string) => void;
   }
 
-  let { bouts, videoLabels = new Map() }: Props = $props();
+  let { bouts, videoLabels = new Map(), onfilter }: Props = $props();
 
   let canvas = $state<HTMLCanvasElement | undefined>(undefined);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -53,6 +54,13 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          onClick: (e, elements) => {
+            if (elements.length > 0 && onfilter) {
+              const index = elements[0].index;
+              const date = rawData[index].video_date;
+              if (date) onfilter(date);
+            }
+          },
           plugins: {
             legend: { display: false },
             tooltip: {

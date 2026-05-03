@@ -3,9 +3,10 @@
 
   interface Props {
     bouts: FighterBout[];
+    onfilter?: (tech: string) => void;
   }
 
-  let { bouts }: Props = $props();
+  let { bouts, onfilter }: Props = $props();
 
   function getTopTechniques(bouts: FighterBout[], limit: number) {
     const counts = new Map<string, { count: number, success: number }>();
@@ -37,7 +38,9 @@
   </div>
   <div class="tech-list">
     {#each topTechniques as t}
-      <div class="tech-item">
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="tech-item" onclick={() => onfilter?.(t.name)}>
         <div class="tech-info">
           <span class="tech-name">{t.name}</span>
           <span class="tech-stats">{t.count} раз ({t.successRate}% успех)</span>
@@ -87,7 +90,7 @@
   .tech-list {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 12px;
     flex: 1;
   }
 
@@ -95,6 +98,14 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .tech-item:hover {
+    background: var(--surface-hover);
   }
 
   .tech-info {

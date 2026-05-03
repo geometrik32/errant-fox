@@ -11,6 +11,8 @@
   import BodySilhouette from '../lib/stats/BodySilhouette.svelte';
   import TopTechniques from '../lib/stats/TopTechniques.svelte';
   import RecentOpponents from '../lib/stats/RecentOpponents.svelte';
+  import HistoryTable from '../lib/stats/HistoryTable.svelte';
+  import type { TableFilters } from '../lib/stats/HistoryTable.svelte';
   import type { Fighter, FighterBout } from '../lib/api/types';
   import { buildVideoLabels } from '../lib/api/types';
 
@@ -19,24 +21,31 @@
   let loading = $state(false);
   let errorMsg = $state('');
 
-  const defaultFilters: TableFilters = {
-    date: '',
-    opponent_id: '',
-    opponent_name: '',
-    my_technique: '',
-    my_result: '',
-    opponent_technique: '',
-    opponent_result: '',
-    sort_col: 'video_date',
-    sort_dir: 'desc',
+  let defaultFilters: TableFilters = {
+    date: '', opponent_id: '', opponent_name: '',
+    my_technique: '', my_result: '', my_zone: '',
+    opponent_technique: '', opponent_result: '', opponent_zone: '',
+    score: '', date_week: '',
+    sort_col: 'video_date', sort_dir: 'desc'
   };
 
   let tableFilters = $state<TableFilters>({ ...defaultFilters });
   let zoneFilter = $state('');
 
+  function getISOWeek(dateStr: string): string {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const day = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - day);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const week = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+  }
+
   // The single derived store — all dashboard components read from this
   let filteredBouts = $derived.by(() => {
-    let result = rawBouts;
+    let result = [...rawBouts];
 
     if (zoneFilter) {
       result = result.filter(b => {
@@ -56,12 +65,20 @@
       );
     if (tableFilters.my_result)
       result = result.filter(b => b.my_result === tableFilters.my_result);
+    if (tableFilters.my_zone)
+      result = result.filter(b => (b.my_hit_zone ?? '').toLowerCase().includes(tableFilters.my_zone.toLowerCase()));
     if (tableFilters.opponent_technique)
       result = result.filter(b =>
         (b.opponent_technique_name ?? '').toLowerCase().includes(tableFilters.opponent_technique.toLowerCase())
       );
     if (tableFilters.opponent_result)
       result = result.filter(b => b.opponent_result === tableFilters.opponent_result);
+    if (tableFilters.opponent_zone)
+      result = result.filter(b => (b.opponent_hit_zone ?? '').toLowerCase().includes(tableFilters.opponent_zone.toLowerCase()));
+    if (tableFilters.score)
+      result = result.filter(b => `${b.my_score}:${b.opponent_score}`.includes(tableFilters.score));
+    if (tableFilters.date_week)
+      result = result.filter(b => getISOWeek(b.video_date) === tableFilters.date_week);
 
     if (tableFilters.sort_col) {
       const col = tableFilters.sort_col as keyof FighterBout;
@@ -215,24 +232,36 @@
       <!-- Main row -->
       <div class="main-row">
         <div class="main-chart-wrapper">
-          <ScoreChart bouts={filteredBouts} {videoLabels} />
+          <ScoreChart bouts={filteredBouts} {videoLabels} onfilter={(date) => handleFilter({...tableFilters, date})} />
         </div>
         <div class="side-panel-wrapper">
-          <RecentOpponents bouts={filteredBouts} limit={8} />
+          <RecentOpponents bouts={filteredBouts} onfilter={(oppId) => handleFilter({...tableFilters, opponent_id: oppId})} />
         </div>
       </div>
 
       <!-- Charts row -->
       <div class="charts-row">
-        <FrequencyChart bouts={filteredBouts} />
-        <ResultsChart bouts={filteredBouts} {videoLabels} />
-        <TopTechniques bouts={filteredBouts} />
+        <FrequencyChart bouts={filteredBouts} onfilter={(week) => handleFilter({...tableFilters, date_week: week})} />
+        <ResultsChart bouts={filteredBouts} {videoLabels} onfilter={(date) => handleFilter({...tableFilters, date})} />
+        <TopTechniques bouts={filteredBouts} onfilter={(tech) => handleFilter({...tableFilters, my_technique: tech})} />
       </div>
 
       <!-- Body silhouettes -->
       <div class="silhouettes-row">
         <BodySilhouette bouts={filteredBouts} type="dealt" selectedZone={zoneFilter} onzoneclick={(z) => { zoneFilter = z; }} />
         <BodySilhouette bouts={filteredBouts} type="received" selectedZone={zoneFilter} onzoneclick={(z) => { zoneFilter = z; }} />
+      </div>
+
+      <!-- History table -->
+      <div class="table-section">
+        <HistoryTable
+          bouts={filteredBouts}
+          filters={tableFilters}
+          {opponents}
+          {videoLabels}
+          onfilter={handleFilter}
+          onnavigate={handleNavigate}
+        />
       </div>
     {/if}
   </div>
@@ -469,18 +498,23 @@
   /* Charts 3-column grid */
   .charts-row {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 20px;
   }
 
-  /* Silhouettes 2-column */
+  /* Body Silhouettes row */
   .silhouettes-row {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 20px;
   }
 
-  /* Empty table section CSS removed */
+  /* History table section */
+  .table-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
 
   @media (max-width: 1024px) {
     .stats-layout {

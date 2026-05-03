@@ -7,8 +7,12 @@
     opponent_name: string;
     my_technique: string;
     my_result: string;
+    my_zone: string;
     opponent_technique: string;
     opponent_result: string;
+    opponent_zone: string;
+    score: string;
+    date_week: string;
     sort_col: string;
     sort_dir: 'asc' | 'desc';
   }
@@ -129,7 +133,9 @@
         {#if visibleCols.has('score')}
         <th class="th sortable" onclick={() => toggleSort('my_score')}>
           <span>Счёт <span class="sort-icon">{sortIcon('my_score')}</span></span>
-          <div class="filter-spacer"></div>
+          <input class="filter-input" type="text" placeholder="Фильтр…" value={filters.score}
+            oninput={(e) => setFilter('score', (e.target as HTMLInputElement).value)}
+            onclick={(e) => e.stopPropagation()} />
         </th>
         {/if}
         {#if visibleCols.has('my_tech')}
@@ -158,7 +164,12 @@
         </th>
         {/if}
         {#if visibleCols.has('my_zone')}
-        <th class="th"><span>Моя зона</span><div class="filter-spacer"></div></th>
+        <th class="th sortable" onclick={() => toggleSort('my_hit_zone')}>
+          <span>Моя зона <span class="sort-icon">{sortIcon('my_hit_zone')}</span></span>
+          <input class="filter-input" type="text" placeholder="Фильтр…" value={filters.my_zone}
+            oninput={(e) => setFilter('my_zone', (e.target as HTMLInputElement).value)}
+            onclick={(e) => e.stopPropagation()} />
+        </th>
         {/if}
         {#if visibleCols.has('opp_tech')}
         <th class="th sortable" onclick={() => toggleSort('opponent_technique_name')}>
@@ -186,7 +197,12 @@
         </th>
         {/if}
         {#if visibleCols.has('opp_zone')}
-        <th class="th"><span>Зона опп.</span><div class="filter-spacer"></div></th>
+        <th class="th sortable" onclick={() => toggleSort('opponent_hit_zone')}>
+          <span>Зона опп. <span class="sort-icon">{sortIcon('opponent_hit_zone')}</span></span>
+          <input class="filter-input" type="text" placeholder="Фильтр…" value={filters.opponent_zone}
+            oninput={(e) => setFilter('opponent_zone', (e.target as HTMLInputElement).value)}
+            onclick={(e) => e.stopPropagation()} />
+        </th>
         {/if}
         <th class="th th--nav"></th>
       </tr>

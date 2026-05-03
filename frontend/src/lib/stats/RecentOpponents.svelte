@@ -5,25 +5,32 @@
 
   interface Props {
     bouts: FighterBout[];
-    limit?: number;
+    onfilter?: (opponentId: string) => void;
   }
 
-  let { bouts, limit = 5 }: Props = $props();
+  let { bouts, onfilter }: Props = $props();
 
   let recentOpponents = $derived.by(() => {
     // Sort bouts by date descending
     const sorted = [...bouts].sort((a, b) => b.video_date.localeCompare(a.video_date));
     
-    const uniqueMap = new Map<string, { id: string, name: string, scoreDiff: number }>();
+    const uniqueMap = new Map<string, { id: string, name: string, scoreDiff: number, wins: number, losses: number, total: number }>();
     for (const b of sorted) {
       if (!uniqueMap.has(b.opponent_id)) {
         uniqueMap.set(b.opponent_id, {
           id: b.opponent_id,
           name: b.opponent_name,
-          scoreDiff: b.my_score - b.opponent_score
+          scoreDiff: 0,
+          wins: 0,
+          losses: 0,
+          total: 0
         });
       }
-      if (uniqueMap.size >= limit) break;
+      const opp = uniqueMap.get(b.opponent_id)!;
+      opp.total += 1;
+      opp.scoreDiff += (b.my_score - b.opponent_score);
+      if (b.my_score > b.opponent_score) opp.wins += 1;
+      else if (b.my_score < b.opponent_score) opp.losses += 1;
     }
 
     return [...uniqueMap.values()].map(opp => {
@@ -39,13 +46,14 @@
 
 <div class="recent-opponents glass-card">
   <div class="card-header">
-    <h3 class="card-title">Недавние оппоненты</h3>
-    <span class="card-subtitle">быстрый доступ</span>
+    <h3 class="card-title">Оппоненты</h3>
   </div>
   
   <div class="opponents-list">
     {#each recentOpponents as opp (opp.id)}
-      <div class="opp-item">
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="opp-item" onclick={() => onfilter?.(opp.id)}>
         <div class="avatar-wrap" style:background={opp.color}>
           {#if opp.avatar_url}
             <img class="avatar-img" src={opp.avatar_url} alt={opp.name} onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
@@ -57,8 +65,13 @@
           {/if}
         </div>
         <div class="opp-name">{opp.name}</div>
+        <div class="opp-stats">
+          <div>Побед: <span class="stat-val">{opp.wins}</span></div>
+          <div>Поражений: <span class="stat-val">{opp.losses}</span></div>
+          <div>Всего: <span class="stat-val">{opp.total}</span></div>
+        </div>
         <div class="opp-score" class:positive={opp.scoreDiff > 0} class:negative={opp.scoreDiff < 0}>
-          {opp.scoreDiff > 0 ? '+' : ''}{opp.scoreDiff}
+          Баланс: {opp.scoreDiff > 0 ? '+' : ''}{opp.scoreDiff}
         </div>
       </div>
     {:else}
@@ -120,8 +133,16 @@
     flex-direction: column;
     align-items: center;
     gap: 8px;
-    min-width: 70px;
+    min-width: 100px;
     flex-shrink: 0;
+    padding: 8px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .opp-item:hover {
+    background: var(--surface-hover);
   }
 
   .avatar-wrap {
@@ -150,7 +171,8 @@
   }
 
   .opp-name {
-    font-size: 0.8rem;
+    font-size: 0.85rem;
+    font-weight: 600;
     color: var(--text-primary);
     text-align: center;
     white-space: nowrap;
@@ -159,10 +181,23 @@
     width: 100%;
   }
 
+  .opp-stats {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    text-align: center;
+    line-height: 1.4;
+    margin-bottom: 4px;
+  }
+
+  .stat-val {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
   .opp-score {
     font-size: 0.75rem;
     font-weight: 600;
-    padding: 2px 6px;
+    padding: 4px 8px;
     border-radius: var(--radius-sm);
     background: var(--surface-solid);
     color: var(--text-secondary);
