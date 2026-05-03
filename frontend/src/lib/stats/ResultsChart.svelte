@@ -84,9 +84,13 @@
             y: {
               beginAtZero: true,
               ticks: { display: false },
-              grid: { display: false },
+              grid: { 
+                display: true, 
+                color: (ctx) => ctx.tick.value === 0 ? 'rgba(255,255,255,0.15)' : 'transparent',
+                drawTicks: false
+              },
               border: { display: false },
-              title: { display: true, text: 'Разница очков', color: '#6b7280', font: { size: 10 } }
+              title: { display: false }
             },
           },
         },

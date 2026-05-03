@@ -48,14 +48,12 @@
         data: {
           labels,
           datasets: [{
-            label: 'Боёв',
+            label: 'Сходы',
             data,
-            backgroundColor: 'rgba(251, 191, 36, 0.85)', /* accent-yellow */
-            borderColor: '#fbbf24',
-            borderWidth: 0,
-            borderRadius: 16,
-            barThickness: 'flex',
-            maxBarThickness: 40
+            backgroundColor: '#fbbf24',
+            borderRadius: Number.MAX_VALUE,
+            borderSkipped: false,
+            barPercentage: 0.5,
           }],
         },
         options: {
@@ -79,7 +77,7 @@
             },
             y: {
               beginAtZero: true,
-              ticks: { display: false },
+              ticks: { display: true, color: '#6b7280', font: { size: 10 }, stepSize: 1 },
               grid: { display: false },
               border: { display: false }
             },

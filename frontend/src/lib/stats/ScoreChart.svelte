@@ -71,10 +71,10 @@
             },
             y: {
               beginAtZero: true,
-              ticks: { display: false },
+              ticks: { display: true, color: '#6b7280', font: { size: 10 } },
               grid: { display: false },
               border: { display: false },
-              title: { display: true, text: 'Очки', color: '#6b7280', font: { size: 10 } }
+              title: { display: false }
             },
           },
         },
@@ -109,10 +109,7 @@
   }
 
   .chart-title {
-    font-size: 1rem;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin: 0 0 20px 0;
+    display: none;
   }
 
   .chart-body {

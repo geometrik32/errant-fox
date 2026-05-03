@@ -447,8 +447,8 @@
 
   .btn-control {
     flex: 1;
-    height: 44px;
-    font-size: 1rem;
+    height: 24px;
+    font-size: 0.75rem;
     font-weight: 700;
     display: flex;
     justify-content: center;
