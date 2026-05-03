@@ -257,8 +257,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: var(--surface-solid);
-    border-left: 1px solid var(--border-color);
+    background: transparent;
     overflow: hidden;
   }
 
@@ -413,7 +412,7 @@
   .input-area {
     flex-shrink: 0;
     border-top: 1px solid var(--border-color);
-    background: var(--surface-solid);
+    background: transparent;
     padding: 12px;
     display: flex;
     flex-direction: column;

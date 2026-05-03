@@ -10,14 +10,15 @@
 
   let { bouts, type, selectedZone = '', onzoneclick }: Props = $props();
 
-  const ZONES = [
-    'Голова', 'Шея',
-    'Плечо пр.', 'Предплечье пр.', 'Кисть пр.',
-    'Плечо лев.', 'Предплечье лев.', 'Кисть лев.',
-    'Тело', 'Таз',
-    'Бедро пр.', 'Голень пр.', 'Стопа пр.',
-    'Бедро лев.', 'Голень лев.', 'Стопа лев.',
+  const LEFT_ZONES = [
+    'Голова', 'Плечо пр.', 'Предплечье пр.', 'Кисть пр.', 'Тело', 'Бедро пр.', 'Голень пр.', 'Стопа пр.'
   ] as const;
+
+  const RIGHT_ZONES = [
+    'Шея', 'Плечо лев.', 'Предплечье лев.', 'Кисть лев.', 'Таз', 'Бедро лев.', 'Голень лев.', 'Стопа лев.'
+  ] as const;
+
+  const ZONES = [...LEFT_ZONES, ...RIGHT_ZONES];
 
   // Parse "ZoneName" or "ZoneName:x:y" — returns zone name only
   function parseZone(s: string | null): string {
@@ -89,6 +90,26 @@
     {type === 'dealt' ? 'Нанесённый урон' : 'Полученный урон'}
   </div>
   <div class="silhouette-wrap">
+
+    <!-- Left Legend -->
+    <div class="legend left-legend">
+      {#each LEFT_ZONES as zone}
+        {@const c = cnt(zone)}
+        <!-- svelte-ignore a11y_interactive_supports_focus -->
+        <div
+          class="legend-row"
+          class:selected={selectedZone === zone}
+          role="button"
+          tabindex="0"
+          onclick={() => handleZoneClick(zone)}
+          onkeydown={(e) => e.key === 'Enter' && handleZoneClick(zone)}
+        >
+          <span class="legend-count">{c}</span>
+          <span class="legend-zone">{zone}</span>
+          <div class="legend-swatch" style:background={fill(zone)}></div>
+        </div>
+      {/each}
+    </div>
 
     <svg viewBox="0 0 350 1055" xmlns="http://www.w3.org/2000/svg" class="svg">
 
@@ -186,9 +207,9 @@
 
     </svg>
 
-    <!-- Legend -->
-    <div class="legend">
-      {#each ZONES as zone}
+    <!-- Right Legend -->
+    <div class="legend right-legend">
+      {#each RIGHT_ZONES as zone}
         {@const c = cnt(zone)}
         <!-- svelte-ignore a11y_interactive_supports_focus -->
         <div
@@ -237,8 +258,9 @@
 
   .silhouette-wrap {
     display: flex;
-    align-items: flex-start;
-    gap: 20px;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
   }
 
   .svg {
@@ -257,9 +279,12 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 4px;
     justify-content: center;
   }
+
+  .left-legend { align-items: flex-end; text-align: right; }
+  .right-legend { align-items: flex-start; text-align: left; }
 
   .legend-row {
     display: flex;
@@ -289,7 +314,6 @@
   }
 
   .legend-zone {
-    flex: 1;
     font-size: 0.8rem;
     color: var(--text-secondary);
   }

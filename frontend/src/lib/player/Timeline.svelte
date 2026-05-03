@@ -254,8 +254,7 @@
     display: flex;
     flex-direction: column;
     width: 100%;
-    background: var(--surface-solid);
-    border-top: 1px solid var(--border-color);
+    background: transparent;
     user-select: none;
   }
 
@@ -269,7 +268,7 @@
   /* ── Row 1: Comment markers ── */
   .track--comments {
     height: 18px;
-    background: var(--surface-solid);
+    background: transparent;
     border-bottom: 1px solid var(--border-color);
   }
 
@@ -329,7 +328,7 @@
   /* ── Row 3: Bout track ── */
   .track--bouts {
     height: 24px;
-    background: var(--surface-solid);
+    background: transparent;
     border-top: 1px solid var(--border-color);
     border-bottom: 1px solid var(--border-color);
   }
@@ -359,7 +358,7 @@
     justify-content: space-between;
     height: 48px;
     padding: 0 16px;
-    background: var(--surface-solid);
+    background: transparent;
   }
 
   .ctrl-group {
@@ -424,6 +423,11 @@
   .speed-sel:hover,
   .speed-sel:focus {
     border-color: var(--text-primary);
+    color: var(--text-primary);
+  }
+
+  .speed-sel option {
+    background: var(--surface-solid);
     color: var(--text-primary);
   }
 

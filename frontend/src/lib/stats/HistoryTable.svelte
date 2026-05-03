@@ -79,29 +79,29 @@
   }
 </script>
 
-<div class="table-header-bar">
-  <div class="col-picker-wrap">
-    <button class="eye-btn" onclick={() => { showColPicker = !showColPicker; }} title="Выбрать столбцы" aria-expanded={showColPicker}>
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-        <circle cx="12" cy="12" r="3"/>
-      </svg>
-    </button>
-    {#if showColPicker}
-      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-      <div class="col-picker" role="menu" onclick={(e) => e.stopPropagation()}>
-        {#each Object.entries(COL_LABELS) as [key, label]}
-          <label class="col-option">
-            <input type="checkbox" checked={visibleCols.has(key as ColKey)} onchange={() => toggleCol(key as ColKey)} />
-            {label}
-          </label>
-        {/each}
-      </div>
-    {/if}
-  </div>
-</div>
-
 <div class="table-wrap">
+  <div class="table-header-bar">
+    <h3 class="table-title">История сходов</h3>
+    <div class="col-picker-wrap">
+      <button class="eye-btn" onclick={() => { showColPicker = !showColPicker; }} title="Выбрать столбцы" aria-expanded={showColPicker}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      </button>
+      {#if showColPicker}
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+        <div class="col-picker" role="menu" onclick={(e) => e.stopPropagation()}>
+          {#each Object.entries(COL_LABELS) as [key, label]}
+            <label class="col-option">
+              <input type="checkbox" checked={visibleCols.has(key as ColKey)} onchange={() => toggleCol(key as ColKey)} />
+              {label}
+            </label>
+          {/each}
+        </div>
+      {/if}
+    </div>
+  </div>
   <table class="table">
     <thead>
       <tr class="header-row">
@@ -291,7 +291,9 @@
   }
 
   .th span {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 4px;
     margin-bottom: 5px;
   }
 
@@ -447,8 +449,18 @@
   .table-header-bar {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    margin-bottom: 6px;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .table-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    margin: 0;
   }
 
   .col-picker-wrap {

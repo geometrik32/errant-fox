@@ -82,11 +82,11 @@
               border: { display: false }
             },
             y: {
-              min: -1.5,
-              max: 1.5,
+              beginAtZero: true,
               ticks: { display: false },
               grid: { display: false },
-              border: { display: false }
+              border: { display: false },
+              title: { display: true, text: 'Разница очков', color: '#6b7280', font: { size: 10 } }
             },
           },
         },

@@ -1,36 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
-  color-scheme: light;
-  /* Светлая тема (default) */
-  --bg-gradient: linear-gradient(135deg, #e5e7eb 0%, #fef3c7 100%);
-  --surface: rgba(255, 255, 255, 0.65);
-  --surface-hover: rgba(255, 255, 255, 0.85);
-  --surface-solid: #ffffff;
-  --text-primary: #1a1a1a;
-  --text-secondary: #4b5563;
-  --accent-yellow: #fbbf24;
-  --accent-yellow-hover: #f59e0b;
-  --accent-dark: #1a1a1a;
-  --accent-dark-hover: #374151;
-  
-  --border-color: rgba(255, 255, 255, 0.4);
-  --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
-  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
-  --glass-blur: blur(16px);
-  
-  --radius-sm: 12px;
-  --radius-md: 20px;
-  --radius-lg: 28px;
-  --radius-pill: 9999px;
-  
-  --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-[data-theme="dark"] {
   color-scheme: dark;
-  /* Темная тема */
+  /* Темная тема (единственная) */
   --bg-gradient: linear-gradient(135deg, #111827 0%, #1f2937 100%);
   --surface: rgba(31, 41, 55, 0.65);
   --surface-hover: rgba(55, 65, 81, 0.85);
@@ -46,6 +18,14 @@
   --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.15);
   --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+  --glass-blur: blur(16px);
+  
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --radius-lg: 28px;
+  --radius-pill: 9999px;
+  
+  --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 * {
@@ -122,8 +102,6 @@ p {
 .btn-dark {
   background: var(--accent-dark);
   color: var(--bg-gradient); /* Inverted text */
-}
-[data-theme="dark"] .btn-dark {
   color: #111827;
 }
 
@@ -145,9 +123,11 @@ p {
 
 /* Inputs Utilities */
 .input-glass {
-  background: var(--surface-hover);
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   padding: 0.75rem 1.2rem;
   color: var(--text-primary);
   font-family: 'Inter', sans-serif;
