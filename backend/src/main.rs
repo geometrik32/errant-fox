@@ -9,7 +9,7 @@ mod db;
 mod errors;
 mod middleware;
 mod previews;
-mod s3;
+mod seafile;
 mod state;
 mod sync;
 mod ws;
@@ -20,12 +20,9 @@ async fn main() {
 
     let config = config::Config::from_env();
 
-    let s3_client = s3::S3Client::new(
-        config.s3_endpoint.clone(),
-        config.s3_bucket.clone(),
-        config.s3_access_key.clone(),
-        config.s3_secret_key.clone(),
-        config.s3_region.clone(),
+    let seafile_client = seafile::SeafileClient::new(
+        config.seafile_url.clone(),
+        config.seafile_token.clone(),
     );
 
     let db_pool = db::init_pool(&config.database_url);
@@ -33,7 +30,7 @@ async fn main() {
     let (ws_tx, _ws_rx) = tokio::sync::broadcast::channel::<ws::WsEvent>(256);
 
     tokio::spawn(sync::run_sync(
-        s3_client.clone(),
+        seafile_client.clone(),
         db_pool.clone(),
         ws_tx.clone(),
     ));
@@ -43,7 +40,7 @@ async fn main() {
         jwt_secret: config.jwt_secret.clone(),
         avatars_dir: config.avatars_dir.clone(),
         previews_dir: config.previews_dir.clone(),
-        s3: s3_client,
+        seafile: seafile_client,
         ws_hub: ws_tx,
     };
 
