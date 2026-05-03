@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, Query, State},
-    http::{header, HeaderMap, StatusCode},
+    http::{header, StatusCode},
     response::IntoResponse,
     Json,
 };
@@ -402,7 +402,7 @@ pub async fn get_video(
     let db = state.db.clone();
     let user_id = user.id.clone();
 
-    let (dto, seafile_path) = tokio::task::spawn_blocking(move || {
+    let dto = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{bouts, comment_reactions, comments, videos};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
@@ -413,8 +413,6 @@ pub async fn get_video(
             .optional()
             .map_err(|e| AppError::Internal(e.to_string()))?
             .ok_or(AppError::NotFound)?;
-
-        let seafile_path = video.seafile_path.clone();
 
         let video_bouts = bouts::table
             .filter(bouts::video_id.eq(&video_id))
@@ -441,16 +439,14 @@ pub async fn get_video(
 
         let users_map = load_users_for_video(&video, &video_comments, &mut conn)?;
 
-        let dto = build_video_full(
+        Ok::<_, AppError>(build_video_full(
             &video,
             video_bouts,
             video_comments,
             &users_map,
             &reactions_map,
             String::new(),
-        );
-
-        Ok::<_, AppError>((dto, seafile_path))
+        ))
     })
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
@@ -469,7 +465,7 @@ pub async fn patch_video(
     let db = state.db.clone();
     let user_id = user.id.clone();
 
-    let (dto, seafile_path) = tokio::task::spawn_blocking(move || {
+    let dto = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{bouts, comment_reactions, comments, videos};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
@@ -491,8 +487,6 @@ pub async fn patch_video(
             .first::<Video>(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        let seafile_path = video.seafile_path.clone();
-
         let video_bouts = bouts::table
             .filter(bouts::video_id.eq(&video_id))
             .order(bouts::order_index.asc())
@@ -518,16 +512,14 @@ pub async fn patch_video(
 
         let users_map = load_users_for_video(&video, &video_comments, &mut conn)?;
 
-        let dto = build_video_full(
+        Ok::<_, AppError>(build_video_full(
             &video,
             video_bouts,
             video_comments,
             &users_map,
             &reactions_map,
             String::new(),
-        );
-
-        Ok::<_, AppError>((dto, seafile_path))
+        ))
     })
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
@@ -537,7 +529,7 @@ pub async fn patch_video(
     Ok(Json(VideoFullDto { stream_url, ..dto }))
 }
 
-// ── Seafile previews ──────────────────────────────────────────────────────────
+// ── Preview generation ────────────────────────────────────────────────────────
 
 pub async fn get_preview_frame(
     State(state): State<AppState>,
@@ -546,7 +538,7 @@ pub async fn get_preview_frame(
     let db = state.db.clone();
     let vid_clone = video_id.clone();
 
-    let (preview_count, seafile_path) = tokio::task::spawn_blocking(move || {
+    let (preview_count, object_key) = tokio::task::spawn_blocking(move || {
         use crate::db::schema::videos;
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
         let video = videos::table
@@ -561,13 +553,13 @@ pub async fn get_preview_frame(
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
     if preview_count == 0 {
-        let seafile = state.seafile.clone();
+        let s3 = state.s3.clone();
         let previews_dir = state.previews_dir.clone();
         let db = state.db.clone();
         let vid_id = video_id.clone();
 
         tokio::spawn(async move {
-            match seafile.get_download_url(&seafile_path).await {
+            match s3.get_presigned_url(&object_key, 3600).await {
                 Ok(url) => {
                     if let Err(e) = crate::previews::generate_previews(
                         &vid_id,
@@ -580,7 +572,7 @@ pub async fn get_preview_frame(
                         tracing::error!("generate_previews failed for {vid_id}: {e:?}");
                     }
                 }
-                Err(e) => tracing::error!("get_download_url failed for {vid_id}: {e}"),
+                Err(e) => tracing::error!("presigned url failed for {vid_id}: {e}"),
             }
         });
 
@@ -598,16 +590,15 @@ pub async fn get_preview_frame(
     Ok(([(header::CONTENT_TYPE, "image/jpeg")], bytes).into_response())
 }
 
-// ── Video stream proxy ────────────────────────────────────────────────────────
+// ── Video stream — redirect to S3 presigned URL ───────────────────────────────
 
 pub async fn stream_video(
     State(state): State<AppState>,
     Path(video_id): Path<String>,
-    req_headers: HeaderMap,
 ) -> Result<axum::response::Response, AppError> {
     let db = state.db.clone();
 
-    let seafile_path = tokio::task::spawn_blocking(move || {
+    let object_key = tokio::task::spawn_blocking(move || {
         use crate::db::schema::videos;
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
         let video = videos::table
@@ -621,29 +612,11 @@ pub async fn stream_video(
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
-    let range = req_headers
-        .get(header::RANGE)
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
-
-    let seafile_resp = state
-        .seafile
-        .fetch_range(&seafile_path, range.as_deref())
+    let presigned_url = state
+        .s3
+        .get_presigned_url(&object_key, 3600)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    let status = seafile_resp.status();
-    let mut builder = axum::response::Response::builder().status(status);
-
-    for key in &["content-type", "content-length", "content-range"] {
-        if let Some(val) = seafile_resp.headers().get(*key) {
-            builder = builder.header(*key, val);
-        }
-    }
-    builder = builder.header("accept-ranges", "bytes");
-
-    let body = axum::body::Body::from_stream(seafile_resp.bytes_stream());
-    builder
-        .body(body)
-        .map_err(|e| AppError::Internal(e.to_string()))
+    Ok(axum::response::Redirect::temporary(&presigned_url).into_response())
 }

@@ -65,12 +65,14 @@ pub struct NewVideo {
 pub struct Technique {
     pub id: i32,
     pub name: String,
+    pub description: Option<String>,
 }
 
 #[derive(Insertable, Deserialize, Debug)]
 #[diesel(table_name = techniques)]
 pub struct NewTechnique {
     pub name: String,
+    pub description: Option<String>,
 }
 
 // ── bouts ─────────────────────────────────────────────────────────────────────

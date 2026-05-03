@@ -1,4 +1,4 @@
-// @generated — matches migrations/0001_initial + 0002_comment_reactions + 0003_comment_bout_search
+// @generated — matches migrations/0001_initial + 0002_comment_reactions + 0003_comment_bout_search + 0004_technique_description
 
 diesel::table! {
     users (id) {
@@ -28,8 +28,9 @@ diesel::table! {
 
 diesel::table! {
     techniques (id) {
-        id   -> Integer,
-        name -> Text,
+        id          -> Integer,
+        name        -> Text,
+        description -> Nullable<Text>,
     }
 }
 

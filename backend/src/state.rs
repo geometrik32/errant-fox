@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{db::DbPool, seafile::SeafileClient, ws::WsHub};
+use crate::{db::DbPool, s3::S3Client, ws::WsHub};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -8,6 +8,6 @@ pub struct AppState {
     pub jwt_secret: String,
     pub avatars_dir: String,
     pub previews_dir: String,
-    pub seafile: Arc<SeafileClient>,
+    pub s3: Arc<S3Client>,
     pub ws_hub: WsHub,
 }

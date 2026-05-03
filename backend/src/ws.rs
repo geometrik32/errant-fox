@@ -17,6 +17,7 @@ pub struct WsCommentAuthor {
     pub id: String,
     pub display_name: String,
     pub avatar_url: String,
+    pub color: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]

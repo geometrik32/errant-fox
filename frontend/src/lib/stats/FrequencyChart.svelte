@@ -23,15 +23,16 @@
   }
 
   function buildData(bouts: FighterBout[]) {
-    const counts = new Map<string, number>();
+    const weekVideos = new Map<string, Set<string>>();
     for (const b of bouts) {
       const week = getISOWeek(b.video_date);
-      counts.set(week, (counts.get(week) ?? 0) + 1);
+      if (!weekVideos.has(week)) weekVideos.set(week, new Set());
+      weekVideos.get(week)!.add(b.video_id);
     }
-    const sorted = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    const sorted = [...weekVideos.entries()].sort((a, b) => a[0].localeCompare(b[0]));
     return {
       labels: sorted.map(([w]) => w),
-      data: sorted.map(([, n]) => n),
+      data: sorted.map(([, videos]) => videos.size),
     };
   }
 

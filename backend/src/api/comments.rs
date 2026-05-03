@@ -22,6 +22,7 @@ pub struct CommentAuthorResponse {
     pub id: String,
     pub display_name: String,
     pub avatar_url: String,
+    pub color: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -47,6 +48,7 @@ fn to_response(c: &Comment, author: &User, likes: i32, dislikes: i32, my_reactio
             id: author.id.clone(),
             display_name: author.display_name.clone(),
             avatar_url: format!("/api/users/{}/avatar", author.id),
+            color: author.color.clone(),
         },
         timestamp_ms: c.timestamp_ms,
         text: c.text.clone(),
@@ -86,6 +88,7 @@ fn to_ws_comment(c: &Comment, author: &User) -> WsComment {
             id: author.id.clone(),
             display_name: author.display_name.clone(),
             avatar_url: format!("/api/users/{}/avatar", author.id),
+            color: author.color.clone(),
         },
         timestamp_ms: c.timestamp_ms,
         text: c.text.clone(),

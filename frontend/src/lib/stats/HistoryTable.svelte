@@ -17,16 +17,17 @@
     bouts: FighterBout[];
     filters: TableFilters;
     opponents: Array<{ id: string; name: string }>;
+    videoLabels?: Map<string, string>;
     onfilter: (f: TableFilters) => void;
     onnavigate: (videoId: string, timeStartMs?: number) => void;
   }
 
-  let { bouts, filters, opponents, onfilter, onnavigate }: Props = $props();
+  let { bouts, filters, opponents, videoLabels = new Map(), onfilter, onnavigate }: Props = $props();
 
   // Visible column config
-  type ColKey = 'date' | 'bout_time' | 'opponent' | 'score' | 'my_tech' | 'my_result' | 'my_zone' | 'opp_tech' | 'opp_result' | 'opp_zone';
+  type ColKey = 'date' | 'opponent' | 'score' | 'my_tech' | 'my_result' | 'my_zone' | 'opp_tech' | 'opp_result' | 'opp_zone';
   const COL_LABELS: Record<ColKey, string> = {
-    date: 'Дата', bout_time: 'Время', opponent: 'Оппонент', score: 'Счёт',
+    date: 'Видео', opponent: 'Оппонент', score: 'Счёт',
     my_tech: 'Мой приём', my_result: 'Мой рез.', my_zone: 'Моя зона',
     opp_tech: 'Приём опп.', opp_result: 'Рез. опп.', opp_zone: 'Зона опп.',
   };
@@ -67,6 +68,15 @@
     const s = t % 60;
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   }
+
+  const RESULT_LABELS: Record<string, string> = {
+    hit: 'Попал', miss: 'Промах', blocked: 'Заблокировали',
+    late: 'Опоздал', no_strike: 'Не бил',
+    disqualification: 'Неквалификация', afterblow: 'Афтерблоу',
+  };
+  function resultLabel(v: string | null): string {
+    return v ? (RESULT_LABELS[v] ?? v) : '—';
+  }
 </script>
 
 <div class="table-header-bar">
@@ -97,16 +107,10 @@
       <tr class="header-row">
         {#if visibleCols.has('date')}
         <th class="th sortable" onclick={() => toggleSort('video_date')}>
-          <span>Дата <span class="sort-icon">{sortIcon('video_date')}</span></span>
+          <span>Видео <span class="sort-icon">{sortIcon('video_date')}</span></span>
           <input class="filter-input" type="date" value={filters.date}
             oninput={(e) => setFilter('date', (e.target as HTMLInputElement).value)}
             onclick={(e) => e.stopPropagation()} />
-        </th>
-        {/if}
-        {#if visibleCols.has('bout_time')}
-        <th class="th sortable" onclick={() => toggleSort('time_start_ms')}>
-          <span>Время <span class="sort-icon">{sortIcon('time_start_ms')}</span></span>
-          <div class="filter-spacer"></div>
         </th>
         {/if}
         {#if visibleCols.has('opponent')}
@@ -148,6 +152,8 @@
             <option value="blocked">Заблокировали</option>
             <option value="late">Опоздал</option>
             <option value="no_strike">Не бил</option>
+            <option value="disqualification">Неквалификация</option>
+            <option value="afterblow">Афтерблоу</option>
           </select>
         </th>
         {/if}
@@ -174,6 +180,8 @@
             <option value="blocked">Заблокировали</option>
             <option value="late">Опоздал</option>
             <option value="no_strike">Не бил</option>
+            <option value="disqualification">Неквалификация</option>
+            <option value="afterblow">Афтерблоу</option>
           </select>
         </th>
         {/if}
@@ -186,8 +194,7 @@
     <tbody>
       {#each bouts as bout (bout.id)}
         <tr class="body-row">
-          {#if visibleCols.has('date')}<td class="td">{formatDate(bout.video_date)}</td>{/if}
-          {#if visibleCols.has('bout_time')}<td class="td bout-time">{fmtMs(bout.time_start_ms)} — {fmtMs(bout.time_end_ms)}</td>{/if}
+          {#if visibleCols.has('date')}<td class="td video-id">{videoLabels.get(bout.video_id) ?? formatDate(bout.video_date)}</td>{/if}
           {#if visibleCols.has('opponent')}<td class="td">{bout.opponent_name}</td>{/if}
           {#if visibleCols.has('score')}
           <td class="td score">
@@ -205,7 +212,9 @@
               class:blocked={bout.my_result === 'blocked'}
               class:late={bout.my_result === 'late'}
               class:no-strike={bout.my_result === 'no_strike'}
-            >{bout.my_result === 'hit' ? 'Попал' : bout.my_result === 'blocked' ? 'Заблокировали' : bout.my_result === 'late' ? 'Опоздал' : bout.my_result === 'no_strike' ? 'Не бил' : 'Промах'}</span>
+              class:disqualification={bout.my_result === 'disqualification'}
+              class:afterblow={bout.my_result === 'afterblow'}
+            >{resultLabel(bout.my_result)}</span>
           </td>
           {/if}
           {#if visibleCols.has('my_zone')}<td class="td zone-cell">{(bout.my_hit_zone ?? '').split(':')[0] || '—'}</td>{/if}
@@ -218,7 +227,9 @@
               class:blocked={bout.opponent_result === 'blocked'}
               class:late={bout.opponent_result === 'late'}
               class:no-strike={bout.opponent_result === 'no_strike'}
-            >{bout.opponent_result === 'hit' ? 'Попал' : bout.opponent_result === 'blocked' ? 'Заблокировали' : bout.opponent_result === 'late' ? 'Опоздал' : bout.opponent_result === 'no_strike' ? 'Не бил' : 'Промах'}</span>
+              class:disqualification={bout.opponent_result === 'disqualification'}
+              class:afterblow={bout.opponent_result === 'afterblow'}
+            >{resultLabel(bout.opponent_result)}</span>
           </td>
           {/if}
           {#if visibleCols.has('opp_zone')}<td class="td zone-cell">{(bout.opponent_hit_zone ?? '').split(':')[0] || '—'}</td>{/if}
@@ -392,6 +403,16 @@
     color: #6b8aab;
   }
 
+  .result-badge.disqualification {
+    background: rgba(200, 80, 200, 0.1);
+    color: #c070c0;
+  }
+
+  .result-badge.afterblow {
+    background: rgba(80, 160, 200, 0.1);
+    color: #50a0c8;
+  }
+
   .td--nav {
     text-align: center;
   }
@@ -486,10 +507,12 @@
     color: #6b8aab;
   }
 
-  .bout-time {
+  .video-id {
     font-size: 0.75rem;
     font-variant-numeric: tabular-nums;
-    color: #5a7a96;
+    color: #a0b4c8;
     white-space: nowrap;
+    font-family: monospace;
+    letter-spacing: 0.03em;
   }
 </style>

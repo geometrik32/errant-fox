@@ -44,10 +44,10 @@
     let result = allVideos;
 
     if (activeFilter.fighter_ids.length > 0) {
-      result = result.filter(
-        (v) =>
-          (v.fighter_a && activeFilter.fighter_ids.includes(v.fighter_a.id)) ||
-          (v.fighter_b && activeFilter.fighter_ids.includes(v.fighter_b.id))
+      result = result.filter((v) =>
+        activeFilter.fighter_ids.every(
+          (id) => v.fighter_a?.id === id || v.fighter_b?.id === id
+        )
       );
     }
 

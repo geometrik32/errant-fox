@@ -4,20 +4,21 @@
 
   interface Props {
     bouts: FighterBout[];
+    videoLabels?: Map<string, string>;
   }
 
-  let { bouts }: Props = $props();
+  let { bouts, videoLabels = new Map() }: Props = $props();
 
   let canvas = $state<HTMLCanvasElement | undefined>(undefined);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let chart: any = null;
 
   function buildVideoScores(bouts: FighterBout[]) {
-    const videoMap = new Map<string, { date: string; score: number }>();
+    const videoMap = new Map<string, { video_id: string; date: string; score: number }>();
     for (const b of bouts) {
       const v = videoMap.get(b.video_id);
       if (v) { v.score += b.my_score; }
-      else videoMap.set(b.video_id, { date: b.video_date, score: b.my_score });
+      else videoMap.set(b.video_id, { video_id: b.video_id, date: b.video_date, score: b.my_score });
     }
     return [...videoMap.values()].sort((a, b) => a.date.localeCompare(b.date));
   }
@@ -25,7 +26,7 @@
   $effect(() => {
     if (!canvas) return;
     const sessions = buildVideoScores(bouts);
-    const labels = sessions.map(s => s.date);
+    const labels = sessions.map(s => videoLabels.get(s.video_id) ?? s.date);
     const data = sessions.map(s => s.score);
 
     import('chart.js').then(({ Chart, registerables }) => {

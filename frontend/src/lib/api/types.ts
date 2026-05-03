@@ -37,11 +37,11 @@ export interface FighterBout {
   my_technique_id: number | null;
   my_technique_name: string | null;
   my_hit_zone: string | null;
-  my_result: 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | null;
+  my_result: 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | 'disqualification' | 'afterblow' | null;
   opponent_technique_id: number | null;
   opponent_technique_name: string | null;
   opponent_hit_zone: string | null;
-  opponent_result: 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | null;
+  opponent_result: 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | 'disqualification' | 'afterblow' | null;
 }
 
 export interface VideoFighter {
@@ -72,10 +72,10 @@ export interface Bout {
   score_b: number;
   technique_a_id: number | null;
   hit_zone_a: string | null;
-  result_a: 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | null;
+  result_a: 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | 'disqualification' | 'afterblow' | null;
   technique_b_id: number | null;
   hit_zone_b: string | null;
-  result_b: 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | null;
+  result_b: 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | 'disqualification' | 'afterblow' | null;
 }
 
 export interface Comment {
@@ -105,12 +105,49 @@ export interface VideoFull {
 export interface Technique {
   id: number;
   name: string;
+  description?: string | null;
 }
 
 export interface VideoShort {
   id: string;
   date: string;
   preview_url: string;
+}
+
+// Computes human-readable video IDs: e.g. "СМ_26.02.01_01"
+export function buildVideoLabels(bouts: FighterBout[], fighterName: string): Map<string, string> {
+  const myInitial = (fighterName.trim()[0] ?? '?').toUpperCase();
+
+  // First occurrence of each video_id → opponent name
+  const videoOpponent = new Map<string, string>();
+  const videoDates = new Map<string, string>();
+  for (const b of bouts) {
+    if (!videoOpponent.has(b.video_id)) {
+      videoOpponent.set(b.video_id, b.opponent_name);
+      videoDates.set(b.video_id, b.video_date);
+    }
+  }
+
+  // Group videos by date, sorted by video_id within each date for stability
+  const dateGroups = new Map<string, string[]>();
+  for (const [vid, date] of videoDates) {
+    if (!dateGroups.has(date)) dateGroups.set(date, []);
+    dateGroups.get(date)!.push(vid);
+  }
+  for (const vids of dateGroups.values()) vids.sort();
+
+  const result = new Map<string, string>();
+  for (const [date, vids] of dateGroups) {
+    const yy = date.slice(2, 4);
+    const mm = date.slice(5, 7);
+    const dd = date.slice(8, 10);
+    const datePart = `${yy}.${mm}.${dd}`;
+    vids.forEach((vid, idx) => {
+      const oppInitial = ((videoOpponent.get(vid) ?? '').trim()[0] ?? '?').toUpperCase();
+      result.set(vid, `${myInitial}${oppInitial}_${datePart}_${String(idx + 1).padStart(2, '0')}`);
+    });
+  }
+  return result;
 }
 
 export interface SearchResult {

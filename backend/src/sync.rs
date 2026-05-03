@@ -9,12 +9,12 @@ use uuid::Uuid;
 
 use crate::{
     db::{models::NewVideo, DbPool},
-    seafile::SeafileClient,
+    s3::S3Client,
     ws::WsEvent,
 };
 
 pub async fn run_sync(
-    seafile: Arc<SeafileClient>,
+    s3: Arc<S3Client>,
     db: DbPool,
     ws_tx: broadcast::Sender<WsEvent>,
 ) {
@@ -23,22 +23,29 @@ pub async fn run_sync(
 
     loop {
         interval.tick().await;
-        if let Err(e) = sync_once(&seafile, &db, &ws_tx, &date_re).await {
-            tracing::error!("seafile sync error: {e:#}");
+        if let Err(e) = sync_once(&s3, &db, &ws_tx, &date_re).await {
+            tracing::error!("s3 sync error: {e:#}");
         }
     }
 }
 
 async fn sync_once(
-    seafile: &SeafileClient,
+    s3: &S3Client,
     db: &DbPool,
     ws_tx: &broadcast::Sender<WsEvent>,
     date_re: &Regex,
 ) -> anyhow::Result<()> {
-    let folders = seafile.list_folders().await?;
+    let keys = s3.list_objects().await?;
 
-    for folder in folders {
-        let date_str = match date_re.find(&folder.name) {
+    for key in keys {
+        // Only process video files
+        let lower = key.to_lowercase();
+        if !lower.ends_with(".mp4") && !lower.ends_with(".mkv") && !lower.ends_with(".mov") && !lower.ends_with(".avi") {
+            continue;
+        }
+
+        // Extract date from the key (anywhere in the path)
+        let date_str = match date_re.find(&key) {
             Some(m) => m.as_str().to_string(),
             None => continue,
         };
@@ -50,68 +57,55 @@ async fn sync_once(
             Err(_) => continue,
         };
 
-        let files = match seafile.list_files(&folder.name).await {
-            Ok(f) => f,
-            Err(e) => {
-                tracing::warn!("failed to list '{}': {e}", folder.name);
-                continue;
-            }
+        let key_clone = key.clone();
+        let db_clone = db.clone();
+        let exists: bool = tokio::task::spawn_blocking(move || {
+            use crate::db::schema::videos;
+            let mut conn = db_clone.get()?;
+            diesel::select(diesel::dsl::exists(
+                videos::table.filter(videos::seafile_path.eq(&key_clone)),
+            ))
+            .get_result::<bool>(&mut conn)
+            .map_err(anyhow::Error::from)
+        })
+        .await??;
+
+        if exists {
+            continue;
+        }
+
+        let new_id = Uuid::new_v4().to_string();
+        let new_video = NewVideo {
+            id: new_id.clone(),
+            seafile_path: key.clone(),
+            fighter_a_id: None,
+            fighter_b_id: None,
+            date,
+            duration_ms: None,
+            preview_count: 0,
         };
 
-        for file in files {
-            // seafile_path: "FolderName/filename.mp4" (no leading slash)
-            let seafile_path = format!("{}/{}", folder.name, file.name);
-
-            let path_clone = seafile_path.clone();
-            let db_clone = db.clone();
-            let exists: bool = tokio::task::spawn_blocking(move || {
-                use crate::db::schema::videos;
-                let mut conn = db_clone.get()?;
-                diesel::select(diesel::dsl::exists(
-                    videos::table.filter(videos::seafile_path.eq(&path_clone)),
-                ))
-                .get_result::<bool>(&mut conn)
+        let db_clone = db.clone();
+        if let Err(e) = tokio::task::spawn_blocking(move || {
+            use crate::db::schema::videos;
+            let mut conn = db_clone.get()?;
+            diesel::insert_into(videos::table)
+                .values(&new_video)
+                .execute(&mut conn)
                 .map_err(anyhow::Error::from)
-            })
-            .await??;
-
-            if exists {
-                continue;
-            }
-
-            let new_id = Uuid::new_v4().to_string();
-            let new_video = NewVideo {
-                id: new_id.clone(),
-                seafile_path: seafile_path.clone(),
-                fighter_a_id: None,
-                fighter_b_id: None,
-                date,
-                duration_ms: None,
-                preview_count: 0,
-            };
-
-            let db_clone = db.clone();
-            if let Err(e) = tokio::task::spawn_blocking(move || {
-                use crate::db::schema::videos;
-                let mut conn = db_clone.get()?;
-                diesel::insert_into(videos::table)
-                    .values(&new_video)
-                    .execute(&mut conn)
-                    .map_err(anyhow::Error::from)
-            })
-            .await?
-            {
-                tracing::error!("failed to insert {seafile_path}: {e}");
-                continue;
-            }
-
-            let _ = ws_tx.send(WsEvent::NewVideo {
-                id: new_id.clone(),
-                date: date_str.clone(),
-                preview_url: format!("/api/videos/{new_id}/previews/0"),
-            });
-            tracing::info!("synced new video: {seafile_path}");
+        })
+        .await?
+        {
+            tracing::error!("failed to insert {key}: {e}");
+            continue;
         }
+
+        let _ = ws_tx.send(WsEvent::NewVideo {
+            id: new_id.clone(),
+            date: date_str.clone(),
+            preview_url: format!("/api/videos/{new_id}/previews/0"),
+        });
+        tracing::info!("synced new video: {key}");
     }
 
     Ok(())

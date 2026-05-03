@@ -112,13 +112,13 @@
           Профиль
         </button>
 
+        <div class="dropdown-divider"></div>
+        <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showTechniques = true; }}>
+          Техники
+        </button>
         {#if $currentUser?.is_admin}
-          <div class="dropdown-divider"></div>
           <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showCreateUser = true; }}>
             Создать бойца
-          </button>
-          <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showTechniques = true; }}>
-            Техники
           </button>
         {/if}
 

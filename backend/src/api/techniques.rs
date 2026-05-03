@@ -34,6 +34,7 @@ pub async fn list_techniques(
 #[derive(Deserialize)]
 pub struct CreateTechniqueRequest {
     pub name: String,
+    pub description: Option<String>,
 }
 
 pub async fn create_technique(
@@ -52,7 +53,7 @@ pub async fn create_technique(
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
 
         diesel::insert_into(techniques)
-            .values(&NewTechnique { name: body.name })
+            .values(&NewTechnique { name: body.name, description: body.description })
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -68,15 +69,16 @@ pub async fn create_technique(
 }
 
 #[derive(Deserialize)]
-pub struct RenameTechniqueRequest {
-    pub name: String,
+pub struct PatchTechniqueRequest {
+    pub name: Option<String>,
+    pub description: Option<String>,
 }
 
-pub async fn rename_technique(
+pub async fn patch_technique(
     State(state): State<AppState>,
     CurrentUser(current): CurrentUser,
     Path(technique_id): Path<i32>,
-    Json(body): Json<RenameTechniqueRequest>,
+    Json(body): Json<PatchTechniqueRequest>,
 ) -> Result<Json<Technique>, AppError> {
     if !current.is_admin {
         return Err(AppError::Forbidden);
@@ -84,17 +86,33 @@ pub async fn rename_technique(
 
     let db = state.db.clone();
     let updated = tokio::task::spawn_blocking(move || {
-        use crate::db::schema::techniques::dsl::{id, name, techniques};
+        use crate::db::schema::techniques::dsl::{description, id, name, techniques};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
 
-        let rows = diesel::update(techniques.filter(id.eq(technique_id)))
-            .set(name.eq(&body.name))
-            .execute(&mut conn)
-            .map_err(|e| AppError::Internal(e.to_string()))?;
+        let exists: bool = diesel::select(diesel::dsl::exists(
+            techniques.filter(id.eq(technique_id)),
+        ))
+        .get_result(&mut conn)
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        if rows == 0 {
+        if !exists {
             return Err(AppError::NotFound);
+        }
+
+        if let Some(new_name) = &body.name {
+            diesel::update(techniques.filter(id.eq(technique_id)))
+                .set(name.eq(new_name))
+                .execute(&mut conn)
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+        }
+
+        if let Some(new_desc) = &body.description {
+            let desc_val: Option<&str> = if new_desc.is_empty() { None } else { Some(new_desc.as_str()) };
+            diesel::update(techniques.filter(id.eq(technique_id)))
+                .set(description.eq(desc_val))
+                .execute(&mut conn)
+                .map_err(|e| AppError::Internal(e.to_string()))?;
         }
 
         techniques
