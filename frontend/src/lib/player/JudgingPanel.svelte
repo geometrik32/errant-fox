@@ -278,10 +278,11 @@
   <!-- ── Controls ─────────────────────────────────────────────────────────── -->
   <div class="controls">
     <button
-      class="btn-start"
-      class:btn-start--active={startTime !== null}
+      class="btn btn-primary"
+      class:btn-primary--active={startTime !== null}
       onclick={() => { startTime = currentTime; finishError = null; }}
       aria-label="Зафиксировать начало схода"
+      style="background: {startTime !== null ? '#0f4020' : '#1a6b35'}; border-color: {startTime !== null ? '#1a8040' : '#27ae60'}; color: {startTime !== null ? '#3bc266' : '#52d47a'};"
     >
       START
       {#if startTime !== null}
@@ -290,10 +291,11 @@
     </button>
 
     <button
-      class="btn-finish"
+      class="btn btn-outline"
       disabled={startTime === null || finishing}
       onclick={handleFinish}
       aria-label="Зафиксировать конец схода"
+      style="color: #e05252; border-color: #ae2727; background: rgba(174, 39, 39, 0.1);"
     >
       {finishing ? '…' : 'FINISH'}
     </button>
@@ -338,15 +340,15 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: #08101f;
-    border-right: 1px solid #1a3050;
+    background: var(--surface-solid);
+    border-right: 1px solid var(--border-color);
     overflow: hidden;
   }
 
   /* ── Fighter selects ────────────────────────────────────────────────────── */
   .fighters-section {
-    padding: 8px 10px;
-    border-bottom: 1px solid #1a3050;
+    padding: 12px;
+    border-bottom: 1px solid var(--border-color);
   }
 
   .fighters-row {
@@ -371,20 +373,20 @@
   .fighter-btn {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 8px;
     width: 100%;
-    background: #0d1e35;
-    border: 1px solid #1a3050;
-    border-radius: 4px;
-    color: #a0b4c8;
-    font-size: 0.78rem;
-    padding: 4px 6px;
+    background: var(--surface-hover);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    padding: 6px 10px;
     cursor: pointer;
-    transition: border-color 0.1s;
+    transition: var(--transition);
     text-align: left;
   }
 
-  .fighter-btn:hover { border-color: #2a4f73; color: #d0dde8; }
+  .fighter-btn:hover { border-color: var(--text-secondary); color: #fff; }
 
   .fighter-btn-name {
     flex: 1;
@@ -400,34 +402,34 @@
 
   .fighter-dropdown {
     position: absolute;
-    top: calc(100% + 3px);
+    top: calc(100% + 4px);
     left: 0;
     right: 0;
-    background: #0d1e35;
-    border: 1px solid #2a4f73;
-    border-radius: 5px;
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
     z-index: 50;
     overflow: hidden;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+    box-shadow: var(--shadow-md);
   }
 
   .fighter-opt {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     width: 100%;
-    padding: 6px 8px;
+    padding: 8px 10px;
     background: none;
     border: none;
-    color: #a0b4c8;
-    font-size: 0.78rem;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
     cursor: pointer;
     text-align: left;
-    transition: background 0.1s, color 0.1s;
+    transition: var(--transition);
   }
 
-  .fighter-opt:hover { background: #1a3050; color: #d0dde8; }
-  .fighter-opt.selected { background: rgba(219,132,31,0.12); color: #DB841F; }
+  .fighter-opt:hover { background: var(--surface-hover); color: var(--text-primary); }
+  .fighter-opt.selected { background: rgba(219, 132, 31, 0.12); color: var(--accent-yellow); }
 
   .fighter-opt-dot {
     width: 9px;
@@ -439,74 +441,26 @@
   /* ── Controls ───────────────────────────────────────────────────────────── */
   .controls {
     display: flex;
-    gap: 6px;
-    padding: 8px 10px;
-    border-bottom: 1px solid #1a3050;
-  }
-
-  .btn-start,
-  .btn-finish {
-    flex: 1;
-    padding: 8px 6px;
-    border-radius: 5px;
-    font-size: 0.8rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    cursor: pointer;
-    border: none;
-    transition: background 0.12s, opacity 0.12s;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-  }
-
-  .btn-start {
-    background: #1a6b35;
-    color: #52d47a;
-    border: 1px solid #27ae60;
-  }
-
-  .btn-start:hover {
-    background: #1f7d3e;
-  }
-
-  .btn-start--active {
-    background: #0f4020;
-    border-color: #1a8040;
-    color: #3bc266;
+    gap: 8px;
+    padding: 12px;
+    border-bottom: 1px solid var(--border-color);
   }
 
   .start-hint {
-    font-size: 0.65rem;
+    font-size: 0.7rem;
     font-weight: 400;
-    color: #3bc266;
+    color: inherit;
     letter-spacing: 0;
   }
 
-  .btn-finish {
-    background: #6b1a1a;
-    color: #e05252;
-    border: 1px solid #ae2727;
-  }
-
-  .btn-finish:hover:not(:disabled) {
-    background: #7d1f1f;
-  }
-
-  .btn-finish:disabled {
-    opacity: 0.35;
-    cursor: default;
-  }
-
   .finish-error {
-    margin: 0 10px 6px;
-    padding: 5px 8px;
-    background: rgba(224, 82, 82, 0.1);
-    border: 1px solid rgba(224, 82, 82, 0.3);
-    border-radius: 4px;
-    font-size: 0.72rem;
-    color: #e08080;
+    margin: 0 12px 8px;
+    padding: 8px 12px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    color: #ef4444;
   }
 
   /* ── Bouts list ─────────────────────────────────────────────────────────── */
@@ -515,23 +469,8 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 8px;
-    scrollbar-width: thin;
-    scrollbar-color: #1a3050 transparent;
-  }
-
-  .bouts-list::-webkit-scrollbar {
-    width: 4px;
-  }
-
-  .bouts-list::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .bouts-list::-webkit-scrollbar-thumb {
-    background: #1a3050;
-    border-radius: 2px;
+    gap: 8px;
+    padding: 12px;
   }
 
   .empty {
@@ -546,24 +485,24 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 12px;
-    border-top: 1px solid #1a3050;
-    background: #060e1a;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border-color);
+    background: var(--surface-solid);
     flex-shrink: 0;
   }
 
   .footer-label {
-    font-size: 0.68rem;
+    font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.1em;
-    color: #4a6280;
+    color: var(--text-secondary);
     text-transform: uppercase;
   }
 
   .footer-score {
-    font-size: 1rem;
+    font-size: 1.2rem;
     font-weight: 700;
-    color: #DB841F;
+    color: var(--accent-yellow);
     font-variant-numeric: tabular-nums;
   }
 </style>

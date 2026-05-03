@@ -196,7 +196,7 @@
   <!-- ── Collapsed ── -->
   <button
     class="card card--collapsed"
-    style={winnerColor ? `border-left: 3px solid ${winnerColor}; background: color-mix(in srgb, ${winnerColor} 10%, #0d1e35)` : ''}
+    style={winnerColor ? `border-left: 3px solid ${winnerColor}; background: color-mix(in srgb, ${winnerColor} 10%, var(--surface-hover))` : ''}
     onclick={onexpand}
   >
     <span class="card-label">
@@ -217,7 +217,7 @@
       class="card-header"
       role="button"
       tabindex="0"
-      style={winnerColor ? `background: color-mix(in srgb, ${winnerColor} 15%, #0d1e35); border-bottom-color: color-mix(in srgb, ${winnerColor} 30%, #1a3050)` : ''}
+      style={winnerColor ? `background: color-mix(in srgb, ${winnerColor} 15%, var(--surface-solid)); border-bottom-color: color-mix(in srgb, ${winnerColor} 30%, var(--border-color))` : ''}
       onclick={handleCollapse}
       onkeydown={(e) => e.key === 'Enter' && handleCollapse()}
     >
@@ -353,10 +353,10 @@
     {/if}
 
     <div class="card-actions">
-      <button class="btn-save" onclick={handleSave} disabled={saving || !dirty}>
+      <button class="btn btn-primary btn-sm" onclick={handleSave} disabled={saving || !dirty}>
         {saving ? 'Сохранение…' : 'Сохранить'}
       </button>
-      <button class="btn-collapse" onclick={handleCollapse}>Свернуть</button>
+      <button class="btn btn-outline btn-sm" onclick={handleCollapse}>Свернуть</button>
       <button class="btn-delete" onclick={handleDelete} disabled={deleting} aria-label="Удалить сход">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
           <polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14H6L5,6"/><path d="M10,11v6"/><path d="M14,11v6"/><path d="M9,6V4h6v2"/>
@@ -373,7 +373,7 @@
     width: 100%;
     border-radius: 5px;
     font-size: 0.8rem;
-    color: #a0b4c8;
+    color: var(--text-primary);
   }
 
   /* ── Collapsed ──────────────────────────────────────────────────────────── */
@@ -381,25 +381,26 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 7px 10px;
-    background: #0d1e35;
-    border: 1px solid #1a3050;
+    padding: 8px 12px;
+    background: var(--surface-hover);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
     cursor: pointer;
     text-align: left;
-    transition: background 0.12s, border-color 0.12s;
+    transition: var(--transition);
     position: relative;
   }
 
   .card--collapsed:hover {
-    background: #0f2035;
-    border-color: #2a4f73;
-    color: #d0dde8;
+    background: var(--surface-solid);
+    border-color: var(--text-secondary);
   }
 
   /* ── Expanded ───────────────────────────────────────────────────────────── */
   .card--expanded {
-    background: #0d1e35;
-    border: 1px solid #2a4f73;
+    background: var(--surface-hover);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
     display: flex;
     flex-direction: column;
     gap: 0;
@@ -409,15 +410,16 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 7px 10px;
+    padding: 8px 12px;
     cursor: pointer;
-    border-bottom: 1px solid #1a3050;
-    transition: background 0.12s;
+    border-bottom: 1px solid var(--border-color);
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    transition: var(--transition);
     user-select: none;
   }
 
   .card-header:hover {
-    background: #0f2035;
+    background: var(--surface-solid);
   }
 
   /* ── Labels & score ─────────────────────────────────────────────────────── */
@@ -467,17 +469,17 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
-    padding: 5px 4px;
-    background: #0a1628;
-    border: 1px solid #1a3050;
-    border-radius: 4px;
+    gap: 4px;
+    padding: 6px 8px;
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: border-color 0.1s, background 0.1s;
+    transition: var(--transition);
   }
 
   .time-cap-btn:hover {
-    border-color: #DB841F;
+    border-color: var(--accent-yellow);
     background: rgba(219, 132, 31, 0.08);
   }
 
@@ -503,7 +505,7 @@
   }
 
   .col-divider {
-    background: #1a3050;
+    background: var(--border-color);
     margin: 0 10px;
   }
 
@@ -514,13 +516,13 @@
   }
 
   .fighter-name {
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-weight: 600;
-    color: #d0dde8;
+    color: var(--text-primary);
     letter-spacing: 0.04em;
     text-transform: uppercase;
     padding-bottom: 4px;
-    border-bottom: 1px solid #1a3050;
+    border-bottom: 1px solid var(--border-color);
   }
 
   /* ── Score row ──────────────────────────────────────────────────────────── */
@@ -531,12 +533,12 @@
   }
 
   .adj {
-    width: 26px;
-    height: 26px;
-    border: 1px solid #1a3050;
-    border-radius: 4px;
-    background: #0a1628;
-    color: #a0b4c8;
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--surface-solid);
+    color: var(--text-secondary);
     font-size: 1rem;
     line-height: 1;
     cursor: pointer;
@@ -544,25 +546,25 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    transition: background 0.1s, border-color 0.1s;
+    transition: var(--transition);
   }
 
   .adj:hover {
-    background: #0f2035;
-    border-color: #2a4f73;
-    color: #d0dde8;
+    background: var(--surface-hover);
+    border-color: var(--text-primary);
+    color: var(--text-primary);
   }
 
   .score-inp {
-    width: 44px;
+    width: 48px;
     text-align: center;
-    background: #0a1628;
-    border: 1px solid #1a3050;
-    border-radius: 4px;
-    color: #DB841F;
-    font-size: 0.9rem;
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--accent-yellow);
+    font-size: 0.95rem;
     font-weight: 700;
-    padding: 3px 4px;
+    padding: 4px 6px;
     outline: none;
     -moz-appearance: textfield;
   }
@@ -573,7 +575,7 @@
   }
 
   .score-inp:focus {
-    border-color: #2a4f73;
+    border-color: var(--text-primary);
   }
 
   /* ── Field group ────────────────────────────────────────────────────────── */
@@ -584,28 +586,15 @@
   }
 
   .field-lbl {
-    font-size: 0.68rem;
-    color: #4a6280;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
 
   .field-sel {
-    background: #0a1628;
-    border: 1px solid #1a3050;
-    border-radius: 4px;
-    color: #a0b4c8;
-    font-size: 0.78rem;
-    padding: 4px 6px;
-    outline: none;
-    cursor: pointer;
-    transition: border-color 0.1s;
-  }
-
-  .field-sel:hover,
-  .field-sel:focus {
-    border-color: #2a4f73;
-    color: #d0dde8;
+    width: 100%;
+    padding: 6px 8px;
   }
 
   /* ── Technique tooltip ──────────────────────────────────────────────────── */
@@ -618,17 +607,17 @@
     bottom: calc(100% + 6px);
     left: 0;
     z-index: 300;
-    background: #0a1628;
-    border: 1px solid #2a4f73;
-    border-radius: 6px;
-    padding: 10px 12px;
-    width: 260px;
-    max-height: 220px;
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    width: 280px;
+    max-height: 240px;
     overflow-y: auto;
-    font-size: 0.78rem;
-    color: #a0b4c8;
+    font-size: 0.85rem;
+    color: var(--text-primary);
     line-height: 1.55;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--shadow-lg);
     pointer-events: none;
   }
 
@@ -650,80 +639,41 @@
 
   /* ── Error ──────────────────────────────────────────────────────────────── */
   .save-error {
-    margin: 0 10px;
-    padding: 5px 8px;
-    background: rgba(224, 82, 82, 0.12);
-    border: 1px solid rgba(224, 82, 82, 0.3);
-    border-radius: 4px;
-    font-size: 0.75rem;
-    color: #e08080;
+    margin: 0 12px;
+    padding: 8px 12px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    color: #ef4444;
   }
 
-  /* ── Actions ────────────────────────────────────────────────────────────── */
   .card-actions {
     display: flex;
-    gap: 6px;
-    padding: 8px 10px;
-    border-top: 1px solid #1a3050;
-  }
-
-  .btn-save,
-  .btn-collapse {
-    flex: 1;
-    padding: 6px 0;
-    border-radius: 4px;
-    font-size: 0.78rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.12s, opacity 0.12s;
-    border: none;
-  }
-
-  .btn-save {
-    background: #DB841F;
-    color: #fff;
-  }
-
-  .btn-save:hover:not(:disabled) {
-    background: #e8941f;
-  }
-
-  .btn-save:disabled {
-    opacity: 0.4;
-    cursor: default;
-  }
-
-  .btn-collapse {
-    background: #0a1628;
-    border: 1px solid #1a3050;
-    color: #7090a8;
-  }
-
-  .btn-collapse:hover {
-    background: #0f2035;
-    border-color: #2a4f73;
-    color: #d0dde8;
+    gap: 8px;
+    padding: 12px;
+    border-top: 1px solid var(--border-color);
   }
 
   .btn-delete {
     flex: none;
-    width: 30px;
+    width: 34px;
     padding: 6px 0;
-    border-radius: 4px;
-    background: rgba(224, 82, 82, 0.08);
-    border: 1px solid rgba(224, 82, 82, 0.25);
-    color: #a05050;
+    border-radius: var(--radius-sm);
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    color: #dc2626;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.12s, border-color 0.12s, color 0.12s;
+    transition: var(--transition);
   }
 
   .btn-delete:hover:not(:disabled) {
-    background: rgba(224, 82, 82, 0.2);
-    border-color: rgba(224, 82, 82, 0.5);
-    color: #e05252;
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #ef4444;
   }
 
   .btn-delete:disabled {

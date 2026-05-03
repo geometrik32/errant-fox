@@ -134,12 +134,12 @@
 
       <div class="field">
         <label for="username">Логин</label>
-        <input id="username" type="text" bind:value={username} autocomplete="username" required />
+        <input class="input-glass" id="username" type="text" bind:value={username} autocomplete="username" required />
       </div>
 
       <div class="field">
         <label for="display-name">Имя</label>
-        <input id="display-name" type="text" bind:value={displayName} required />
+        <input class="input-glass" id="display-name" type="text" bind:value={displayName} required />
       </div>
 
       <div class="field">
@@ -154,12 +154,12 @@
 
       <div class="field">
         <label for="new-password">Новый пароль</label>
-        <input id="new-password" type="password" bind:value={newPassword} autocomplete="new-password" placeholder="Оставьте пустым, чтобы не менять" />
+        <input class="input-glass" id="new-password" type="password" bind:value={newPassword} autocomplete="new-password" placeholder="Оставьте пустым, чтобы не менять" />
       </div>
 
       <div class="field">
         <label for="confirm-password">Подтверждение пароля</label>
-        <input id="confirm-password" type="password" bind:value={confirmPassword} autocomplete="new-password" />
+        <input class="input-glass" id="confirm-password" type="password" bind:value={confirmPassword} autocomplete="new-password" />
       </div>
 
       {#if error}
@@ -170,8 +170,8 @@
       {/if}
 
       <div class="actions">
-        <button type="button" class="btn-cancel" onclick={onclose}>Отмена</button>
-        <button type="submit" class="btn-save" disabled={saving}>
+        <button type="button" class="btn btn-outline" onclick={onclose}>Отмена</button>
+        <button type="submit" class="btn btn-primary" disabled={saving}>
           {saving ? 'Сохранение…' : 'Сохранить'}
         </button>
       </div>
@@ -188,14 +188,18 @@
     align-items: center;
     justify-content: center;
     z-index: 500;
+    padding: 16px;
   }
 
   .modal {
-    background: #0f2035;
-    border: 1px solid #1f3a57;
-    border-radius: 12px;
+    background: var(--surface);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
     width: 100%;
-    max-width: 420px;
+    max-width: 440px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -205,36 +209,40 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 20px 24px 16px;
-    border-bottom: 1px solid #1f3a57;
+    padding: 24px 28px 16px;
+    border-bottom: 1px solid var(--border-color);
   }
 
   .modal-header h2 {
-    font-size: 1rem;
-    font-weight: 600;
-    color: #e8edf2;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
     margin: 0;
   }
 
   .close-btn {
-    background: none;
-    border: none;
-    color: #6b8aab;
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
+    color: var(--text-secondary);
     cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
+    padding: 6px;
+    border-radius: 50%;
     display: flex;
-    transition: color 0.15s;
+    transition: var(--transition);
   }
 
-  .close-btn:hover { color: #e8edf2; }
+  .close-btn:hover {
+    color: var(--text-primary);
+    transform: scale(1.05);
+  }
 
   .modal-body {
-    padding: 24px;
+    padding: 24px 28px 28px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    max-height: 80vh;
+    gap: 20px;
+    max-height: calc(100vh - 100px);
     overflow-y: auto;
   }
 
@@ -249,10 +257,11 @@
   }
 
   .avatar-preview {
-    width: 72px;
-    height: 72px;
+    width: 80px;
+    height: 80px;
     border-radius: 50%;
-    border: 2px solid #2a4f73;
+    border: 2px solid var(--border-color);
+    box-shadow: var(--shadow-md);
     overflow: hidden;
     display: flex;
     align-items: center;
@@ -278,8 +287,8 @@
   }
 
   .avatar-hint {
-    font-size: 0.72rem;
-    color: #4a6280;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
   }
 
   .file-hidden {
@@ -294,31 +303,31 @@
   }
 
   .color-input {
-    width: 40px;
-    height: 32px;
-    border: 1px solid #1f3a57;
-    border-radius: 6px;
-    background: #0d1b2a;
+    width: 48px;
+    height: 36px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: transparent;
     cursor: pointer;
     padding: 2px;
   }
 
   .color-val {
-    font-size: 0.8rem;
-    color: #6b8aab;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
     font-family: monospace;
   }
 
   .field {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
   }
 
   .field label {
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     font-weight: 500;
-    color: #6b8aab;
+    color: var(--text-secondary);
   }
 
   .field input[type="text"],
@@ -338,64 +347,50 @@
 
   .divider {
     height: 1px;
-    background: #1f3a57;
-    margin: 4px 0;
+    background: var(--border-color);
+    margin: 8px 0;
   }
 
   .msg {
-    font-size: 0.85rem;
-    padding: 8px 12px;
-    border-radius: 6px;
+    font-size: 0.9rem;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
     margin: 0;
   }
 
   .error {
-    color: #e05252;
-    background: rgba(224, 82, 82, 0.1);
-    border: 1px solid rgba(224, 82, 82, 0.2);
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
   }
 
   .success {
-    color: #6aaa5e;
-    background: rgba(106, 170, 94, 0.1);
-    border: 1px solid rgba(106, 170, 94, 0.2);
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.2);
   }
 
   .actions {
     display: flex;
-    gap: 10px;
+    gap: 12px;
     justify-content: flex-end;
-    margin-top: 4px;
+    margin-top: 8px;
   }
 
-  .btn-cancel {
-    background: none;
-    border: 1px solid #1f3a57;
-    color: #6b8aab;
-    border-radius: 6px;
-    padding: 8px 18px;
-    font-size: 0.875rem;
-    cursor: pointer;
-    transition: border-color 0.15s, color 0.15s;
+  @media (max-width: 768px) {
+    .modal {
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      margin-top: auto;
+    }
+    .modal-backdrop {
+      padding: 0;
+      align-items: flex-end;
+    }
+    .actions {
+      flex-direction: column-reverse;
+    }
+    .actions button {
+      width: 100%;
+    }
   }
-
-  .btn-cancel:hover {
-    border-color: #4a6280;
-    color: #e8edf2;
-  }
-
-  .btn-save {
-    background: #DB841F;
-    border: none;
-    color: #fff;
-    border-radius: 6px;
-    padding: 8px 18px;
-    font-size: 0.875rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-
-  .btn-save:hover:not(:disabled) { background: #c4741a; }
-  .btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>

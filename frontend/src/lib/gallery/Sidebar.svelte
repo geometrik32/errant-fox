@@ -227,20 +227,20 @@
 
   .slim-toggle {
     background: none;
-    border: 1px solid #1f3a57;
-    border-radius: 4px;
-    color: #4a6280;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
     width: 22px;
     height: 28px;
     cursor: pointer;
     font-size: 1rem;
     line-height: 1;
-    transition: color 0.12s, border-color 0.12s;
+    transition: var(--transition);
   }
 
   .slim-toggle:hover {
-    color: #a0b4c8;
-    border-color: #2a4f73;
+    color: var(--text-primary);
+    border-color: var(--accent-yellow);
   }
 
   .sidebar {
@@ -318,15 +318,15 @@
   .mode-btn {
     background: none;
     border: none;
-    color: #2a4f73;
+    color: var(--text-secondary);
     font-size: 0.7rem;
     cursor: pointer;
     padding: 0;
-    transition: color 0.12s;
+    transition: var(--transition);
   }
 
   .mode-btn:hover {
-    color: #6b8aab;
+    color: var(--text-primary);
   }
 
   /* Fighter rows */
@@ -381,7 +381,7 @@
 
   .empty {
     font-size: 0.8rem;
-    color: #4a6280;
+    color: var(--text-secondary);
     padding: 4px 6px;
   }
 
@@ -423,9 +423,9 @@
 
   .cal-arrow {
     background: none;
-    border: 1px solid #1f3a57;
-    border-radius: 4px;
-    color: #4a6280;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
     width: 22px;
     height: 22px;
     cursor: pointer;
@@ -434,23 +434,23 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: color 0.12s, border-color 0.12s;
+    transition: var(--transition);
   }
 
   .cal-arrow:hover {
-    color: #a0b4c8;
-    border-color: #2a4f73;
+    color: var(--text-primary);
+    border-color: var(--accent-yellow);
   }
 
   .cal-year {
     font-size: 0.85rem;
     font-weight: 700;
-    color: #4a6280;
+    color: var(--text-secondary);
     letter-spacing: 0.04em;
   }
 
   .cal-year.has-videos {
-    color: #a0b4c8;
+    color: var(--text-primary);
   }
 
   .cal-months {
@@ -467,7 +467,7 @@
 
   .cal-month-lbl {
     font-size: 0.66rem;
-    color: #4a6280;
+    color: var(--text-secondary);
     width: 26px;
     flex-shrink: 0;
     text-align: right;
@@ -484,16 +484,16 @@
     height: 12px;
     border-radius: 2px;
     border: none;
-    background: #0f2035;
+    background: var(--surface-solid);
     cursor: pointer;
     padding: 0;
-    transition: background 0.1s, outline 0.1s;
+    transition: var(--transition);
     outline: 1px solid transparent;
   }
 
   .cal-week:hover {
-    background: #1a3050;
-    outline-color: #2a4f73;
+    background: var(--surface-hover);
+    outline-color: var(--accent-yellow);
   }
 
   .cal-week.has-video {
@@ -524,25 +524,25 @@
 
   .date-label {
     font-size: 0.78rem;
-    color: #6b8aab;
+    color: var(--text-secondary);
     width: 20px;
     flex-shrink: 0;
   }
 
   .date-input {
     flex: 1;
-    background: #0f2035;
-    border: 1px solid #1f3a57;
-    border-radius: 6px;
-    color: #a0b4c8;
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
     font-size: 0.78rem;
     padding: 5px 7px;
     outline: none;
-    transition: border-color 0.12s;
+    transition: var(--transition);
     min-width: 0;
   }
 
-  .date-input:focus { border-color: #2a4f73; }
+  .date-input:focus { border-color: var(--accent-yellow); }
 
   .date-input::-webkit-calendar-picker-indicator {
     filter: invert(0.5);

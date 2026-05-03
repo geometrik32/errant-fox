@@ -242,15 +242,15 @@
     top: 10px;
     right: 10px;
     background: rgba(0, 0, 0, 0.6);
-    color: #DB841F;
-    font-size: 0.78rem;
+    color: var(--accent-yellow);
+    font-size: 0.8rem;
     font-weight: 700;
-    padding: 3px 8px;
-    border-radius: 4px;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
     border: none;
     cursor: pointer;
     font-variant-numeric: tabular-nums;
-    transition: background 0.12s;
+    transition: var(--transition);
   }
 
   .zoom-badge:hover {

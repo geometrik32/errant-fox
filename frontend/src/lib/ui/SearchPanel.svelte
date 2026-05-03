@@ -76,10 +76,10 @@
           bind:value={query}
           onkeydown={onKeydown}
           placeholder="Поиск по сообщениям…"
-          class="search-inp"
+          class="input-glass search-inp"
           aria-label="Поиск"
         />
-        <button class="btn-search" onclick={doSearch} disabled={searching || !query.trim()}>
+        <button class="btn btn-primary btn-search" onclick={doSearch} disabled={searching || !query.trim()}>
           {searching ? '…' : 'Поиск'}
         </button>
         <button class="btn-close" onclick={onclose} aria-label="Закрыть">✕</button>
@@ -134,7 +134,7 @@
 <style>
   .overlay {
     position: fixed;
-    inset: 56px 0 0 0;
+    inset: 64px 0 0 0;
     z-index: 90;
     pointer-events: none;
     display: flex;
@@ -144,12 +144,14 @@
 
   .panel {
     pointer-events: all;
-    background: #0f2035;
-    border: 1px solid #1f3a57;
+    background: var(--surface);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-color);
     border-top: none;
-    border-radius: 0 0 10px 10px;
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
     width: min(760px, 96vw);
-    box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+    box-shadow: var(--shadow-lg);
     display: flex;
     flex-direction: column;
     max-height: calc(100vh - 80px);
@@ -157,145 +159,150 @@
   }
 
   .panel-head {
-    padding: 12px 14px;
-    border-bottom: 1px solid #1f3a57;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
     flex-shrink: 0;
   }
 
   .search-row {
     display: flex;
-    gap: 8px;
+    gap: 12px;
     align-items: center;
   }
 
   .search-inp {
     flex: 1;
-    background: #0a1628;
-    border: 1px solid #2a4f73;
-    border-radius: 6px;
-    color: #d0dde8;
-    font-size: 0.9rem;
-    padding: 7px 12px;
-    outline: none;
-    transition: border-color 0.12s;
+    font-size: 1rem;
+    padding: 10px 16px;
   }
-
-  .search-inp:focus { border-color: #DB841F; }
-  .search-inp::placeholder { color: #3a5470; }
 
   .btn-search {
-    padding: 7px 18px;
-    background: #DB841F;
-    border: none;
-    border-radius: 6px;
-    color: #fff;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.12s, opacity 0.12s;
+    padding: 10px 24px;
     flex-shrink: 0;
   }
-
-  .btn-search:hover:not(:disabled) { background: #e8941f; }
-  .btn-search:disabled { opacity: 0.45; cursor: default; }
 
   .btn-close {
-    background: none;
-    border: none;
-    color: #4a6280;
-    font-size: 1rem;
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 1.2rem;
     cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 4px;
-    transition: color 0.1s, background 0.1s;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: var(--transition);
     flex-shrink: 0;
   }
 
-  .btn-close:hover { color: #e05252; background: rgba(224,82,82,0.1); }
+  .btn-close:hover {
+    color: #ef4444;
+    border-color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+  }
 
   .msg-info {
-    padding: 20px;
+    padding: 32px;
     text-align: center;
-    font-size: 0.85rem;
-    color: #4a6280;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
   }
 
   .msg-error {
-    padding: 12px 14px;
-    font-size: 0.82rem;
-    color: #e08080;
+    padding: 16px 20px;
+    font-size: 0.9rem;
+    color: #ef4444;
   }
 
   .results-wrap {
     overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: #1a3050 transparent;
   }
 
   .results-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.82rem;
+    font-size: 0.85rem;
   }
 
   thead th {
-    padding: 8px 12px;
+    padding: 12px 16px;
     text-align: left;
-    font-size: 0.68rem;
+    font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: #4a6280;
-    border-bottom: 1px solid #1a3050;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-color);
     position: sticky;
     top: 0;
-    background: #0f2035;
+    background: var(--surface-solid);
+    backdrop-filter: var(--glass-blur);
   }
 
   tbody tr {
-    border-bottom: 1px solid #0d1e35;
-    transition: background 0.1s;
+    border-bottom: 1px solid var(--border-color);
+    transition: var(--transition);
   }
 
-  tbody tr:hover { background: #0d1e35; }
+  tbody tr:hover { background: var(--surface-hover); }
 
   td {
-    padding: 8px 12px;
+    padding: 12px 16px;
     vertical-align: middle;
-    color: #a0b4c8;
+    color: var(--text-primary);
   }
 
   .col-text { width: 50%; }
   .col-author { width: 15%; white-space: nowrap; }
-  .col-fighters { width: 20%; color: #6b8aab; font-size: 0.78rem; }
+  .col-fighters { width: 20%; color: var(--text-secondary); font-size: 0.8rem; }
   .col-action { width: 15%; text-align: right; }
 
   .msg-text {
     display: block;
-    color: #c8d8e8;
+    color: var(--text-primary);
     word-break: break-word;
+    font-size: 0.9rem;
   }
 
   .msg-ts {
     display: block;
-    font-size: 0.68rem;
-    color: #3a6080;
-    margin-top: 2px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 4px;
     font-variant-numeric: tabular-nums;
   }
 
   .btn-goto {
-    background: rgba(219,132,31,0.12);
-    border: 1px solid rgba(219,132,31,0.3);
-    color: #DB841F;
-    border-radius: 5px;
-    padding: 4px 10px;
-    font-size: 0.75rem;
+    background: rgba(219, 132, 31, 0.15);
+    border: 1px solid rgba(219, 132, 31, 0.4);
+    color: var(--accent-yellow);
+    border-radius: var(--radius-sm);
+    padding: 6px 12px;
+    font-size: 0.8rem;
     font-weight: 600;
     cursor: pointer;
     white-space: nowrap;
-    transition: background 0.12s;
+    transition: var(--transition);
   }
 
-  .btn-goto:hover { background: rgba(219,132,31,0.22); }
+  .btn-goto:hover {
+    background: var(--accent-yellow);
+    color: #000;
+  }
+
+  @media (max-width: 768px) {
+    .search-row {
+      flex-wrap: wrap;
+    }
+    .btn-search {
+      flex: 1;
+    }
+    .col-author, .col-fighters {
+      display: none;
+    }
+    .col-text { width: 70%; }
+    .col-action { width: 30%; }
+  }
 </style>

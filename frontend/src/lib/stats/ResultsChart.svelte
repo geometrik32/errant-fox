@@ -119,10 +119,13 @@
 
 <style>
   .chart-card {
-    background: #0f2035;
-    border: 1px solid #1f3a57;
-    border-radius: 8px;
-    padding: 16px;
+    background: var(--surface);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    padding: 20px;
   }
 
   .chart-header {
@@ -134,17 +137,17 @@
   }
 
   .chart-title {
-    font-size: 0.72rem;
+    font-size: 0.8rem;
     font-weight: 600;
-    letter-spacing: 0.07em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #4a6280;
+    color: var(--text-secondary);
     margin-bottom: 2px;
   }
 
   .win-rate {
-    font-size: 0.8rem;
-    color: #6b8aab;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
   }
 
   .wins {
@@ -154,7 +157,7 @@
 
   .sep {
     margin: 0 5px;
-    color: #2a4f73;
+    color: var(--border-color);
   }
 
   .opp-select {
