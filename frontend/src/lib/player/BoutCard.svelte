@@ -660,6 +660,7 @@
 
   .card-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
     padding: 12px;
     border-top: 1px solid var(--border-color);
