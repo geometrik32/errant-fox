@@ -361,6 +361,7 @@
     display: flex;
     flex-direction: column;
     box-shadow: var(--shadow-lg);
+    overflow: hidden;
   }
 
   .modal-header {
