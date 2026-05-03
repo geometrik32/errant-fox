@@ -108,7 +108,7 @@
               <!-- Edit mode (admin only) -->
               <div class="edit-block">
                 <input
-                  class="edit-inp"
+                  class="input-glass edit-inp"
                   type="text"
                   bind:value={editName}
                   placeholder="Название"
@@ -116,14 +116,14 @@
                   autofocus
                 />
                 <textarea
-                  class="edit-desc"
+                  class="input-glass edit-desc"
                   bind:value={editDescription}
                   placeholder="Описание (HTML, включая изображения и embed-видео YouTube/VK)"
                   rows="6"
                 ></textarea>
                 <div class="edit-actions">
-                  <button class="btn-save-edit" onclick={() => saveEdit(t.id)}>Сохранить</button>
-                  <button class="btn-cancel-edit" onclick={() => { editingId = null; }}>Отмена</button>
+                  <button class="btn btn-primary btn-sm" onclick={() => saveEdit(t.id)}>Сохранить</button>
+                  <button class="btn btn-outline btn-sm" onclick={() => { editingId = null; }}>Отмена</button>
                 </div>
               </div>
             {:else}
@@ -182,14 +182,14 @@
     {#if isAdmin}
       <div class="add-row">
         <input
-          class="input"
+          class="input-glass"
           type="text"
           bind:value={newName}
           placeholder="Название техники"
           onkeydown={handleAddKey}
           autocomplete="off"
         />
-        <button class="btn-add" onclick={add} disabled={!canAdd}>
+        <button class="btn btn-primary" onclick={add} disabled={!canAdd}>
           {adding ? '…' : 'Добавить'}
         </button>
       </div>
@@ -218,17 +218,19 @@
   }
 
   .modal {
-    background: #0f2035;
-    border: 1px solid #1f3a57;
-    border-radius: 12px;
-    padding: 28px;
+    background: var(--surface);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 32px;
     width: 480px;
     max-width: calc(100vw - 32px);
     max-height: calc(100vh - 64px);
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+    gap: 20px;
+    box-shadow: var(--shadow-lg);
     overflow: hidden;
   }
 
@@ -243,13 +245,13 @@
   .list {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
     max-height: 420px;
     overflow-y: auto;
-    border: 1px solid #1f3a57;
-    border-radius: 8px;
-    padding: 4px;
-    background: #060e18;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 6px;
+    background: var(--surface-solid);
   }
 
   .empty {
@@ -269,13 +271,13 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 7px 10px;
-    border-radius: 5px;
-    gap: 8px;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    gap: 12px;
   }
 
   .technique-row:hover {
-    background: #0f2035;
+    background: var(--surface-hover);
   }
 
   .technique-name-btn {
@@ -292,18 +294,19 @@
   }
 
   .technique-name {
-    font-size: 0.9rem;
-    color: #c8d8e8;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .desc-indicator {
-    font-size: 0.7rem;
-    color: #4a6280;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
     flex-shrink: 0;
-    transition: transform 0.15s;
+    transition: var(--transition);
     display: inline-block;
   }
 
@@ -312,12 +315,13 @@
   }
 
   .desc-panel {
-    padding: 10px 12px;
-    background: #0a1628;
-    border-top: 1px solid #1a3050;
-    font-size: 0.85rem;
-    color: #a0b4c8;
+    padding: 14px 18px;
+    background: var(--surface-hover);
+    border-top: 1px solid var(--border-color);
+    font-size: 0.9rem;
+    color: var(--text-secondary);
     line-height: 1.6;
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
   }
 
   .desc-panel :global(img) {
@@ -356,37 +360,38 @@
   .edit-block {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 10px;
-    background: #0a1628;
+    gap: 12px;
+    padding: 14px;
+    background: var(--surface-hover);
+    border-radius: var(--radius-sm);
   }
 
   .edit-inp {
-    background: #060e18;
-    border: 1px solid #2a4f73;
-    border-radius: 4px;
-    color: #e8edf2;
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
     font-size: 0.88rem;
     padding: 6px 8px;
     outline: none;
   }
 
   .edit-desc {
-    background: #060e18;
-    border: 1px solid #1f3a57;
-    border-radius: 4px;
-    color: #a0b4c8;
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
     font-size: 0.8rem;
     padding: 6px 8px;
     outline: none;
     resize: vertical;
     font-family: monospace;
     line-height: 1.5;
-    transition: border-color 0.12s;
+    transition: var(--transition);
   }
 
   .edit-desc:focus {
-    border-color: #2a4f73;
+    border-color: var(--accent-yellow);
   }
 
   .edit-actions {
@@ -395,63 +400,63 @@
   }
 
   .btn-save-edit {
-    background: #1a4030;
-    border: 1px solid #2a6048;
-    color: #52d47a;
+    background: rgba(76, 175, 130, 0.12);
+    border: 1px solid rgba(76, 175, 130, 0.3);
+    color: #4caf82;
     font-size: 0.82rem;
     padding: 5px 12px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: background 0.12s;
+    transition: var(--transition);
   }
 
-  .btn-save-edit:hover { background: #1f5040; }
+  .btn-save-edit:hover { background: rgba(76, 175, 130, 0.2); }
 
   .btn-cancel-edit {
     background: none;
-    border: 1px solid #2a3a50;
-    color: #6b8aab;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
     font-size: 0.82rem;
     padding: 5px 12px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: background 0.12s;
+    transition: var(--transition);
   }
 
-  .btn-cancel-edit:hover { background: #1a3050; }
+  .btn-cancel-edit:hover { background: var(--surface-hover); color: var(--text-primary); }
 
   .btn-edit {
     background: none;
     border: none;
-    color: #4a6280;
+    color: var(--text-secondary);
     cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
+    padding: 6px;
+    border-radius: var(--radius-sm);
     display: flex;
     align-items: center;
-    transition: color 0.12s, background 0.12s;
+    transition: var(--transition);
   }
 
   .btn-edit:hover {
-    color: #DB841F;
+    color: var(--accent-yellow);
     background: rgba(219, 132, 31, 0.1);
   }
 
   .btn-delete {
     background: none;
     border: none;
-    color: #4a6280;
+    color: var(--text-secondary);
     cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
+    padding: 6px;
+    border-radius: var(--radius-sm);
     display: flex;
     align-items: center;
-    transition: color 0.12s, background 0.12s;
+    transition: var(--transition);
   }
 
   .btn-delete:hover {
-    color: #e05252;
-    background: rgba(224, 82, 82, 0.1);
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
   }
 
   .add-row {
@@ -461,37 +466,38 @@
   }
 
   .input {
-    background: #060e18;
-    border: 1px solid #1f3a57;
-    border-radius: 6px;
-    color: #e8edf2;
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
     font-size: 0.9rem;
     padding: 8px 10px;
     outline: none;
     flex: 1;
-    transition: border-color 0.12s;
+    transition: var(--transition);
   }
 
   .input:focus {
-    border-color: #2a4f73;
+    border-color: var(--accent-yellow);
   }
 
   .btn-add {
-    background: #1a3050;
-    border: none;
-    color: #a0b4c8;
+    background: var(--surface-hover);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
     font-size: 0.88rem;
     font-weight: 500;
     padding: 8px 16px;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
     white-space: nowrap;
-    transition: background 0.12s, color 0.12s;
+    transition: var(--transition);
     flex-shrink: 0;
   }
 
   .btn-add:hover:not(:disabled) {
-    background: #DB841F;
+    background: var(--accent-yellow);
+    border-color: var(--accent-yellow);
     color: #fff;
   }
 
@@ -510,23 +516,37 @@
   .actions {
     display: flex;
     justify-content: flex-end;
-    margin-top: 4px;
+    margin-top: 8px;
     flex-shrink: 0;
   }
 
   .btn-close {
-    background: #1a3050;
-    border: none;
-    color: #a0b4c8;
-    font-size: 0.88rem;
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 0.9rem;
     font-weight: 500;
-    padding: 8px 18px;
-    border-radius: 6px;
+    padding: 10px 24px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: background 0.12s;
+    transition: var(--transition);
   }
 
   .btn-close:hover {
-    background: #1f3a57;
+    background: var(--surface-hover);
+    color: var(--text-primary);
+  }
+
+  .btn-sm {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+  }
+
+  @media (max-width: 768px) {
+    .modal {
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      margin-top: auto;
+      max-width: 100vw;
+    }
   }
 </style>

@@ -202,17 +202,17 @@
         <div class="form-grid">
           <div class="field">
             <label class="label" for="new-username">Логин</label>
-            <input id="new-username" class="input" type="text" bind:value={newUsername} placeholder="ivan" autocomplete="off" />
+            <input id="new-username" class="input-glass" type="text" bind:value={newUsername} placeholder="ivan" autocomplete="off" />
           </div>
 
           <div class="field">
             <label class="label" for="new-display">Имя</label>
-            <input id="new-display" class="input" type="text" bind:value={newDisplayName} placeholder="Иван" autocomplete="off" />
+            <input id="new-display" class="input-glass" type="text" bind:value={newDisplayName} placeholder="Иван" autocomplete="off" />
           </div>
 
           <div class="field">
             <label class="label" for="new-pw">Пароль</label>
-            <input id="new-pw" class="input" type="password" bind:value={newPassword} autocomplete="new-password" />
+            <input id="new-pw" class="input-glass" type="password" bind:value={newPassword} autocomplete="new-password" />
           </div>
 
           <div class="field">
@@ -234,7 +234,7 @@
         {/if}
 
         <div class="row-end">
-          <button class="btn-primary" onclick={handleCreate} disabled={!canCreate}>
+          <button class="btn btn-primary" onclick={handleCreate} disabled={!canCreate}>
             {creating ? 'Создание…' : 'Создать'}
           </button>
         </div>
@@ -269,8 +269,8 @@
                 </label>
 
                 <div class="edit-fields">
-                  <input class="input" type="text" bind:value={editName} placeholder="Имя" />
-                  <input class="input" type="password" bind:value={editPassword} placeholder="Новый пароль (необязательно)" autocomplete="new-password" />
+                  <input class="input-glass" type="text" bind:value={editName} placeholder="Имя" />
+                  <input class="input-glass" type="password" bind:value={editPassword} placeholder="Новый пароль (необязательно)" autocomplete="new-password" />
                   <div class="color-row">
                     <input type="color" class="color-input" bind:value={editColor} />
                     <span class="color-val">{editColor}</span>
@@ -283,10 +283,10 @@
                     <p class="error">{editError}</p>
                   {/if}
                   <div class="edit-actions">
-                    <button class="btn-sm btn-primary" onclick={() => handleSaveEdit(f)} disabled={saving}>
+                    <button class="btn btn-primary btn-sm" onclick={() => handleSaveEdit(f)} disabled={saving}>
                       {saving ? '…' : 'Сохранить'}
                     </button>
-                    <button class="btn-sm btn-ghost" onclick={cancelEdit}>Отмена</button>
+                    <button class="btn btn-outline btn-sm" onclick={cancelEdit}>Отмена</button>
                   </div>
                 </div>
               </div>
@@ -350,48 +350,54 @@
   }
 
   .modal {
-    background: #0f2035;
-    border: 1px solid #1f3a57;
-    border-radius: 12px;
+    background: var(--surface);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
     width: 480px;
     max-width: calc(100vw - 24px);
     max-height: 88vh;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--shadow-lg);
   }
 
   .modal-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 18px 24px 14px;
-    border-bottom: 1px solid #1f3a57;
+    padding: 24px 28px 16px;
+    border-bottom: 1px solid var(--border-color);
     flex-shrink: 0;
   }
 
   .modal-header h2 {
-    font-size: 1rem;
-    font-weight: 600;
-    color: #e8edf2;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
     margin: 0;
   }
 
   .close-btn {
-    background: none;
-    border: none;
-    color: #6b8aab;
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
+    color: var(--text-secondary);
     cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
+    padding: 6px;
+    border-radius: 50%;
     display: flex;
-    transition: color 0.15s;
+    transition: var(--transition);
   }
 
-  .close-btn:hover { color: #e8edf2; }
+  .close-btn:hover {
+    color: var(--text-primary);
+    transform: scale(1.05);
+  }
 
   .modal-body {
-    padding: 20px 24px;
+    padding: 24px 28px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -401,22 +407,22 @@
   .section {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 16px;
   }
 
   .section-title {
-    font-size: 0.68rem;
+    font-size: 0.8rem;
     font-weight: 600;
     letter-spacing: 0.09em;
     text-transform: uppercase;
-    color: #4a6280;
+    color: var(--text-secondary);
     margin: 0;
   }
 
   .divider {
     height: 1px;
-    background: #1f3a57;
-    margin: 20px 0;
+    background: var(--border-color);
+    margin: 24px 0;
   }
 
   /* Avatar pick */
@@ -426,15 +432,16 @@
   }
 
   .avatar-circle {
-    width: 56px;
-    height: 56px;
+    width: 64px;
+    height: 64px;
     border-radius: 50%;
-    border: 2px solid #2a4f73;
+    border: 2px solid var(--border-color);
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: filter 0.15s;
+    box-shadow: var(--shadow-md);
   }
 
   .avatar-pick:hover .avatar-circle { filter: brightness(0.75); }
@@ -470,24 +477,24 @@
 
   .label {
     font-size: 0.75rem;
-    color: #6b8aab;
+    color: var(--text-secondary);
     font-weight: 500;
   }
 
   .input {
-    background: #060e18;
-    border: 1px solid #1f3a57;
-    border-radius: 6px;
-    color: #e8edf2;
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
     font-size: 0.875rem;
     padding: 7px 10px;
     outline: none;
     width: 100%;
-    transition: border-color 0.12s;
+    transition: var(--transition);
     box-sizing: border-box;
   }
 
-  .input:focus { border-color: #2a4f73; }
+  .input:focus { border-color: var(--accent-yellow); }
 
   .color-row {
     display: flex;
@@ -496,19 +503,19 @@
   }
 
   .color-input {
-    width: 36px;
-    height: 28px;
-    border: 1px solid #1f3a57;
-    border-radius: 4px;
-    background: #060e18;
+    width: 40px;
+    height: 32px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: transparent;
     cursor: pointer;
     padding: 2px;
     flex-shrink: 0;
   }
 
   .color-val {
-    font-size: 0.75rem;
-    color: #6b8aab;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
     font-family: monospace;
   }
 
@@ -517,7 +524,7 @@
     align-items: center;
     gap: 8px;
     font-size: 0.83rem;
-    color: #a0b4c8;
+    color: var(--text-secondary);
     cursor: pointer;
   }
 
@@ -536,30 +543,17 @@
 
   .empty {
     font-size: 0.83rem;
-    color: #4a6280;
-  }
-
-  /* Existing user rows */
-  .user-row {
-    border: 1px solid #1a3050;
-    border-radius: 7px;
-    overflow: hidden;
-  }
-
-  .user-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
-    flex: 1;
-    min-width: 0;
+    color: var(--text-secondary);
   }
 
   .user-row {
     display: flex;
     align-items: center;
     gap: 0;
-    background: #0d1e35;
+    background: var(--surface-hover);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
   }
 
   .user-dot {
@@ -573,8 +567,8 @@
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background: #1f3a57;
-    border: 1px solid #2a4f73;
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -604,7 +598,7 @@
 
   .user-display {
     font-size: 0.83rem;
-    color: #d0dde8;
+    color: var(--text-primary);
     font-weight: 500;
     white-space: nowrap;
     overflow: hidden;
@@ -613,7 +607,7 @@
 
   .user-login {
     font-size: 0.72rem;
-    color: #4a6280;
+    color: var(--text-secondary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -631,18 +625,18 @@
     width: 28px;
     height: 28px;
     border: none;
-    border-radius: 5px;
+    border-radius: var(--radius-sm);
     background: transparent;
-    color: #4a6280;
+    color: var(--text-secondary);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.12s, color 0.12s;
+    transition: var(--transition);
   }
 
-  .btn-icon:hover { background: #1a3050; color: #a0b4c8; }
-  .btn-icon.danger:hover { background: rgba(224,82,82,0.12); color: #e05252; }
+  .btn-icon:hover { background: var(--surface-hover); color: var(--text-primary); }
+  .btn-icon.danger:hover { background: rgba(239,68,68,0.12); color: #ef4444; }
 
   /* Edit form */
   .edit-form {
@@ -667,33 +661,16 @@
   }
 
   /* Buttons */
-  .btn-primary {
-    background: #DB841F;
-    border: none;
-    color: #fff;
-    border-radius: 6px;
-    padding: 8px 18px;
-    font-size: 0.875rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.12s;
+  .btn-sm { padding: 6px 12px; font-size: 0.85rem; }
+
+  @media (max-width: 768px) {
+    .modal {
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      margin-top: auto;
+      max-width: 100vw;
+    }
+    .form-grid {
+      grid-template-columns: 1fr;
+    }
   }
-
-  .btn-primary:hover:not(:disabled) { background: #c4731a; }
-  .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
-
-  .btn-ghost {
-    background: #1a3050;
-    border: none;
-    color: #a0b4c8;
-    border-radius: 6px;
-    padding: 8px 14px;
-    font-size: 0.875rem;
-    cursor: pointer;
-    transition: background 0.12s;
-  }
-
-  .btn-ghost:hover { background: #1f3a57; }
-
-  .btn-sm { padding: 5px 12px; font-size: 0.8rem; }
 </style>

@@ -254,8 +254,8 @@
     display: flex;
     flex-direction: column;
     width: 100%;
-    background: #060e1a;
-    border-top: 1px solid #1a3050;
+    background: var(--surface-solid);
+    border-top: 1px solid var(--border-color);
     user-select: none;
   }
 
@@ -269,8 +269,8 @@
   /* ── Row 1: Comment markers ── */
   .track--comments {
     height: 18px;
-    background: #08101f;
-    border-bottom: 1px solid #0d1e35;
+    background: var(--surface-solid);
+    border-bottom: 1px solid var(--border-color);
   }
 
   .c-dot {
@@ -294,8 +294,8 @@
 
   /* ── Row 2: Progress bar ── */
   .track--progress {
-    height: 7px;
-    background: #0d1e35;
+    height: 8px;
+    background: var(--surface-hover);
     cursor: pointer;
   }
 
@@ -308,30 +308,30 @@
     position: absolute;
     inset: 0;
     height: 100%;
-    background: #DB841F;
+    background: var(--accent-yellow);
     pointer-events: none;
   }
 
   .prog-thumb {
     position: absolute;
     top: 50%;
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
     background: #fff;
-    border: 2px solid #DB841F;
+    border: 2px solid var(--accent-yellow);
     transform: translate(-50%, -50%) scale(0.6);
-    opacity: 0.6;
+    opacity: 0;
     pointer-events: none;
     transition: transform 0.1s, opacity 0.1s;
   }
 
   /* ── Row 3: Bout track ── */
   .track--bouts {
-    height: 22px;
-    background: #08101f;
-    border-top: 1px solid #0d1e35;
-    border-bottom: 1px solid #0d1e35;
+    height: 24px;
+    background: var(--surface-solid);
+    border-top: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
   }
 
   .bout-seg {
@@ -357,9 +357,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    height: 44px;
-    padding: 0 10px;
-    background: #060e1a;
+    height: 48px;
+    padding: 0 16px;
+    background: var(--surface-solid);
   }
 
   .ctrl-group {
@@ -376,63 +376,63 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 30px;
-    height: 30px;
+    width: 36px;
+    height: 36px;
     border: none;
-    border-radius: 5px;
+    border-radius: var(--radius-sm);
     background: transparent;
-    color: #5a7a96;
+    color: var(--text-secondary);
     cursor: pointer;
-    transition: background 0.12s, color 0.12s;
+    transition: var(--transition);
     flex-shrink: 0;
   }
 
   .ctrl-btn:hover {
-    background: #0f2035;
-    color: #d0dde8;
+    background: var(--surface-hover);
+    color: var(--text-primary);
   }
 
   .loop-btn {
     width: auto;
-    padding: 0 10px;
-    font-size: 0.68rem;
+    padding: 0 12px;
+    font-size: 0.8rem;
     font-weight: 700;
     letter-spacing: 0.08em;
-    color: #3a5470;
-    border: 1px solid #152840;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
   }
 
   .loop-btn.on {
-    color: #DB841F;
+    color: var(--accent-yellow);
     border-color: rgba(219, 132, 31, 0.5);
     background: rgba(219, 132, 31, 0.1);
   }
 
   .speed-sel {
-    background: #060e1a;
-    border: 1px solid #152840;
-    border-radius: 5px;
-    color: #7090a8;
-    font-size: 0.78rem;
-    padding: 4px 6px;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    padding: 6px 10px;
     cursor: pointer;
     outline: none;
-    transition: border-color 0.12s, color 0.12s;
-    margin-left: 4px;
+    transition: var(--transition);
+    margin-left: 8px;
   }
 
   .speed-sel:hover,
   .speed-sel:focus {
-    border-color: #2a4f73;
-    color: #d0dde8;
+    border-color: var(--text-primary);
+    color: var(--text-primary);
   }
 
   /* Volume */
   .vol-wrap {
     display: flex;
     align-items: center;
-    gap: 6px;
-    color: #5a7a96;
+    gap: 8px;
+    color: var(--text-secondary);
   }
 
   .vol-icon-btn {
@@ -441,55 +441,56 @@
     justify-content: center;
     background: none;
     border: none;
-    color: #5a7a96;
+    color: var(--text-secondary);
     cursor: pointer;
-    padding: 3px;
-    border-radius: 4px;
-    transition: color 0.12s, background 0.12s;
+    padding: 4px;
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
     flex-shrink: 0;
   }
 
   .vol-icon-btn:hover {
-    color: #d0dde8;
-    background: #0f2035;
+    color: var(--text-primary);
+    background: var(--surface-hover);
   }
 
   .vol-slider {
     -webkit-appearance: none;
     appearance: none;
-    width: 72px;
-    height: 4px;
-    background: #152840;
-    border-radius: 2px;
+    width: 80px;
+    height: 6px;
+    background: var(--surface-hover);
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
     outline: none;
     cursor: pointer;
   }
 
   .vol-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
-    background: #DB841F;
+    background: var(--accent-yellow);
     cursor: pointer;
   }
 
   .vol-slider::-moz-range-thumb {
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
-    background: #DB841F;
+    background: var(--accent-yellow);
     cursor: pointer;
     border: none;
   }
 
   /* Time display */
   .time-disp {
-    font-size: 0.78rem;
+    font-size: 0.85rem;
     font-variant-numeric: tabular-nums;
-    color: #5a7a96;
+    color: var(--text-secondary);
     white-space: nowrap;
-    min-width: 116px;
+    min-width: 130px;
     text-align: right;
   }
 </style>

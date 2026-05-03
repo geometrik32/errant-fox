@@ -72,7 +72,7 @@
   }
 
   function strokeColor(zone: string): string {
-    return selectedZone === zone ? '#e8941f' : '#2a4f73';
+    return selectedZone === zone ? 'var(--accent-yellow)' : 'var(--border-color)';
   }
 
   function cnt(zone: string): number {
@@ -217,19 +217,22 @@
 
 <style>
   .silhouette-card {
-    background: #0f2035;
-    border: 1px solid #1f3a57;
-    border-radius: 8px;
-    padding: 16px;
+    background: var(--surface);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    padding: 20px;
   }
 
   .silhouette-title {
-    font-size: 0.72rem;
+    font-size: 0.8rem;
     font-weight: 600;
-    letter-spacing: 0.07em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #4a6280;
-    margin-bottom: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
   }
 
   .silhouette-wrap {
@@ -270,7 +273,7 @@
   }
 
   .legend-row:hover {
-    background: #1a3050;
+    background: var(--surface-hover);
   }
 
   .legend-row.selected {
@@ -287,14 +290,14 @@
 
   .legend-zone {
     flex: 1;
-    font-size: 0.72rem;
-    color: #6b8aab;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
   }
 
   .legend-count {
-    font-size: 0.72rem;
+    font-size: 0.85rem;
     font-weight: 600;
-    color: #a0b4c8;
+    color: var(--text-primary);
     min-width: 14px;
     text-align: right;
   }
@@ -303,21 +306,21 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: 10px;
-    padding: 4px 8px;
+    margin-top: 12px;
+    padding: 6px 12px;
     background: rgba(219, 132, 31, 0.12);
     border: 1px solid rgba(219, 132, 31, 0.3);
-    border-radius: 5px;
-    font-size: 0.75rem;
-    color: #DB841F;
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    color: var(--accent-yellow);
   }
 
   .clear-filter {
     background: none;
     border: none;
-    color: #DB841F;
+    color: var(--accent-yellow);
     cursor: pointer;
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     padding: 0;
     line-height: 1;
   }
