@@ -660,16 +660,22 @@
 
   .card-actions {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 12px;
+    flex-wrap: nowrap;
+    gap: 4px;
+    padding: 8px;
     border-top: 1px solid var(--border-color);
+  }
+
+  .btn-sm {
+    padding: 4px 6px;
+    font-size: 0.7rem;
+    white-space: nowrap;
   }
 
   .btn-delete {
     flex-shrink: 0;
-    width: 32px;
-    height: 32px;
+    width: 24px;
+    height: 24px;
     padding: 0;
     margin-left: auto;
     border-radius: var(--radius-sm);

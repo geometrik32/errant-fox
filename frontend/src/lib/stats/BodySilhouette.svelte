@@ -86,30 +86,12 @@
 </script>
 
 <div class="silhouette-card">
-  <div class="silhouette-title">
-    {type === 'dealt' ? 'Нанесённый урон' : 'Полученный урон'}
+  <div class="card-header">
+    <h3 class="card-title">{type === 'dealt' ? 'Нанесённый урон' : 'Полученный урон'}</h3>
   </div>
   <div class="silhouette-wrap">
 
-    <!-- Left Legend -->
-    <div class="legend left-legend">
-      {#each LEFT_ZONES as zone}
-        {@const c = cnt(zone)}
-        <!-- svelte-ignore a11y_interactive_supports_focus -->
-        <div
-          class="legend-row"
-          class:selected={selectedZone === zone}
-          role="button"
-          tabindex="0"
-          onclick={() => handleZoneClick(zone)}
-          onkeydown={(e) => e.key === 'Enter' && handleZoneClick(zone)}
-        >
-          <span class="legend-count">{c}</span>
-          <span class="legend-zone">{zone}</span>
-          <div class="legend-swatch" style:background={fill(zone)}></div>
-        </div>
-      {/each}
-    </div>
+    <!-- Left Legend removed -->
 
     <svg viewBox="0 0 350 1055" xmlns="http://www.w3.org/2000/svg" class="svg">
 
@@ -209,7 +191,7 @@
 
     <!-- Right Legend -->
     <div class="legend right-legend">
-      {#each RIGHT_ZONES as zone}
+      {#each ZONES as zone}
         {@const c = cnt(zone)}
         <!-- svelte-ignore a11y_interactive_supports_focus -->
         <div
@@ -220,7 +202,6 @@
           onclick={() => handleZoneClick(zone)}
           onkeydown={(e) => e.key === 'Enter' && handleZoneClick(zone)}
         >
-          <div class="legend-swatch" style:background={fill(zone)}></div>
           <span class="legend-zone">{zone}</span>
           <span class="legend-count">{c}</span>
         </div>
@@ -247,13 +228,18 @@
     padding: 20px;
   }
 
-  .silhouette-title {
-    font-size: 0.8rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-secondary);
-    margin-bottom: 16px;
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+  }
+
+  .card-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
   }
 
   .silhouette-wrap {
@@ -276,20 +262,17 @@
   .zone:hover { filter: brightness(1.3); }
 
   .legend {
-    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    justify-content: center;
+    justify-content: space-between;
+    align-items: stretch;
+    min-width: 130px;
   }
-
-  .left-legend { align-items: flex-end; text-align: right; }
-  .right-legend { align-items: flex-start; text-align: left; }
 
   .legend-row {
     display: flex;
     align-items: center;
-    gap: 7px;
+    justify-content: space-between;
     padding: 2px 5px;
     border-radius: 4px;
     cursor: pointer;
@@ -305,14 +288,6 @@
     background: rgba(219, 132, 31, 0.15);
   }
 
-  .legend-swatch {
-    width: 12px;
-    height: 12px;
-    border-radius: 3px;
-    flex-shrink: 0;
-    border: 1px solid var(--text-secondary);
-  }
-
   .legend-zone {
     font-size: 0.8rem;
     color: var(--text-secondary);
@@ -322,8 +297,6 @@
     font-size: 0.85rem;
     font-weight: 600;
     color: var(--text-primary);
-    min-width: 14px;
-    text-align: right;
   }
 
   .zone-filter-badge {

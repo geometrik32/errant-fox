@@ -14,6 +14,23 @@
   let pointsScored = $derived(bouts.reduce((sum, b) => sum + b.my_score, 0));
   let pointsConceded = $derived(bouts.reduce((sum, b) => sum + b.opponent_score, 0));
 
+  // Text Stats
+  function topBy(bouts: FighterBout[], getName: (b: FighterBout) => string | null): string {
+    const counts = new Map<string, number>();
+    for (const b of bouts) {
+      const name = getName(b);
+      if (name) counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    let max = 0, top = '—';
+    for (const [name, count] of counts) {
+      if (count > max) { max = count; top = name; }
+    }
+    return top;
+  }
+
+  let mostUsed = $derived(topBy(bouts, (b) => b.my_technique_name));
+  let mostMissed = $derived(topBy(bouts.filter(b => b.my_result === 'miss'), (b) => b.my_technique_name));
+  let mostReceived = $derived(topBy(bouts.filter(b => b.opponent_result === 'hit'), (b) => b.opponent_technique_name));
 </script>
 
 <div class="kpi-grid">
@@ -64,17 +81,39 @@
       <div class="kpi-value">{pointsConceded}</div>
     </div>
   </div>
+
+  <div class="kpi-card glass-card text-kpi">
+    <div class="kpi-info">
+      <div class="kpi-label">Попадаю чаще</div>
+      <div class="kpi-value text-val">{mostUsed}</div>
+    </div>
+  </div>
+
+  <div class="kpi-card glass-card text-kpi">
+    <div class="kpi-info">
+      <div class="kpi-label">Промахиваюсь</div>
+      <div class="kpi-value text-val">{mostMissed}</div>
+    </div>
+  </div>
+
+  <div class="kpi-card glass-card text-kpi">
+    <div class="kpi-info">
+      <div class="kpi-label">Пропускаю чаще</div>
+      <div class="kpi-value text-val">{mostReceived}</div>
+    </div>
+  </div>
 </div>
 
 <style>
   .kpi-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    display: flex;
+    flex-wrap: wrap;
     gap: 20px;
     flex: 1;
   }
 
   .kpi-card {
+    flex: 1 1 180px;
     display: flex;
     align-items: center;
     gap: 16px;
@@ -83,7 +122,7 @@
     backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
+    box-shadow: none;
   }
 
   .kpi-icon {
@@ -117,4 +156,29 @@
     line-height: 1;
   }
 
+  .text-kpi {
+    padding: 16px 24px;
+    justify-content: center;
+  }
+
+  .text-val {
+    font-size: 1.2rem;
+    color: var(--accent-yellow);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  @media (max-width: 1024px) {
+    .kpi-card {
+      flex: 1 1 45%;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .kpi-card {
+      flex: 1 1 100%;
+    }
+  }
 </style>

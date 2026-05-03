@@ -4,7 +4,6 @@
   import { getFighterBouts } from '../lib/api/fighters';
   import { resolveColor } from '../lib/api/types';
   import FighterSidebar from '../lib/stats/FighterSidebar.svelte';
-  import HistoryTable from '../lib/stats/HistoryTable.svelte';
   import QuickStats from '../lib/stats/QuickStats.svelte';
   import FrequencyChart from '../lib/stats/FrequencyChart.svelte';
   import ResultsChart from '../lib/stats/ResultsChart.svelte';
@@ -14,7 +13,6 @@
   import RecentOpponents from '../lib/stats/RecentOpponents.svelte';
   import type { Fighter, FighterBout } from '../lib/api/types';
   import { buildVideoLabels } from '../lib/api/types';
-  import type { TableFilters } from '../lib/stats/HistoryTable.svelte';
 
   let selectedFighter = $state<Fighter | null>(null);
   let rawBouts = $state<FighterBout[]>([]);
@@ -227,18 +225,6 @@
         <BodySilhouette bouts={filteredBouts} type="dealt" selectedZone={zoneFilter} onzoneclick={(z) => { zoneFilter = z; }} />
         <BodySilhouette bouts={filteredBouts} type="received" selectedZone={zoneFilter} onzoneclick={(z) => { zoneFilter = z; }} />
       </div>
-
-      <!-- History table -->
-      <div class="table-section">
-        <HistoryTable
-          bouts={filteredBouts}
-          filters={tableFilters}
-          {opponents}
-          {videoLabels}
-          onfilter={handleFilter}
-          onnavigate={handleNavigate}
-        />
-      </div>
     {/if}
   </div>
 </div>
@@ -450,6 +436,7 @@
   .side-panel-wrapper {
     flex: 1;
     min-width: 0;
+    align-self: flex-start;
   }
 
   /* Charts 3-column grid */
@@ -466,12 +453,7 @@
     gap: 20px;
   }
 
-  /* History table section */
-  .table-section {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
+  /* Empty table section CSS removed */
 
   @media (max-width: 1024px) {
     .stats-layout {
