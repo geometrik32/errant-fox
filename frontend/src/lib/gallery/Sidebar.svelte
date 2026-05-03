@@ -244,48 +244,49 @@
   }
 
   .sidebar {
-    width: 216px;
+    width: 280px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
     gap: 24px;
+    padding: 20px;
   }
 
   .sidebar-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding-bottom: 4px;
-    border-bottom: 1px solid #1a3050;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
   }
 
   .head-title {
-    font-size: 0.68rem;
+    font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: #4a6280;
+    color: var(--text-secondary);
   }
 
   .head-toggle {
     background: none;
-    border: 1px solid #1f3a57;
-    border-radius: 4px;
-    color: #4a6280;
-    width: 22px;
-    height: 22px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    width: 28px;
+    height: 28px;
     cursor: pointer;
-    font-size: 1rem;
+    font-size: 1.2rem;
     line-height: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: color 0.12s, border-color 0.12s;
+    transition: var(--transition);
   }
 
   .head-toggle:hover {
-    color: #a0b4c8;
-    border-color: #2a4f73;
+    color: var(--text-primary);
+    background: var(--surface-hover);
   }
 
   .section {
@@ -295,12 +296,12 @@
   }
 
   .section-title {
-    font-size: 0.68rem;
+    font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.09em;
     text-transform: uppercase;
-    color: #4a6280;
-    margin: 0 0 8px;
+    color: var(--text-secondary);
+    margin: 0 0 12px;
   }
 
   .section-title-row {
@@ -332,14 +333,14 @@
   .row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
     cursor: pointer;
-    padding: 5px 6px;
-    border-radius: 6px;
-    transition: background 0.12s;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
   }
 
-  .row:hover { background: #1a3050; }
+  .row:hover { background: var(--surface-hover); }
 
   .row input[type="checkbox"] {
     width: 14px;
@@ -365,16 +366,16 @@
   }
 
   .fighter-name {
-    font-size: 0.83rem;
-    color: #a0b4c8;
+    font-size: 0.9rem;
+    color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .count {
-    font-size: 0.72rem;
-    color: #4a6280;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
     flex-shrink: 0;
   }
 

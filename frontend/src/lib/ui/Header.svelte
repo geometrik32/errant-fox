@@ -47,6 +47,17 @@
     }
   }
 
+  function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    if (currentTheme === 'dark') {
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('theme', 'light');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      localStorage.setItem('theme', 'dark');
+    }
+  }
+
   $effect(() => {
     if (dropdownOpen) {
       document.addEventListener('click', handleClickOutside);
@@ -111,6 +122,9 @@
         <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showProfile = true; }}>
           Профиль
         </button>
+        <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; toggleTheme(); }}>
+          Сменить тему
+        </button>
 
         <div class="dropdown-divider"></div>
         <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showTechniques = true; }}>
@@ -149,12 +163,14 @@
 
 <style>
   .header {
-    height: 56px;
-    background: #0f2035;
-    border-bottom: 1px solid #1f3a57;
+    height: 64px;
+    background: var(--surface);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-bottom: 1px solid var(--border-color);
     display: flex;
     align-items: center;
-    padding: 0 20px;
+    padding: 0 24px;
     gap: 16px;
     position: sticky;
     top: 0;
@@ -165,12 +181,12 @@
   .logo {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     background: none;
     border: none;
     cursor: pointer;
-    color: #e8edf2;
-    font-size: 1rem;
+    color: var(--text-primary);
+    font-size: 1.1rem;
     font-weight: 700;
     letter-spacing: 0.02em;
     padding: 0;
@@ -180,43 +196,48 @@
   }
 
   .logo:hover {
-    color: #DB841F;
+    color: var(--accent-yellow-hover);
   }
 
-  /* Center nav — absolutely centered regardless of logo/avatar widths */
+  /* Center nav */
   .nav {
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    gap: 4px;
+    gap: 8px;
+    background: var(--surface-solid);
+    padding: 6px;
+    border-radius: var(--radius-pill);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border-color);
   }
 
   .nav-btn {
     background: none;
     border: none;
-    color: #6b8aab;
+    color: var(--text-secondary);
     font-size: 0.9rem;
     font-weight: 500;
     cursor: pointer;
-    padding: 6px 18px;
-    border-radius: 6px;
-    transition: color 0.15s, background 0.15s;
+    padding: 8px 20px;
+    border-radius: var(--radius-pill);
+    transition: var(--transition);
   }
 
   .nav-btn:hover {
-    color: #e8edf2;
-    background: #1a3050;
+    color: var(--text-primary);
+    background: var(--surface-hover);
   }
 
   .nav-btn.active {
-    color: #DB841F;
-    background: rgba(219, 132, 31, 0.12);
+    color: #000;
+    background: var(--accent-yellow);
   }
 
   .logo-img {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     object-fit: contain;
   }
 
@@ -231,26 +252,26 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    background: none;
-    border: none;
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
     cursor: pointer;
-    color: #6b8aab;
     padding: 4px;
-    border-radius: 6px;
-    transition: background 0.15s;
+    border-radius: var(--radius-pill);
+    transition: var(--transition);
   }
 
   .menu-trigger:hover {
-    background: #1a3050;
-    color: #a0b4c8;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
   }
 
   .avatar {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
-    background: #1f3a57;
-    border: 1.5px solid #2a4f73;
+    background: var(--surface-hover);
+    border: 1.5px solid var(--border-color);
     overflow: hidden;
     display: flex;
     align-items: center;
@@ -262,6 +283,9 @@
   .avatar-icon {
     position: absolute;
     pointer-events: none;
+  }
+  .avatar-icon circle, .avatar-icon path {
+    stroke: var(--text-secondary);
   }
 
   .avatar img {
@@ -275,14 +299,14 @@
   /* Dropdown */
   .dropdown {
     position: absolute;
-    top: calc(100% + 8px);
+    top: calc(100% + 12px);
     right: 0;
-    background: #0f2035;
-    border: 1px solid #1f3a57;
-    border-radius: 8px;
-    padding: 4px;
-    min-width: 176px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 8px;
+    min-width: 200px;
+    box-shadow: var(--shadow-lg);
     z-index: 200;
   }
 
@@ -291,32 +315,55 @@
     width: 100%;
     background: none;
     border: none;
-    color: #a0b4c8;
-    font-size: 0.875rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
     text-align: left;
-    padding: 8px 12px;
+    padding: 10px 16px;
     cursor: pointer;
-    border-radius: 5px;
-    transition: background 0.12s, color 0.12s;
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
   }
 
   .dropdown-item:hover {
-    background: #1a3050;
-    color: #e8edf2;
+    background: var(--surface-hover);
+    color: var(--text-primary);
   }
 
   .dropdown-item.danger {
-    color: #e05252;
+    color: #ef4444;
   }
 
   .dropdown-item.danger:hover {
-    background: rgba(224, 82, 82, 0.1);
-    color: #e05252;
+    background: #fef2f2;
+    color: #dc2626;
+  }
+  [data-theme="dark"] .dropdown-item.danger:hover {
+    background: rgba(239, 68, 68, 0.1);
   }
 
   .dropdown-divider {
     height: 1px;
-    background: #1f3a57;
-    margin: 4px 0;
+    background: var(--border-color);
+    margin: 8px 0;
+  }
+
+  @media (max-width: 768px) {
+    .nav {
+      position: static;
+      transform: none;
+      background: transparent;
+      box-shadow: none;
+      border: none;
+      margin-left: auto;
+      margin-right: 16px;
+    }
+    .logo span {
+      display: none;
+    }
+    .nav-btn {
+      padding: 6px 12px;
+      font-size: 0.85rem;
+    }
   }
 </style>
