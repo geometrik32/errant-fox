@@ -8,11 +8,12 @@
     videoId: string;
     comments?: Comment[];
     currentTime?: number;
+    highlightedId?: number | null;
     onseek?: (timestamp_ms: number) => void;
     oncommentschange?: (comments: Comment[]) => void;
   }
 
-  let { videoId, comments: initComments = [], currentTime = 0, onseek, oncommentschange }: Props = $props();
+  let { videoId, comments: initComments = [], currentTime = 0, highlightedId = null, onseek, oncommentschange }: Props = $props();
 
   let comments = $state<Comment[]>([...initComments]);
   let text = $state('');
@@ -127,6 +128,18 @@
     }
   }
 
+  // Scroll to + flash highlighted comment from timeline click
+  $effect(() => {
+    const id = highlightedId;
+    if (!id || !listEl) return;
+    const el = listEl.querySelector<HTMLElement>(`[data-comment-id="${id}"]`);
+    if (!el) return;
+    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    el.classList.remove('msg--flash');
+    void el.offsetWidth; // reflow to restart animation
+    el.classList.add('msg--flash');
+  });
+
   // WebSocket
   let ws: WebSocket | null = null;
 
@@ -169,7 +182,7 @@
   <!-- Message list -->
   <div class="list" bind:this={listEl}>
     {#each sortedComments as c (c.id)}
-      <div class="msg" style={c.reply_to_id !== null ? 'margin-left: 16px' : ''}>
+      <div class="msg" data-comment-id={c.id} style={c.reply_to_id !== null ? 'margin-left: 16px' : ''}>
         <div class="msg-head">
           <div class="avatar">
             <svg class="avatar-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -279,6 +292,16 @@
     border-radius: var(--radius-sm);
     background: var(--surface-hover);
     border: 1px solid var(--border-color);
+    transition: border-color 0.2s;
+  }
+
+  @keyframes comment-flash {
+    0%   { border-color: var(--accent-yellow); background: rgba(219, 132, 31, 0.15); }
+    100% { border-color: var(--border-color);  background: var(--surface-hover); }
+  }
+
+  :global(.msg--flash) {
+    animation: comment-flash 1.2s ease-out forwards;
   }
 
   .msg-head {

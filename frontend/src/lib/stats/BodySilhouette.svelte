@@ -290,7 +290,8 @@
   .legend-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
+    gap: 8px;
     padding: 2px 5px;
     border-radius: 4px;
     cursor: pointer;

@@ -57,7 +57,7 @@ pub async fn generate_previews(
         .arg("-vframes")
         .arg("1")
         .arg("-start_number")
-        .arg("1")
+        .arg("0")
         .arg(&output_pattern)
         .stdout(Stdio::null())
         .stderr(Stdio::piped())

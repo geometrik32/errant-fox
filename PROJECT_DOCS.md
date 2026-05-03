@@ -281,7 +281,7 @@ Errant Fox/
 #### `pub async fn generate_previews(video_id: &str, download_url: &str, previews_dir: &Path, db: &DbPool) -> Result<(), AppError>`
 1. Создаёт папку `{previews_dir}/{video_id}/`
 2. Определяет длительность видео через `get_duration()`
-3. Запускает `ffmpeg` — делает seek в середину видео, извлекает 1 кадр (JPG, ширина 480px) в файл `1.jpg`
+3. Запускает `ffmpeg` — делает seek в середину видео, извлекает 1 кадр (JPG, ширина 480px) в файл `0.jpg` (флаг `-start_number 0`)
 4. Обновляет `videos.preview_count = 1` в БД
 
 ---
@@ -855,19 +855,23 @@ Utility-функции:
 - [`JudgingPanel`](frontend/src/lib/player/JudgingPanel.svelte) — левая панель разметки
 - [`Chat`](frontend/src/lib/player/Chat.svelte) — правая панель чата
 - [`Timeline`](frontend/src/lib/player/Timeline.svelte) — нижний таймлайн
-- Управление состояниями: `currentTime`, `duration`, `playing`, `looping`, `speed`, `volume`, `fps`
-- WebSocket-подписка на live-обновления буты и комментариев
-- Клавиатурные хоткеи (пробел = play/pause, F = fullscreen, X/Z = frame-step)
+- Управление состояниями: `currentTime`, `duration`, `playing`, `looping`, `speed`, `volume`, `fps`, `highlightedCommentId`
+- Кнопки показа/скрытия панелей (JudgingPanel, Chat)
+- Клавиатурные хоткеи: `Space` (play/pause), `F` (fullscreen), `X`/`Z` (frame-step), `←`/`→` (±2с), `A` (0.2×), `S` (2×), `C` (triggerMark), `G` (toggle panels)
+- Клик по маркеру комментария на таймлайне → скролл и подсветка сообщения в чате
 
 #### [`frontend/src/routes/Stats.svelte`](frontend/src/routes/Stats.svelte)
 Страница статистики бойца. Содержит:
-- [`FighterSidebar`](frontend/src/lib/stats/FighterSidebar.svelte) — выбор бойца
+- Inline hero-карточка бойца с dropdown выбора бойца (FighterSidebar не используется)
 - [`QuickStats`](frontend/src/lib/stats/QuickStats.svelte) — блоки быстрой статистики
+- [`ScoreChart`](frontend/src/lib/stats/ScoreChart.svelte) — прогресс по баллам
+- [`RecentOpponents`](frontend/src/lib/stats/RecentOpponents.svelte) — список оппонентов с win/loss
 - [`FrequencyChart`](frontend/src/lib/stats/FrequencyChart.svelte) — график частоты боёв
 - [`ResultsChart`](frontend/src/lib/stats/ResultsChart.svelte) — динамика побед/поражений
-- [`ScoreChart`](frontend/src/lib/stats/ScoreChart.svelte) — прогресс по баллам
+- [`TopTechniques`](frontend/src/lib/stats/TopTechniques.svelte) — топ используемых техник
 - [`BodySilhouette`](frontend/src/lib/stats/BodySilhouette.svelte) × 2 — нанесённый и полученный урон
-- [`HistoryTable`](frontend/src/lib/stats/HistoryTable.svelte) — таблица истории боёв с фильтрацией
+- [`HistoryTable`](frontend/src/lib/stats/HistoryTable.svelte) — таблица истории сходов с фильтрацией
+- Единый `filteredBouts` derived-стор; клики на графики применяют фильтры к таблице
 
 ---
 
@@ -876,31 +880,31 @@ Utility-функции:
 #### [`frontend/src/lib/player/VideoPlayer.svelte`](frontend/src/lib/player/VideoPlayer.svelte)
 HTML5 `<video>` элемент с расширенным управлением.
 - **Props:** `src, speed, volume`, колбеки `ontimeupdate, ondurationchange, onplayingchange, onloopingchange, onfpschange`
-- **Экспортируемые методы:** `seekTo(ms), pause(), play(), setLoopRange({start, end}), clearLoop(), stepForward(), stepBack()`
+- **Экспортируемые методы:** `seekTo(ms)`, `pause()`, `play()`, `togglePlay()`, `setLoop(start, end, autoPlay?)`, `toggleLoop()`, `stepForward()`, `stepBackward()`, `setSpeed(s)`, `setVolume(v)`
 - **Функции:** цифровой зум (колесо мыши с индикатором), пан (drag при зуме), двойной клик = сброс зума, loop по диапазону, покадровый шаг через вычисление `1/fps`
 - **CSS:** `transform: scale()` для зума, курсор при панорамировании
 
 #### [`frontend/src/lib/player/Chat.svelte`](frontend/src/lib/player/Chat.svelte)
 Чат с комментариями.
-- **Props:** `videoId, comments, currentTime`, колбеки `onseek, oncommentschange`
+- **Props:** `videoId, comments, currentTime, highlightedId?`, колбеки `onseek, oncommentschange`
 - **Состояния:** `text`, `replyTo`, `sending`, `editingId`, `editText`
 - **Функции:**
   - `fmtMs(ms)` — форматирование миллисекунд в HH:MM:SS
   - `getReplyPreview(replyToId)` — превью текста родительского комментария
-  - `submitComment()` — отправка (Enter или кнопка)
-  - `startEdit(id) / cancelEdit() / saveEdit(id)` — редактирование своего комментария
+  - `submit()` — отправка (Enter или кнопка)
+  - `startEdit(id) / submitEdit(id)` — редактирование своего комментария
   - `handleDelete(id)` — удаление (с confirm)
-  - `toggleLike(id) / toggleDislike(id)` — лайк/дизлайк
-- **Отображение:** рекурсивная структура тредов (ответы с отступом 16px)
+  - `handleReact(id, kind)` — лайк/дизлайк
+- **Отображение:** рекурсивная структура тредов (ответы с отступом 16px); при изменении `highlightedId` скроллит к соответствующему сообщению и подсвечивает его анимацией
 - **WebSocket:** слушает `new_comment` события для live-обновлений
 
 #### [`frontend/src/lib/player/JudgingPanel.svelte`](frontend/src/lib/player/JudgingPanel.svelte)
 Панель разметки сходов (левая панель).
 - **Props:** `video, currentTime, playing`, колбеки `onboutschange, onseekrequest`
-- **Состояния:** `bouts[]`, `fighterAId`, `fighterBId`, `recording`, `recordStart`
+- **Состояния:** `bouts[]`, `fighterAId`, `fighterBId`, `startTime: number | null`
+- **Экспортируемые методы:** `triggerMark()` — фиксирует начало/конец схода; `expandBout(id)` — разворачивает карточку схода
 - **Функции:**
   - `saveFighters()` — назначает бойцов на видео
-  - `startRecording()` / `finishRecording()` — START/FINISH схода → создаёт бут
   - Авто-сохранение бойцов при изменении дропдауна
   - Отображение TOTAL SCORE в футере (`sum(score_a) : sum(score_b)`)
 - **WebSocket:** слушает `update_bout` для live-обновлений
@@ -909,22 +913,22 @@ HTML5 `<video>` элемент с расширенным управлением.
 #### [`frontend/src/lib/player/BoutCard.svelte`](frontend/src/lib/player/BoutCard.svelte)
 Карточка отдельного схода.
 - **Состояния:** свёрнута/развёрнута, dirty-флаг для несохранённых данных
-- **Поля:** очки A/B (+/− кнопки), техника (дропдаун), зона поражения ([`HitZonePicker`](frontend/src/lib/player/HitZonePicker.svelte)), результат (дропдаун: hit/miss/blocked/late/no_strike/disqualification/afterblow)
+- **Поля:** очки A/B (+/− кнопки), техника (дропдаун `<select>`), зона поражения ([`HitZonePicker`](frontend/src/lib/player/HitZonePicker.svelte)), результат (кастомный dropdown `position: fixed` для обхода overflow-clipping)
+- **Tooltip техники:** при наведении на дропдаун показывает `description` техники во floating tooltip (`position: fixed`, рендерится вне overflow-контейнера)
 - **Кнопки:** Save, Delete, Collapse
-- **Экспорт:** `collapse()` — закрыть с проверкой dirty-флага
+- **Внутренние функции:** `handleCollapse()` — с проверкой dirty-флага (не экспортируется)
 
 #### [`frontend/src/lib/player/HitZonePicker.svelte`](frontend/src/lib/player/HitZonePicker.svelte)
-Визуальный выбор зоны поражения на SVG-силуэте человека. 6 зон: Голова, Тело, Рука левая, Рука правая, Нога левая, Нога правая.
+Визуальный выбор зоны поражения на SVG-силуэте человека. **16 зон:** Голова, Шея, Плечо/Предплечье/Кисть (пр. и лев.), Тело, Таз, Бедро/Голень/Стопа (пр. и лев.). Значение хранится как `"ЗонаNазвание:x:y"` (координаты клика в SVG). Экспортирует константу `HIT_ZONES` (массив всех названий зон).
 
 #### [`frontend/src/lib/player/Timeline.svelte`](frontend/src/lib/player/Timeline.svelte)
 Нижняя панель управления воспроизведением.
-- **Props:** `currentTime, duration, bouts, comments, fighterA, fighterB, playing, looping, speed, volume, fps`, много колбеков
+- **Props:** `currentTime, duration, bouts, comments, fighterA, fighterB, playing, looping, speed, volume, fps`, колбеки: `onseek, onloop, onboutclick, oncommentclick, onplay, onstepback, onstepforward, onspeedchange, onvolumechange, onlooptoggle`
 - **Три дорожки:**
-  1. Метки комментариев (точки на временной шкале)
+  1. Метки комментариев (точки на временной шкале); клик → `onseek` + `oncommentclick`
   2. Основной прогресс-бар (клик/драг = перемотка)
   3. Трек сходов (цветные прямоугольники-сегменты с цветами бойцов)
-- **Контролы:** Play/Pause, Step Back, Step Forward, Loop (toggle), Speed (0.1×–2.0×), Volume, Time
-- **Функции:** `fmtTime(ms)`, seek по клику на прогресс-бар, loop по клику на сегмент схода, seek по клику на маркер комментария
+- **Контролы:** Play/Pause, Step Back, Step Forward, Loop (toggle), Speed (0.1×–2.0×), Volume, Time (формат MM:SS:FFF с номером кадра)
 
 ---
 
@@ -939,10 +943,10 @@ HTML5 `<video>` элемент с расширенным управлением.
 #### [`frontend/src/lib/gallery/VideoCard.svelte`](frontend/src/lib/gallery/VideoCard.svelte)
 Карточка видео в галерее.
 - Статичное превью (`/api/videos/{id}/previews/0`)
-- При наведении — scrub-анимация (меняет `src` на кадры 0, 1, 2... с интервалом по позиции мыши)
 - Отображение: Боец A vs Боец B, счёт `X : Y`, дата
 - Неразмеченное: маркер «Заполните данные»
 - Клик: размеченное → переход в плеер, неразмеченное → модалка назначения бойцов
+- Средняя кнопка мыши: открывает видео в новой вкладке
 
 #### [`frontend/src/lib/gallery/VideoGrid.svelte`](frontend/src/lib/gallery/VideoGrid.svelte)
 CSS Grid контейнер для карточек видео. Принимает список видео, рендерит [`VideoCard`](frontend/src/lib/gallery/VideoCard.svelte) для каждого.
@@ -952,30 +956,37 @@ CSS Grid контейнер для карточек видео. Принимае
 ### 6.7. Компоненты статистики
 
 #### [`frontend/src/lib/stats/FighterSidebar.svelte`](frontend/src/lib/stats/FighterSidebar.svelte)
-Сайдбар со списком бойцов для переключения дашбордов.
+Компонент существует, но в `Stats.svelte` не используется. Выбор бойца реализован inline в hero-блоке.
 
 #### [`frontend/src/lib/stats/QuickStats.svelte`](frontend/src/lib/stats/QuickStats.svelte)
-Блоки быстрой статистики: «Чаще всего использую», «Чаще всего промахиваюсь», «Чаще всего получаю».
+**9 KPI-блоков:** Всего боёв (с тегами / всего), Всего сходов (ср. за бой), Винрейт по боям, Винрейт по сходам, Набрано очков, Пропущено очков, Попадаю чаще, Промахиваюсь, Пропускаю чаще.
+- **Props:** `bouts, totalVideos?`
+
+#### [`frontend/src/lib/stats/TopTechniques.svelte`](frontend/src/lib/stats/TopTechniques.svelte)
+Топ техник бойца по частоте применения. Клик применяет фильтр по технике.
+
+#### [`frontend/src/lib/stats/RecentOpponents.svelte`](frontend/src/lib/stats/RecentOpponents.svelte)
+Горизонтальный список оппонентов с win/loss/total и balance. Wins/losses считаются по **боям** (по video_id), не по отдельным сходам. Клик применяет фильтр по оппоненту.
 
 #### [`frontend/src/lib/stats/FrequencyChart.svelte`](frontend/src/lib/stats/FrequencyChart.svelte)
-График частоты поединков (X = недели, Y = количество боёв). Chart.js.
+График частоты поединков (X = ISO-недели, Y = количество видео). Показывает **все недели** между первым и последним боем, включая пустые. Chart.js bar. Клик по столбцу фильтрует таблицу по неделе.
 
 #### [`frontend/src/lib/stats/ResultsChart.svelte`](frontend/src/lib/stats/ResultsChart.svelte)
-График динамики результатов (победа/поражение бинарно). Фильтр по оппоненту. Процент побед в заголовке. Chart.js.
+График динамики результатов (победа=1, ничья=0, поражение=−1 по видео). Процент побед в заголовке. Chart.js line с `cubicInterpolationMode: 'monotone'`. Клик по точке фильтрует таблицу по дате.
 
 #### [`frontend/src/lib/stats/ScoreChart.svelte`](frontend/src/lib/stats/ScoreChart.svelte)
 Линейный график прогресса по баллам (суммарные очки за тренировку). Chart.js.
 
 #### [`frontend/src/lib/stats/BodySilhouette.svelte`](frontend/src/lib/stats/BodySilhouette.svelte)
-SVG-силуэт человека в T-позе с динамической заливкой зон. Интенсивность цвета = частота попаданий в зону.
+SVG-силуэт человека в T-позе. Зоны кликабельны — клик устанавливает `zoneFilter`. Заливка бинарная (попадание/нет, не зависит от частоты). Рядом с силуэтом — легенда с количеством попаданий по зонам (имя и число вплотную).
 
 #### [`frontend/src/lib/stats/HistoryTable.svelte`](frontend/src/lib/stats/HistoryTable.svelte)
-Интерактивная таблица истории боёв:
-- Колонки: Дата, Оппонент, Счёт, Мой приём, Результат моего удара, Приём оппонента, Результат удара оппонента, Ссылка →
+Интерактивная таблица истории сходов:
+- Колонки (переключаются через column picker): Видео (метка), Дата, Оппонент, Счёт, Мой приём, Мой рез., Моя зона, Приём опп., Рез. опп., Зона опп., →
 - Сортировка по всем колонкам
-- Фильтрация по всем колонкам (текстовый/выпадающий фильтр)
-- Клик → → переход к видео
-- Все остальные компоненты дашборда реагируют на фильтры этой таблицы
+- Фильтры: текстовые (оппонент, счёт), выпадающие `<select>` (Мой рез., Рез. опп., Мой приём, Приём опп., Моя зона, Зона опп., дата), выпадающий список бойцов
+- Техника фильтруется по точному имени; зона — по имени зоны (из `HIT_ZONES`)
+- Клик → переход к видео в плеере
 
 ---
 
@@ -1001,7 +1012,7 @@ SVG-силуэт человека в T-позе с динамической за
 ### 6.9. Админ-компоненты
 
 #### [`frontend/src/lib/admin/CreateUserModal.svelte`](frontend/src/lib/admin/CreateUserModal.svelte)
-Модальное окно создания пользователя: username, display_name, password, is_admin (чекбокс), color. Вызывает [`createUser()`](frontend/src/lib/api/fighters.ts).
+Модальное окно управления бойцами (полный CRUD): список всех бойцов с inline-редактированием (display_name, password, color, is_admin, avatar) + форма создания нового бойца. Вызывает [`createUser()`](frontend/src/lib/api/fighters.ts), [`patchUser()`](frontend/src/lib/api/fighters.ts), [`deleteUser()`](frontend/src/lib/api/fighters.ts), [`uploadUserAvatar()`](frontend/src/lib/api/fighters.ts).
 
 #### [`frontend/src/lib/admin/TechniquesModal.svelte`](frontend/src/lib/admin/TechniquesModal.svelte)
 Модальное окно управления техниками: список с возможностью добавить/переименовать/удалить. Вызывает [`getTechniques()`](frontend/src/lib/api/techniques.ts), [`createTechnique()`](frontend/src/lib/api/techniques.ts), [`renameTechnique()`](frontend/src/lib/api/techniques.ts), [`deleteTechnique()`](frontend/src/lib/api/techniques.ts).

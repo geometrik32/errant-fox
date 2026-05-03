@@ -3,9 +3,10 @@
 
   interface Props {
     bouts: FighterBout[];
+    totalVideos?: number;
   }
 
-  let { bouts }: Props = $props();
+  let { bouts, totalVideos = 0 }: Props = $props();
 
   let totalBouts = $derived(bouts.length);
   let boutWins = $derived(bouts.filter(b => b.my_score > b.opponent_score).length);
@@ -27,6 +28,8 @@
   
   let pointsScored = $derived(bouts.reduce((sum, b) => sum + b.my_score, 0));
   let pointsConceded = $derived(bouts.reduce((sum, b) => sum + b.opponent_score, 0));
+  let untaggedVideos = $derived(totalVideos > 0 ? totalVideos - totalBattles : 0);
+  let avgBoutsPerFight = $derived(totalBattles > 0 ? (totalBouts / totalBattles).toFixed(1) : '—');
 
   // Text Stats
   function topBy(bouts: FighterBout[], getName: (b: FighterBout) => string | null): string {
@@ -57,6 +60,9 @@
     <div class="kpi-info">
       <div class="kpi-label">Всего боёв</div>
       <div class="kpi-value">{totalBattles}</div>
+      {#if totalVideos > 0}
+        <div class="kpi-sub"><span class="sub-green">{totalBattles} с тегами</span> · <span class="sub-dim">{untaggedVideos} без</span></div>
+      {/if}
     </div>
   </div>
 
@@ -69,6 +75,7 @@
     <div class="kpi-info">
       <div class="kpi-label">Всего сходов</div>
       <div class="kpi-value">{totalBouts}</div>
+      <div class="kpi-sub"><span class="sub-dim">ср. {avgBoutsPerFight} за бой</span></div>
     </div>
   </div>
 
@@ -193,6 +200,14 @@
     color: var(--text-primary);
     line-height: 1;
   }
+
+  .kpi-sub {
+    font-size: 0.72rem;
+    margin-top: 3px;
+  }
+
+  .sub-green { color: #4caf82; }
+  .sub-dim   { color: var(--text-secondary); }
 
   .text-kpi {
     padding: 16px 24px;

@@ -16,6 +16,7 @@
     onseek?: (timestamp_ms: number) => void;
     onloop?: (range: { start: number; end: number }) => void;
     onboutclick?: (boutId: number) => void;
+    oncommentclick?: (commentId: number) => void;
     onplay?: () => void;
     onstepback?: () => void;
     onstepforward?: () => void;
@@ -40,6 +41,7 @@
     onseek,
     onloop,
     onboutclick,
+    oncommentclick,
     onplay,
     onstepback,
     onstepforward,
@@ -125,7 +127,7 @@
       <button
         class="c-dot"
         style="left: {commentPos(c)}%; background: {commentColor(c)}"
-        onclick={() => onseek?.(c.timestamp_ms)}
+        onclick={() => { onseek?.(c.timestamp_ms); oncommentclick?.(c.id); }}
         title={c.text}
         aria-label="Комментарий: {c.text}"
       ></button>

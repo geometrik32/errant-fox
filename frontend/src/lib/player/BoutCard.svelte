@@ -165,18 +165,69 @@
 
   let tooltipTimer: ReturnType<typeof setTimeout> | null = null;
   let showTooltip = $state<'a' | 'b' | null>(null);
+  let tooltipPos = $state<{ top: number; left: number; width: number } | null>(null);
+  let techWrapA = $state<HTMLDivElement | null>(null);
+  let techWrapB = $state<HTMLDivElement | null>(null);
 
   let techADescription = $derived($techniques.find(t => t.id === techAId)?.description ?? null);
   let techBDescription = $derived($techniques.find(t => t.id === techBId)?.description ?? null);
 
   function startTooltip(side: 'a' | 'b') {
+    const el = side === 'a' ? techWrapA : techWrapB;
+    if (!el) return;
     if (tooltipTimer) clearTimeout(tooltipTimer);
-    tooltipTimer = setTimeout(() => { showTooltip = side; }, 1000);
+    tooltipTimer = setTimeout(() => {
+      const rect = el.getBoundingClientRect();
+      tooltipPos = { top: rect.top, left: rect.left, width: rect.width };
+      showTooltip = side;
+    }, 600);
   }
 
   function stopTooltip() {
     if (tooltipTimer) { clearTimeout(tooltipTimer); tooltipTimer = null; }
     showTooltip = null;
+    tooltipPos = null;
+  }
+
+  // ── Result dropdown ──────────────────────────────────────────────────────────
+
+  const RESULT_OPTIONS: { value: ResultType; label: string }[] = [
+    { value: 'hit',             label: 'Попал' },
+    { value: 'miss',            label: 'Промахнулся' },
+    { value: 'blocked',         label: 'Заблокировали' },
+    { value: 'late',            label: 'Опоздал' },
+    { value: 'no_strike',       label: 'Не бил' },
+    { value: 'disqualification',label: 'Неквалификация' },
+    { value: 'afterblow',       label: 'Афтерблоу' },
+  ];
+
+  let resDropdown = $state<'a' | 'b' | null>(null);
+  let resDropdownPos = $state<{ top: number; left: number; width: number } | null>(null);
+  let resWrapA = $state<HTMLDivElement | null>(null);
+  let resWrapB = $state<HTMLDivElement | null>(null);
+
+  function openResDropdown(side: 'a' | 'b') {
+    if (resDropdown === side) { closeResDropdown(); return; }
+    const el = side === 'a' ? resWrapA : resWrapB;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    resDropdownPos = { top: rect.bottom, left: rect.left, width: rect.width };
+    resDropdown = side;
+  }
+
+  function closeResDropdown() {
+    resDropdown = null;
+    resDropdownPos = null;
+  }
+
+  function selectResult(side: 'a' | 'b', val: ResultType) {
+    if (side === 'a') resA = val;
+    else resB = val;
+    closeResDropdown();
+  }
+
+  function resLabel(val: ResultType): string {
+    return RESULT_OPTIONS.find(o => o.value === val)?.label ?? val;
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -257,6 +308,7 @@
         <div class="field">
           <span class="field-lbl">Техника</span>
           <div class="tech-wrap"
+            bind:this={techWrapA}
             onmouseenter={() => startTooltip('a')}
             onmouseleave={stopTooltip}
           >
@@ -266,12 +318,6 @@
                 <option value={t.id}>{t.name}</option>
               {/each}
             </select>
-            {#if showTooltip === 'a' && techADescription}
-              <div class="tech-tooltip">
-                <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                {@html techADescription}
-              </div>
-            {/if}
           </div>
         </div>
 
@@ -282,15 +328,12 @@
 
         <div class="field">
           <span class="field-lbl">Результат</span>
-          <select class="field-sel" bind:value={resA}>
-            <option value="hit">Попал</option>
-            <option value="miss">Промахнулся</option>
-            <option value="blocked">Заблокировали</option>
-            <option value="late">Опоздал</option>
-            <option value="no_strike">Не бил</option>
-            <option value="disqualification">Неквалификация</option>
-            <option value="afterblow">Афтерблоу</option>
-          </select>
+          <div class="res-wrap" bind:this={resWrapA}>
+            <button class="res-btn" onclick={() => openResDropdown('a')}>
+              {resLabel(resA)}
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><path d="M1 3l4 4 4-4"/></svg>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -309,6 +352,7 @@
         <div class="field">
           <span class="field-lbl">Техника</span>
           <div class="tech-wrap"
+            bind:this={techWrapB}
             onmouseenter={() => startTooltip('b')}
             onmouseleave={stopTooltip}
           >
@@ -318,12 +362,6 @@
                 <option value={t.id}>{t.name}</option>
               {/each}
             </select>
-            {#if showTooltip === 'b' && techBDescription}
-              <div class="tech-tooltip">
-                <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                {@html techBDescription}
-              </div>
-            {/if}
           </div>
         </div>
 
@@ -334,19 +372,47 @@
 
         <div class="field">
           <span class="field-lbl">Результат</span>
-          <select class="field-sel" bind:value={resB}>
-            <option value="hit">Попал</option>
-            <option value="miss">Промахнулся</option>
-            <option value="blocked">Заблокировали</option>
-            <option value="late">Опоздал</option>
-            <option value="no_strike">Не бил</option>
-            <option value="disqualification">Неквалификация</option>
-            <option value="afterblow">Афтерблоу</option>
-          </select>
+          <div class="res-wrap" bind:this={resWrapB}>
+            <button class="res-btn" onclick={() => openResDropdown('b')}>
+              {resLabel(resB)}
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><path d="M1 3l4 4 4-4"/></svg>
+            </button>
+          </div>
         </div>
       </div>
 
     </div>
+
+    <!-- Result dropdown rendered at viewport level to escape overflow clipping -->
+    {#if resDropdown && resDropdownPos}
+      <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+      <div class="dropdown-backdrop" onclick={closeResDropdown}></div>
+      <div class="res-dropdown" style="top: {resDropdownPos.top}px; left: {resDropdownPos.left}px; width: {resDropdownPos.width}px">
+        {#each RESULT_OPTIONS as opt (opt.value)}
+          <button
+            class="res-option"
+            class:selected={resDropdown === 'a' ? resA === opt.value : resB === opt.value}
+            onclick={() => selectResult(resDropdown!, opt.value)}
+          >
+            {opt.label}
+          </button>
+        {/each}
+      </div>
+    {/if}
+
+    <!-- Tooltip rendered at viewport level to escape overflow clipping -->
+    {#if showTooltip && tooltipPos}
+      {@const desc = showTooltip === 'a' ? techADescription : techBDescription}
+      {#if desc}
+        <div
+          class="tech-tooltip"
+          style="top: {tooltipPos.top}px; left: {tooltipPos.left}px; min-width: {tooltipPos.width}px"
+        >
+          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+          {@html desc}
+        </div>
+      {/if}
+    {/if}
 
     {#if saveError}
       <div class="save-error">{saveError}</div>
@@ -607,22 +673,88 @@
     border-color: var(--accent-yellow);
   }
 
+  /* ── Result custom dropdown ────────────────────────────────────────────── */
+  .res-wrap {
+    position: relative;
+  }
+
+  .res-btn {
+    width: 100%;
+    padding: 6px 8px;
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    transition: var(--transition);
+  }
+
+  .res-btn:hover,
+  .res-btn:focus {
+    border-color: var(--accent-yellow);
+    outline: none;
+  }
+
+  .dropdown-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+  }
+
+  .res-dropdown {
+    position: fixed;
+    z-index: 9999;
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+    min-width: 80px;
+  }
+
+  .res-option {
+    width: 100%;
+    text-align: left;
+    padding: 6px 10px;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: var(--transition);
+    display: block;
+  }
+
+  .res-option:hover {
+    background: var(--surface-hover);
+  }
+
+  .res-option.selected {
+    color: var(--accent-yellow);
+    background: rgba(219, 132, 31, 0.08);
+  }
+
   /* ── Technique tooltip ──────────────────────────────────────────────────── */
   .tech-wrap {
     position: relative;
   }
 
   .tech-tooltip {
-    position: absolute;
-    bottom: calc(100% + 6px);
-    left: 0;
-    z-index: 300;
+    position: fixed;
+    transform: translateY(calc(-100% - 8px));
+    z-index: 9999;
     background: var(--surface-solid);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     padding: 12px 16px;
-    width: 280px;
-    max-height: 240px;
+    max-width: min(320px, 90vw);
+    max-height: 50vh;
     overflow-y: auto;
     font-size: 0.85rem;
     color: var(--text-primary);

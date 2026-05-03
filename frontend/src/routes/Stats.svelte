@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { fighters, currentUser } from '../stores';
   import { getFighterBouts } from '../lib/api/fighters';
+  import { getVideos } from '../lib/api/videos';
   import { resolveColor } from '../lib/api/types';
   import FighterSidebar from '../lib/stats/FighterSidebar.svelte';
   import QuickStats from '../lib/stats/QuickStats.svelte';
@@ -18,6 +19,7 @@
 
   let selectedFighter = $state<Fighter | null>(null);
   let rawBouts = $state<FighterBout[]>([]);
+  let totalVideos = $state(0);
   let loading = $state(false);
   let errorMsg = $state('');
 
@@ -60,21 +62,17 @@
     if (tableFilters.opponent_id)
       result = result.filter(b => b.opponent_id === tableFilters.opponent_id);
     if (tableFilters.my_technique)
-      result = result.filter(b =>
-        (b.my_technique_name ?? '').toLowerCase().includes(tableFilters.my_technique.toLowerCase())
-      );
+      result = result.filter(b => b.my_technique_name === tableFilters.my_technique);
     if (tableFilters.my_result)
       result = result.filter(b => b.my_result === tableFilters.my_result);
     if (tableFilters.my_zone)
-      result = result.filter(b => (b.my_hit_zone ?? '').toLowerCase().includes(tableFilters.my_zone.toLowerCase()));
+      result = result.filter(b => (b.my_hit_zone ?? '').split(':')[0] === tableFilters.my_zone);
     if (tableFilters.opponent_technique)
-      result = result.filter(b =>
-        (b.opponent_technique_name ?? '').toLowerCase().includes(tableFilters.opponent_technique.toLowerCase())
-      );
+      result = result.filter(b => b.opponent_technique_name === tableFilters.opponent_technique);
     if (tableFilters.opponent_result)
       result = result.filter(b => b.opponent_result === tableFilters.opponent_result);
     if (tableFilters.opponent_zone)
-      result = result.filter(b => (b.opponent_hit_zone ?? '').toLowerCase().includes(tableFilters.opponent_zone.toLowerCase()));
+      result = result.filter(b => (b.opponent_hit_zone ?? '').split(':')[0] === tableFilters.opponent_zone);
     if (tableFilters.score)
       result = result.filter(b => `${b.my_score}:${b.opponent_score}`.includes(tableFilters.score));
     if (tableFilters.date_week)
@@ -125,7 +123,12 @@
     loading = true;
     errorMsg = '';
     try {
-      rawBouts = await getFighterBouts(fighter.id);
+      const [bouts, vids] = await Promise.all([
+        getFighterBouts(fighter.id),
+        getVideos({ fighter_id: fighter.id }),
+      ]);
+      rawBouts = bouts;
+      totalVideos = vids.length;
     } catch (e) {
       errorMsg = e instanceof Error ? e.message : 'Ошибка загрузки данных';
     } finally {
@@ -226,10 +229,20 @@
           {/if}
         </div>
 
-        <QuickStats bouts={filteredBouts} />
+        <QuickStats bouts={filteredBouts} {totalVideos} />
       </div>
 
-      <!-- Main row -->
+      <!-- Trends row: win dynamics + fight frequency -->
+      <div class="trends-row">
+        <div class="trends-main">
+          <ResultsChart bouts={filteredBouts} {videoLabels} onfilter={(date) => handleFilter({...tableFilters, date})} />
+        </div>
+        <div class="trends-side">
+          <FrequencyChart bouts={filteredBouts} onfilter={(week) => handleFilter({...tableFilters, date_week: week})} />
+        </div>
+      </div>
+
+      <!-- Score + opponents row -->
       <div class="main-row">
         <div class="main-chart-wrapper">
           <ScoreChart bouts={filteredBouts} {videoLabels} onfilter={(date) => handleFilter({...tableFilters, date})} />
@@ -239,15 +252,11 @@
         </div>
       </div>
 
-      <!-- Charts row -->
-      <div class="charts-row">
-        <FrequencyChart bouts={filteredBouts} onfilter={(week) => handleFilter({...tableFilters, date_week: week})} />
-        <ResultsChart bouts={filteredBouts} {videoLabels} onfilter={(date) => handleFilter({...tableFilters, date})} />
-        <TopTechniques bouts={filteredBouts} onfilter={(tech) => handleFilter({...tableFilters, my_technique: tech})} />
-      </div>
-
-      <!-- Body silhouettes -->
-      <div class="silhouettes-row">
+      <!-- Style row: techniques + hit zones -->
+      <div class="style-row">
+        <div class="style-techniques">
+          <TopTechniques bouts={filteredBouts} onfilter={(tech) => handleFilter({...tableFilters, my_technique: tech})} />
+        </div>
         <BodySilhouette bouts={filteredBouts} type="dealt" selectedZone={zoneFilter} onzoneclick={(z) => { zoneFilter = z; }} />
         <BodySilhouette bouts={filteredBouts} type="received" selectedZone={zoneFilter} onzoneclick={(z) => { zoneFilter = z; }} />
       </div>
@@ -332,7 +341,7 @@
     gap: 16px;
     cursor: pointer;
     position: relative;
-    z-index: 100;
+    z-index: 10;
     user-select: none;
     transition: var(--transition);
   }
@@ -353,8 +362,6 @@
     z-index: 50;
     display: flex;
     flex-direction: column;
-    max-height: 400px;
-    overflow: hidden;
     cursor: default;
   }
 
@@ -370,7 +377,6 @@
   }
 
   .dropdown-list {
-    overflow-y: auto;
     padding: 8px;
     display: flex;
     flex-direction: column;
@@ -478,35 +484,48 @@
     margin-top: 4px;
   }
 
-  /* Main Row */
+  /* Trends: results chart (wider) + frequency (narrower) */
+  .trends-row {
+    display: flex;
+    gap: 20px;
+  }
+
+  .trends-main {
+    flex: 2;
+    min-width: 0;
+  }
+
+  .trends-side {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Score + opponents */
   .main-row {
     display: flex;
     gap: 20px;
   }
-  
+
   .main-chart-wrapper {
     flex: 2;
     min-width: 0;
   }
-  
+
   .side-panel-wrapper {
     flex: 1;
     min-width: 0;
     align-self: flex-start;
   }
 
-  /* Charts 3-column grid */
-  .charts-row {
+  /* Style row: techniques + 2 silhouettes */
+  .style-row {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 20px;
   }
 
-  /* Body Silhouettes row */
-  .silhouettes-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 20px;
+  .style-techniques {
+    min-width: 0;
   }
 
   /* History table section */
@@ -534,8 +553,10 @@
       width: 60px;
       height: 60px;
     }
-    .charts-row, .silhouettes-row, .main-row {
+    .trends-row, .main-row {
       flex-direction: column;
+    }
+    .style-row {
       grid-template-columns: 1fr;
     }
   }

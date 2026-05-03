@@ -23,6 +23,19 @@
     return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
   }
 
+  function addWeeks(isoWeek: string, n: number): string {
+    // Parse YYYY-Www, add n weeks, return new YYYY-Www
+    const [yearStr, wStr] = isoWeek.split('-W');
+    const year = parseInt(yearStr);
+    const week = parseInt(wStr);
+    // Convert ISO week to a date (Thursday of that week)
+    const jan4 = new Date(Date.UTC(year, 0, 4));
+    const startOfWeek1 = new Date(jan4);
+    startOfWeek1.setUTCDate(jan4.getUTCDate() - (jan4.getUTCDay() || 7) + 1);
+    const ms = startOfWeek1.getTime() + (week - 1 + n) * 7 * 86400000;
+    return getISOWeek(new Date(ms).toISOString().slice(0, 10));
+  }
+
   function buildData(bouts: FighterBout[]) {
     const weekVideos = new Map<string, Set<string>>();
     for (const b of bouts) {
@@ -30,10 +43,23 @@
       if (!weekVideos.has(week)) weekVideos.set(week, new Set());
       weekVideos.get(week)!.add(b.video_id);
     }
-    const sorted = [...weekVideos.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    if (weekVideos.size === 0) return { labels: [], data: [] };
+
+    const sortedWeeks = [...weekVideos.keys()].sort();
+    const first = sortedWeeks[0];
+    const last = sortedWeeks[sortedWeeks.length - 1];
+
+    // Fill every week between first and last
+    const allWeeks: string[] = [];
+    let cur = first;
+    while (cur <= last) {
+      allWeeks.push(cur);
+      cur = addWeeks(cur, 1);
+    }
+
     return {
-      labels: sorted.map(([w]) => w),
-      data: sorted.map(([, videos]) => videos.size),
+      labels: allWeeks,
+      data: allWeeks.map(w => weekVideos.get(w)?.size ?? 0),
     };
   }
 
