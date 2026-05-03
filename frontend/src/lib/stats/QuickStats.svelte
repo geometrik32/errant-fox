@@ -7,142 +7,114 @@
 
   let { bouts }: Props = $props();
 
-  function topBy(bouts: FighterBout[], getName: (b: FighterBout) => string | null): string {
-    const counts = new Map<string, number>();
-    for (const b of bouts) {
-      const name = getName(b);
-      if (name) counts.set(name, (counts.get(name) ?? 0) + 1);
-    }
-    let max = 0, top = '—';
-    for (const [name, count] of counts) {
-      if (count > max) { max = count; top = name; }
-    }
-    return top;
-  }
-
-  let mostUsed = $derived(topBy(bouts, (b) => b.my_technique_name));
-  let mostMissed = $derived(topBy(bouts.filter(b => b.my_result === 'miss'), (b) => b.my_technique_name));
-  let mostReceived = $derived(topBy(bouts.filter(b => b.opponent_result === 'hit'), (b) => b.opponent_technique_name));
-
   let totalBouts = $derived(bouts.length);
   let wins = $derived(bouts.filter(b => b.my_score > b.opponent_score).length);
   let winRate = $derived(totalBouts > 0 ? Math.round((wins / totalBouts) * 100) : 0);
+  
+  let pointsScored = $derived(bouts.reduce((sum, b) => sum + b.my_score, 0));
+  let pointsConceded = $derived(bouts.reduce((sum, b) => sum + b.opponent_score, 0));
+
 </script>
 
-<div class="quick-stats-container">
-  <div class="numbers-row">
-    <div class="num-card glass-card">
-      <div class="num-val">{totalBouts}</div>
-      <div class="num-lbl">Всего сходов</div>
+<div class="kpi-grid">
+  <div class="kpi-card glass-card">
+    <div class="kpi-icon" style="background: rgba(111, 160, 224, 0.1); color: #6fa0e0;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+      </svg>
     </div>
-    <div class="num-card glass-card">
-      <div class="num-val">{wins}</div>
-      <div class="num-lbl">Побед</div>
-    </div>
-    <div class="num-card glass-card">
-      <div class="num-val">{winRate}%</div>
-      <div class="num-lbl">Винрейт</div>
+    <div class="kpi-info">
+      <div class="kpi-label">Всего сходов</div>
+      <div class="kpi-value">{totalBouts}</div>
     </div>
   </div>
 
-  <div class="text-stats-row">
-    <div class="stat-block glass-card">
-      <div class="stat-label">Использую чаще всего</div>
-      <div class="stat-value">{mostUsed}</div>
+  <div class="kpi-card glass-card">
+    <div class="kpi-icon" style="background: rgba(219, 132, 31, 0.1); color: var(--accent-yellow);">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 2L2 22h20L12 2z"/>
+      </svg>
     </div>
-    <div class="stat-block glass-card">
-      <div class="stat-label">Промахиваюсь с</div>
-      <div class="stat-value">{mostMissed}</div>
+    <div class="kpi-info">
+      <div class="kpi-label">Винрейт</div>
+      <div class="kpi-value">{winRate}%</div>
     </div>
-    <div class="stat-block glass-card">
-      <div class="stat-label">Урон чаще всего от</div>
-      <div class="stat-value">{mostReceived}</div>
+  </div>
+
+  <div class="kpi-card glass-card">
+    <div class="kpi-icon" style="background: rgba(39, 174, 96, 0.1); color: #27ae60;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M5 12l5 5L20 7"/>
+      </svg>
+    </div>
+    <div class="kpi-info">
+      <div class="kpi-label">Набрано очков</div>
+      <div class="kpi-value">{pointsScored}</div>
+    </div>
+  </div>
+
+  <div class="kpi-card glass-card">
+    <div class="kpi-icon" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M18 6L6 18M6 6l12 12"/>
+      </svg>
+    </div>
+    <div class="kpi-info">
+      <div class="kpi-label">Пропущено очков</div>
+      <div class="kpi-value">{pointsConceded}</div>
     </div>
   </div>
 </div>
 
 <style>
-  .quick-stats-container {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
     flex: 1;
   }
 
-  .numbers-row {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 14px;
-  }
-
-  .text-stats-row {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 14px;
-  }
-
-  @media (max-width: 768px) {
-    .numbers-row, .text-stats-row {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  .num-card {
-    padding: 24px 20px;
+  .kpi-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 24px;
     background: var(--surface);
     backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    text-align: center;
   }
 
-  .num-val {
-    font-size: 3rem;
-    font-weight: 300;
+  .kpi-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .kpi-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .kpi-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+
+  .kpi-value {
+    font-size: 1.8rem;
+    font-weight: 700;
     color: var(--text-primary);
     line-height: 1;
-    margin-bottom: 6px;
   }
 
-  .num-lbl {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .stat-block {
-    padding: 18px 20px;
-    background: var(--surface-solid);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-sm);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-
-  .stat-label {
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--text-secondary);
-    margin-bottom: 6px;
-  }
-
-  .stat-value {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--accent-yellow);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
 </style>

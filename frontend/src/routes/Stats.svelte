@@ -10,6 +10,8 @@
   import ResultsChart from '../lib/stats/ResultsChart.svelte';
   import ScoreChart from '../lib/stats/ScoreChart.svelte';
   import BodySilhouette from '../lib/stats/BodySilhouette.svelte';
+  import TopTechniques from '../lib/stats/TopTechniques.svelte';
+  import RecentOpponents from '../lib/stats/RecentOpponents.svelte';
   import type { Fighter, FighterBout } from '../lib/api/types';
   import { buildVideoLabels } from '../lib/api/types';
   import type { TableFilters } from '../lib/stats/HistoryTable.svelte';
@@ -203,11 +205,21 @@
         <QuickStats bouts={filteredBouts} />
       </div>
 
+      <!-- Main row -->
+      <div class="main-row">
+        <div class="main-chart-wrapper">
+          <ScoreChart bouts={filteredBouts} {videoLabels} />
+        </div>
+        <div class="side-panel-wrapper">
+          <RecentOpponents bouts={filteredBouts} limit={8} />
+        </div>
+      </div>
+
       <!-- Charts row -->
       <div class="charts-row">
         <FrequencyChart bouts={filteredBouts} />
         <ResultsChart bouts={filteredBouts} {videoLabels} />
-        <ScoreChart bouts={filteredBouts} {videoLabels} />
+        <TopTechniques bouts={filteredBouts} />
       </div>
 
       <!-- Body silhouettes -->
@@ -423,6 +435,22 @@
     margin-top: 4px;
   }
 
+  /* Main Row */
+  .main-row {
+    display: flex;
+    gap: 20px;
+  }
+  
+  .main-chart-wrapper {
+    flex: 2;
+    min-width: 0;
+  }
+  
+  .side-panel-wrapper {
+    flex: 1;
+    min-width: 0;
+  }
+
   /* Charts 3-column grid */
   .charts-row {
     display: grid;
@@ -462,7 +490,8 @@
       width: 60px;
       height: 60px;
     }
-    .charts-row, .silhouettes-row {
+    .charts-row, .silhouettes-row, .main-row {
+      flex-direction: column;
       grid-template-columns: 1fr;
     }
   }
