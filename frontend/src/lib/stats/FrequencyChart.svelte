@@ -4,9 +4,10 @@
 
   interface Props {
     bouts: FighterBout[];
+    onfilter?: (week: string) => void;
   }
 
-  let { bouts }: Props = $props();
+  let { bouts, onfilter }: Props = $props();
 
   let canvas = $state<HTMLCanvasElement | undefined>(undefined);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -59,6 +60,12 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          onClick: (e, elements) => {
+            if (elements.length > 0 && onfilter) {
+              const week = labels[elements[0].index];
+              onfilter(week);
+            }
+          },
           plugins: {
             legend: { display: false },
             tooltip: {
