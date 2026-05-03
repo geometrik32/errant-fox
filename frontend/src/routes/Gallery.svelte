@@ -144,22 +144,34 @@
 <style>
   .gallery {
     display: flex;
-    gap: 16px;
+    gap: 24px;
     align-items: flex-start;
   }
 
   .sidebar-sticky {
     position: sticky;
-    top: 56px;
-    max-height: calc(100vh - 56px);
+    top: 80px; /* 64px header + 16px gap */
+    max-height: calc(100vh - 80px);
     overflow-y: auto;
     flex-shrink: 0;
     align-self: flex-start;
+    width: 280px;
   }
 
   .content {
     flex: 1;
     min-width: 0;
+  }
+
+  @media (max-width: 768px) {
+    .gallery {
+      flex-direction: column;
+    }
+    .sidebar-sticky {
+      position: static;
+      width: 100%;
+      max-height: none;
+    }
   }
 
   .state {

@@ -9,6 +9,21 @@
   let hash = $state(typeof window !== 'undefined' ? (window.location.hash || '#/gallery') : '#/gallery');
   let initialized = $state(false);
 
+  // Theme initialization
+  $effect(() => {
+    if (typeof window !== 'undefined') {
+      const savedTheme = localStorage.getItem('theme');
+      if (savedTheme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      } else if (savedTheme === 'light') {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        // default based on preference or just light
+        document.documentElement.removeAttribute('data-theme');
+      }
+    }
+  });
+
   $effect(() => {
     const onHashChange = () => {
       hash = window.location.hash || '#/gallery';
@@ -63,19 +78,6 @@
 {/if}
 
 <style>
-  :global(*, *::before, *::after) {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-  }
-
-  :global(body) {
-    background: #0d1b2a;
-    color: #e8edf2;
-    font-family: system-ui, -apple-system, sans-serif;
-    min-height: 100vh;
-  }
-
   .app {
     display: flex;
     flex-direction: column;

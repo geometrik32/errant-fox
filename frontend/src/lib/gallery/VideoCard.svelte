@@ -69,9 +69,12 @@
 
 <style>
   .card {
-    background: #0f2035;
-    border: 1px solid #1f3a57;
-    border-radius: 8px;
+    background: var(--surface);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
     overflow: hidden;
     cursor: pointer;
     text-align: left;
@@ -79,18 +82,19 @@
     width: 100%;
     display: flex;
     flex-direction: column;
-    transition: border-color 0.15s, transform 0.15s;
+    transition: var(--transition);
   }
 
   .card:hover {
-    border-color: #2a4f73;
-    transform: translateY(-1px);
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-4px);
+    border-color: var(--accent-yellow);
   }
 
   .preview {
     width: 100%;
     aspect-ratio: 16 / 9;
-    background: #060e18;
+    background: var(--surface-hover);
     overflow: hidden;
     flex-shrink: 0;
   }
@@ -103,7 +107,7 @@
   }
 
   .info {
-    padding: 8px 12px;
+    padding: 12px 16px;
     display: flex;
     flex-direction: column;
   }
@@ -134,17 +138,18 @@
   }
 
   .name {
-    font-size: 0.78rem;
-    color: #a0b4c8;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .score {
-    font-size: 0.88rem;
+    font-size: 0.95rem;
     font-weight: 700;
-    color: #DB841F;
+    color: var(--accent-yellow);
     white-space: nowrap;
     flex-shrink: 0;
   }
@@ -153,7 +158,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    color: #4a6280;
-    font-size: 0.78rem;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
   }
 </style>

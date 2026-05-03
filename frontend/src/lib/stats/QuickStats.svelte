@@ -26,15 +26,15 @@
 </script>
 
 <div class="quick-stats">
-  <div class="stat-block">
+  <div class="stat-block glass-card">
     <div class="stat-label">Использую чаще всего</div>
     <div class="stat-value">{mostUsed}</div>
   </div>
-  <div class="stat-block">
+  <div class="stat-block glass-card">
     <div class="stat-label">Промахиваюсь чаще всего с</div>
     <div class="stat-value">{mostMissed}</div>
   </div>
-  <div class="stat-block">
+  <div class="stat-block glass-card">
     <div class="stat-label">Получаю урон чаще всего от</div>
     <div class="stat-value">{mostReceived}</div>
   </div>
@@ -47,26 +47,35 @@
     gap: 14px;
   }
 
+  @media (max-width: 768px) {
+    .quick-stats {
+      grid-template-columns: 1fr;
+    }
+  }
+
   .stat-block {
-    background: #0f2035;
-    border: 1px solid #1f3a57;
-    border-radius: 8px;
-    padding: 14px 16px;
+    padding: 16px 20px;
+    background: var(--surface);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
   }
 
   .stat-label {
-    font-size: 0.72rem;
+    font-size: 0.8rem;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: #4a6280;
-    margin-bottom: 6px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
   }
 
   .stat-value {
-    font-size: 1rem;
-    font-weight: 600;
-    color: #DB841F;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent-yellow);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

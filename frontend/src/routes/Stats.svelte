@@ -256,11 +256,14 @@
   .fighter-header {
     display: flex;
     align-items: center;
-    gap: 14px;
-    padding: 16px 20px;
-    background: #0f2035;
-    border: 1px solid #1f3a57;
-    border-radius: 10px;
+    gap: 16px;
+    padding: 20px 24px;
+    background: var(--surface);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
   }
 
   .avatar-wrap {
@@ -290,14 +293,14 @@
   }
 
   .fighter-name {
-    font-size: 1.2rem;
+    font-size: 1.4rem;
     font-weight: 700;
-    color: #e8edf2;
+    color: var(--text-primary);
   }
 
   .fighter-since {
-    font-size: 0.8rem;
-    color: #4a6280;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
     margin-top: 2px;
   }
 
@@ -323,10 +326,19 @@
   }
 
   .section-title {
-    font-size: 0.72rem;
+    font-size: 0.8rem;
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #4a6280;
+    color: var(--text-secondary);
+  }
+
+  @media (max-width: 1024px) {
+    .stats-layout {
+      flex-direction: column;
+    }
+    .charts-row, .silhouettes-row {
+      grid-template-columns: 1fr;
+    }
   }
 </style>
