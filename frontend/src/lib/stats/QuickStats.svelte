@@ -8,8 +8,22 @@
   let { bouts }: Props = $props();
 
   let totalBouts = $derived(bouts.length);
-  let wins = $derived(bouts.filter(b => b.my_score > b.opponent_score).length);
-  let winRate = $derived(totalBouts > 0 ? Math.round((wins / totalBouts) * 100) : 0);
+  let boutWins = $derived(bouts.filter(b => b.my_score > b.opponent_score).length);
+  let boutWinRate = $derived(totalBouts > 0 ? Math.round((boutWins / totalBouts) * 100) : 0);
+
+  let videoResults = $derived.by(() => {
+    const videoMap = new Map<string, { my: number; opp: number }>();
+    for (const b of bouts) {
+      const v = videoMap.get(b.video_id);
+      if (v) { v.my += b.my_score; v.opp += b.opponent_score; }
+      else videoMap.set(b.video_id, { my: b.my_score, opp: b.opponent_score });
+    }
+    return [...videoMap.values()].map(v => v.my > v.opp ? 1 : v.my < v.opp ? -1 : 0);
+  });
+
+  let totalBattles = $derived(videoResults.length);
+  let battleWins = $derived(videoResults.filter(r => r === 1).length);
+  let battleWinRate = $derived(totalBattles > 0 ? Math.round((battleWins / totalBattles) * 100) : 0);
   
   let pointsScored = $derived(bouts.reduce((sum, b) => sum + b.my_score, 0));
   let pointsConceded = $derived(bouts.reduce((sum, b) => sum + b.opponent_score, 0));
@@ -35,6 +49,18 @@
 
 <div class="kpi-grid">
   <div class="kpi-card glass-card">
+    <div class="kpi-icon" style="background: rgba(142, 68, 173, 0.1); color: #8e44ad;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M4 6h16M4 12h16M4 18h16"/>
+      </svg>
+    </div>
+    <div class="kpi-info">
+      <div class="kpi-label">Всего боёв</div>
+      <div class="kpi-value">{totalBattles}</div>
+    </div>
+  </div>
+
+  <div class="kpi-card glass-card">
     <div class="kpi-icon" style="background: rgba(111, 160, 224, 0.1); color: #6fa0e0;">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
@@ -49,12 +75,24 @@
   <div class="kpi-card glass-card">
     <div class="kpi-icon" style="background: rgba(219, 132, 31, 0.1); color: var(--accent-yellow);">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><path d="M16 12l-4-4-4 4M12 8v8"/>
+      </svg>
+    </div>
+    <div class="kpi-info">
+      <div class="kpi-label">Винрейт по боям</div>
+      <div class="kpi-value">{battleWinRate}%</div>
+    </div>
+  </div>
+
+  <div class="kpi-card glass-card">
+    <div class="kpi-icon" style="background: rgba(241, 196, 15, 0.1); color: #f1c40f;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M12 2L2 22h20L12 2z"/>
       </svg>
     </div>
     <div class="kpi-info">
-      <div class="kpi-label">Винрейт</div>
-      <div class="kpi-value">{winRate}%</div>
+      <div class="kpi-label">Винрейт по сходам</div>
+      <div class="kpi-value">{boutWinRate}%</div>
     </div>
   </div>
 

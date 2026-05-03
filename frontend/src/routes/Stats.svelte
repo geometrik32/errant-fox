@@ -191,7 +191,16 @@
               <div class="dropdown-list">
                 {#each $fighters as f (f.id)}
                   <button class="fighter-opt" class:selected={selectedFighter.id === f.id} onclick={() => { selectFighter(f); showFighterDropdown = false; }}>
-                    <div class="opt-avatar" style:background={resolveColor(f.id, f.color)}></div>
+                    <div class="opt-avatar" style:background={resolveColor(f.id, f.color)}>
+                      <svg class="opt-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="1.5"/>
+                        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+                      </svg>
+                      {#if f.avatar_url}
+                        <img class="opt-img" src={f.avatar_url} alt={f.display_name}
+                          onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      {/if}
+                    </div>
                     <span class="opt-name">{f.display_name}</span>
                   </button>
                 {/each}
@@ -366,6 +375,24 @@
     border-radius: 50%;
     flex-shrink: 0;
     border: 1px solid rgba(255,255,255,0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .opt-icon {
+    opacity: 0.6;
+  }
+
+  .opt-img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
   .opt-name {
