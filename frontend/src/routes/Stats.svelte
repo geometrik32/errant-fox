@@ -138,15 +138,11 @@
     if (!d) return '';
     return new Date(d).toLocaleDateString('ru-RU', { year: 'numeric', month: 'long', day: 'numeric' });
   }
+
+  let showFighterDropdown = $state(false);
 </script>
 
 <div class="stats-layout">
-  <FighterSidebar
-    fighters={$fighters}
-    selectedId={selectedFighter?.id ?? null}
-    onselect={selectFighter}
-  />
-
   <div class="dashboard">
     {#if !selectedFighter}
       <div class="empty-state">
@@ -160,7 +156,12 @@
     {:else}
       <!-- Fighter header & Quick stats -->
       <div class="dashboard-top">
-        <div class="fighter-hero glass-card">
+        <!-- svelte-ignore a11y_interactive_supports_focus -->
+        <div class="fighter-hero glass-card"
+          role="button" tabindex="0"
+          onclick={() => showFighterDropdown = !showFighterDropdown}
+          onkeydown={(e) => e.key === 'Enter' && (showFighterDropdown = !showFighterDropdown)}
+        >
           <div class="avatar-wrap" style:background={resolveColor(selectedFighter.id, selectedFighter.color)}>
             <svg class="avatar-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="1.5"/>
@@ -171,11 +172,32 @@
           </div>
           <div class="fighter-info">
             <div class="greeting">Статистика бойца</div>
-            <div class="fighter-name">{selectedFighter.display_name}</div>
+            <div class="fighter-name">
+              {selectedFighter.display_name}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="vertical-align: middle; margin-left: 4px; transform: {showFighterDropdown ? 'rotate(180deg)' : 'none'}; transition: transform 0.2s;">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </div>
             {#if firstBoutDate}
               <div class="fighter-since">с {formatDate(firstBoutDate)}</div>
             {/if}
           </div>
+
+          {#if showFighterDropdown}
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="fighter-dropdown" onclick={(e) => e.stopPropagation()}>
+              <div class="dropdown-header">Выберите бойца</div>
+              <div class="dropdown-list">
+                {#each $fighters as f (f.id)}
+                  <button class="fighter-opt" class:selected={selectedFighter.id === f.id} onclick={() => { selectFighter(f); showFighterDropdown = false; }}>
+                    <div class="opt-avatar" style:background={resolveColor(f.id, f.color)}></div>
+                    <span class="opt-name">{f.display_name}</span>
+                  </button>
+                {/each}
+              </div>
+            </div>
+          {/if}
         </div>
 
         <QuickStats bouts={filteredBouts} />
@@ -196,7 +218,6 @@
 
       <!-- History table -->
       <div class="table-section">
-        <div class="section-title">История сходов</div>
         <HistoryTable
           bouts={filteredBouts}
           filters={tableFilters}
@@ -213,8 +234,6 @@
 <style>
   .stats-layout {
     display: flex;
-    gap: 28px;
-    align-items: flex-start;
     min-height: 0;
   }
 
@@ -223,7 +242,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 20px;
   }
 
   /* Empty / loading states */
@@ -257,7 +276,7 @@
   /* Fighter header */
   .dashboard-top {
     display: flex;
-    gap: 14px;
+    gap: 20px;
     align-items: stretch;
   }
 
@@ -275,6 +294,85 @@
     justify-content: center;
     text-align: center;
     gap: 16px;
+    cursor: pointer;
+    position: relative;
+    user-select: none;
+    transition: var(--transition);
+  }
+
+  .fighter-hero:hover {
+    border-color: var(--text-secondary);
+  }
+
+  .fighter-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    max-height: 400px;
+    overflow: hidden;
+    cursor: default;
+  }
+
+  .dropdown-header {
+    padding: 12px 16px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+  }
+
+  .dropdown-list {
+    overflow-y: auto;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .fighter-opt {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    text-align: left;
+    transition: var(--transition);
+  }
+
+  .fighter-opt:hover {
+    background: var(--surface-hover);
+  }
+
+  .fighter-opt.selected {
+    background: rgba(219, 132, 31, 0.12);
+  }
+
+  .opt-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+
+  .opt-name {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    font-weight: 500;
   }
 
   .avatar-wrap {
@@ -329,14 +427,14 @@
   .charts-row {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 14px;
+    gap: 20px;
   }
 
   /* Silhouettes 2-column */
   .silhouettes-row {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 14px;
+    gap: 20px;
   }
 
   /* History table section */
@@ -344,14 +442,6 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-  }
-
-  .section-title {
-    font-size: 0.8rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-secondary);
   }
 
   @media (max-width: 1024px) {

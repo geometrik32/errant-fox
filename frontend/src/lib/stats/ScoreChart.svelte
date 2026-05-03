@@ -73,7 +73,8 @@
               beginAtZero: true,
               ticks: { display: false },
               grid: { display: false },
-              border: { display: false }
+              border: { display: false },
+              title: { display: true, text: 'Очки', color: '#6b7280', font: { size: 10 } }
             },
           },
         },

@@ -222,6 +222,8 @@
     height: calc(100vh - 64px);
     overflow: hidden;
     background: transparent;
+    padding: 16px;
+    gap: 16px;
   }
 
   .cols {
@@ -230,16 +232,17 @@
     min-height: 0;
     overflow: hidden;
     position: relative;
+    gap: 16px;
   }
 
   /* Toggle pills — float over top-left of video area */
   .panel-toggles {
     position: absolute;
     top: 8px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 16px;
+    transform: none;
     display: flex;
-    gap: 6px;
+    gap: 8px;
     z-index: 10;
   }
 
@@ -275,6 +278,12 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    background: var(--surface);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
   }
 
   .col-left {
@@ -295,6 +304,13 @@
 
   .timeline-row {
     flex-shrink: 0;
+    background: var(--surface);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
   }
 
   .state-msg {

@@ -162,7 +162,7 @@
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
-  class="backdrop"
+  class="modal-backdrop"
   role="presentation"
   onmousedown={onBackdropMousedown}
   onclick={onBackdropClick}
@@ -338,15 +338,15 @@
 </div>
 
 <style>
-  .backdrop {
+  .modal-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(3px);
+    background: rgba(0, 0, 0, 0.55);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 500;
+    padding: 16px;
   }
 
   .modal {
@@ -355,9 +355,8 @@
     -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
-    width: 480px;
-    max-width: calc(100vw - 24px);
-    max-height: 88vh;
+    width: 100%;
+    max-width: 480px;
     display: flex;
     flex-direction: column;
     box-shadow: var(--shadow-lg);
@@ -398,11 +397,12 @@
   }
 
   .modal-body {
-    padding: 24px 28px;
-    overflow-y: auto;
+    padding: 24px 28px 28px;
     display: flex;
     flex-direction: column;
-    gap: 0;
+    gap: 20px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
   }
 
   .section {
@@ -423,7 +423,7 @@
   .divider {
     height: 1px;
     background: var(--border-color);
-    margin: 24px 0;
+    margin: 8px 0;
   }
 
   /* Avatar pick */
@@ -465,9 +465,9 @@
 
   /* Form grid */
   .form-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
   }
 
   .field {
@@ -504,14 +504,23 @@
   }
 
   .color-input {
-    width: 40px;
+    width: 32px;
     height: 32px;
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    background: transparent;
+    border-radius: 50%;
+    padding: 0;
+    overflow: hidden;
     cursor: pointer;
-    padding: 2px;
-    flex-shrink: 0;
+    background: transparent;
+  }
+
+  .color-input::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+
+  .color-input::-webkit-color-swatch {
+    border: none;
+    border-radius: 50%;
   }
 
   .color-val {

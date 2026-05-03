@@ -358,7 +358,7 @@
       </button>
       <button class="btn btn-outline btn-sm" onclick={handleCollapse}>Свернуть</button>
       <button class="btn-delete" onclick={handleDelete} disabled={deleting} aria-label="Удалить сход">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
           <polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14H6L5,6"/><path d="M10,11v6"/><path d="M14,11v6"/><path d="M9,6V4h6v2"/>
         </svg>
       </button>
@@ -666,9 +666,11 @@
   }
 
   .btn-delete {
-    flex: none;
-    width: 34px;
-    padding: 6px 0;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    margin-left: auto;
     border-radius: var(--radius-sm);
     background: rgba(239, 68, 68, 0.08);
     border: 1px solid rgba(239, 68, 68, 0.2);

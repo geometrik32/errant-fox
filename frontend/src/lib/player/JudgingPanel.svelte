@@ -278,7 +278,7 @@
   <!-- ── Controls ─────────────────────────────────────────────────────────── -->
   <div class="controls">
     <button
-      class="btn btn-primary"
+      class="btn btn-primary btn-control"
       class:btn-primary--active={startTime !== null}
       onclick={() => { startTime = currentTime; finishError = null; }}
       aria-label="Зафиксировать начало схода"
@@ -291,7 +291,7 @@
     </button>
 
     <button
-      class="btn btn-outline"
+      class="btn btn-outline btn-control"
       disabled={startTime === null || finishing}
       onclick={handleFinish}
       aria-label="Зафиксировать конец схода"
@@ -340,8 +340,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: var(--surface-solid);
-    border-right: 1px solid var(--border-color);
+    background: transparent;
     overflow: hidden;
   }
 
@@ -446,6 +445,16 @@
     border-bottom: 1px solid var(--border-color);
   }
 
+  .btn-control {
+    flex: 1;
+    height: 44px;
+    font-size: 1rem;
+    font-weight: 700;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
   .start-hint {
     font-size: 0.7rem;
     font-weight: 400;
@@ -487,7 +496,7 @@
     justify-content: space-between;
     padding: 12px 16px;
     border-top: 1px solid var(--border-color);
-    background: var(--surface-solid);
+    background: transparent;
     flex-shrink: 0;
   }
 

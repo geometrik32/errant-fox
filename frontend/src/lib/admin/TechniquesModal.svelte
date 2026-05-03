@@ -94,127 +94,133 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="backdrop" onclick={handleBackdrop} role="dialog" aria-modal="true" aria-label="Техники">
+<div class="modal-backdrop" onclick={handleBackdrop} role="dialog" aria-modal="true" aria-label="Техники">
   <div class="modal">
-    <h2 class="title">Техники</h2>
-
-    <div class="list">
-      {#if $techniques.length === 0}
-        <p class="empty">Техники не добавлены</p>
-      {:else}
-        {#each $techniques as t (t.id)}
-          <div class="technique-item">
-            {#if editingId === t.id}
-              <!-- Edit mode (admin only) -->
-              <div class="edit-block">
-                <input
-                  class="input-glass edit-inp"
-                  type="text"
-                  bind:value={editName}
-                  placeholder="Название"
-                  onkeydown={(e) => { if (e.key === 'Enter') saveEdit(t.id); if (e.key === 'Escape') editingId = null; }}
-                  autofocus
-                />
-                <textarea
-                  class="input-glass edit-desc"
-                  bind:value={editDescription}
-                  placeholder="Описание (HTML, включая изображения и embed-видео YouTube/VK)"
-                  rows="6"
-                ></textarea>
-                <div class="edit-actions">
-                  <button class="btn btn-primary btn-sm" onclick={() => saveEdit(t.id)}>Сохранить</button>
-                  <button class="btn btn-outline btn-sm" onclick={() => { editingId = null; }}>Отмена</button>
-                </div>
-              </div>
-            {:else}
-              <!-- View mode -->
-              <div class="technique-row">
-                <button
-                  class="technique-name-btn"
-                  onclick={() => toggleExpanded(t.id)}
-                  title={t.description ? 'Нажмите для просмотра описания' : undefined}
-                >
-                  <span class="technique-name">{t.name}</span>
-                  {#if t.description}
-                    <span class="desc-indicator" class:expanded={expandedId === t.id}>▸</span>
-                  {/if}
-                </button>
-                {#if isAdmin}
-                  <div class="row-right">
-                    {#if deleteErrors[t.id]}
-                      <span class="row-error">{deleteErrors[t.id]}</span>
-                    {/if}
-                    <button
-                      class="btn-edit"
-                      onclick={() => startEdit(t.id, t.name, t.description)}
-                      aria-label="Редактировать {t.name}"
-                    >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                      </svg>
-                    </button>
-                    <button
-                      class="btn-delete"
-                      onclick={() => remove(t.id, t.name)}
-                      aria-label="Удалить технику {t.name}"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                      </svg>
-                    </button>
-                  </div>
-                {/if}
-              </div>
-              {#if expandedId === t.id && t.description}
-                <!-- Description panel -->
-                <div class="desc-panel">
-                  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                  {@html t.description}
-                </div>
-              {/if}
-            {/if}
-          </div>
-        {/each}
-      {/if}
+    <div class="modal-header">
+      <h2>Техники</h2>
+      <button class="close-btn" onclick={onclose} aria-label="Закрыть">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
     </div>
 
-    {#if isAdmin}
-      <div class="add-row">
-        <input
-          class="input-glass"
-          type="text"
-          bind:value={newName}
-          placeholder="Название техники"
-          onkeydown={handleAddKey}
-          autocomplete="off"
-        />
-        <button class="btn btn-primary" onclick={add} disabled={!canAdd}>
-          {adding ? '…' : 'Добавить'}
-        </button>
+    <div class="modal-body">
+      <div class="list">
+        {#if $techniques.length === 0}
+          <p class="empty">Техники не добавлены</p>
+        {:else}
+          {#each $techniques as t (t.id)}
+            <div class="technique-item">
+              {#if editingId === t.id}
+                <!-- Edit mode (admin only) -->
+                <div class="edit-block">
+                  <input
+                    class="input-glass edit-inp"
+                    type="text"
+                    bind:value={editName}
+                    placeholder="Название"
+                    onkeydown={(e) => { if (e.key === 'Enter') saveEdit(t.id); if (e.key === 'Escape') editingId = null; }}
+                    autofocus
+                  />
+                  <textarea
+                    class="input-glass edit-desc"
+                    bind:value={editDescription}
+                    placeholder="Описание (HTML, включая изображения и embed-видео YouTube/VK)"
+                    rows="6"
+                  ></textarea>
+                  <div class="edit-actions">
+                    <button class="btn btn-primary btn-sm" onclick={() => saveEdit(t.id)}>Сохранить</button>
+                    <button class="btn btn-outline btn-sm" onclick={() => { editingId = null; }}>Отмена</button>
+                  </div>
+                </div>
+              {:else}
+                <!-- View mode -->
+                <div class="technique-row">
+                  <button
+                    class="technique-name-btn"
+                    onclick={() => toggleExpanded(t.id)}
+                    title={t.description ? 'Нажмите для просмотра описания' : undefined}
+                  >
+                    <span class="technique-name">{t.name}</span>
+                    {#if t.description}
+                      <span class="desc-indicator" class:expanded={expandedId === t.id}>▸</span>
+                    {/if}
+                  </button>
+                  {#if isAdmin}
+                    <div class="row-right">
+                      {#if deleteErrors[t.id]}
+                        <span class="row-error">{deleteErrors[t.id]}</span>
+                      {/if}
+                      <button
+                        class="btn-edit"
+                        onclick={() => startEdit(t.id, t.name, t.description)}
+                        aria-label="Редактировать {t.name}"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                      </button>
+                      <button
+                        class="btn-delete"
+                        onclick={() => remove(t.id, t.name)}
+                        aria-label="Удалить технику {t.name}"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                      </button>
+                    </div>
+                  {/if}
+                </div>
+                {#if expandedId === t.id && t.description}
+                  <!-- Description panel -->
+                  <div class="desc-panel">
+                    <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                    {@html t.description}
+                  </div>
+                {/if}
+              {/if}
+            </div>
+          {/each}
+        {/if}
       </div>
-    {/if}
 
-    {#if addError}
-      <p class="error">{addError}</p>
-    {/if}
+      {#if isAdmin}
+        <div class="add-row">
+          <input
+            class="input-glass"
+            type="text"
+            bind:value={newName}
+            placeholder="Название техники"
+            onkeydown={handleAddKey}
+            autocomplete="off"
+            style="flex: 1;"
+          />
+          <button class="btn btn-primary" onclick={add} disabled={!canAdd}>
+            {adding ? '…' : 'Добавить'}
+          </button>
+        </div>
+      {/if}
 
-    <div class="actions">
-      <button class="btn-close" onclick={onclose}>Закрыть</button>
+      {#if addError}
+        <p class="error">{addError}</p>
+      {/if}
     </div>
   </div>
 </div>
 
 <style>
-  .backdrop {
+  .modal-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(3px);
+    background: rgba(0, 0, 0, 0.55);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 500;
+    padding: 16px;
   }
 
   .modal {
@@ -223,24 +229,56 @@
     -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
-    padding: 32px;
-    width: 480px;
-    max-width: calc(100vw - 32px);
-    max-height: calc(100vh - 64px);
+    box-shadow: var(--shadow-lg);
+    width: 100%;
+    max-width: 480px;
     display: flex;
     flex-direction: column;
-    gap: 20px;
-    box-shadow: var(--shadow-lg);
     overflow: hidden;
   }
 
-  .title {
-    font-size: 1.05rem;
-    font-weight: 600;
-    color: #e8edf2;
-    margin: 0;
-    flex-shrink: 0;
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 24px 28px 16px;
+    border-bottom: 1px solid var(--border-color);
   }
+
+  .modal-header h2 {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+  }
+
+  .close-btn {
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 50%;
+    display: flex;
+    transition: var(--transition);
+  }
+
+  .close-btn:hover {
+    color: var(--text-primary);
+    transform: scale(1.05);
+  }
+
+  .modal-body {
+    padding: 24px 28px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+  }
+
+
 
   .list {
     display: flex;

@@ -303,13 +303,23 @@
   }
 
   .color-input {
-    width: 48px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    background: transparent;
+    border-radius: 50%;
+    padding: 0;
+    overflow: hidden;
     cursor: pointer;
-    padding: 2px;
+    background: transparent;
+  }
+
+  .color-input::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+
+  .color-input::-webkit-color-swatch {
+    border: none;
+    border-radius: 50%;
   }
 
   .color-val {
@@ -330,20 +340,7 @@
     color: var(--text-secondary);
   }
 
-  .field input[type="text"],
-  .field input[type="password"] {
-    background: #0d1b2a;
-    border: 1px solid #1f3a57;
-    border-radius: 6px;
-    color: #e8edf2;
-    padding: 9px 12px;
-    font-size: 0.9rem;
-    outline: none;
-    transition: border-color 0.2s;
-  }
-
-  .field input:focus { border-color: #DB841F; }
-  .field input:disabled { color: #4a6280; cursor: not-allowed; }
+  .field input:disabled { color: var(--text-secondary); cursor: not-allowed; }
 
   .divider {
     height: 1px;
