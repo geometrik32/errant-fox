@@ -4,11 +4,11 @@
 
   interface Props {
     bouts: FighterBout[];
-    rawVideoDates?: string[];
+    rawVideos?: any[];
     onfilter?: (week: string) => void;
   }
 
-  let { bouts, rawVideoDates = [], onfilter }: Props = $props();
+  let { bouts, rawVideos = [], onfilter }: Props = $props();
 
   let canvas = $state<HTMLCanvasElement | undefined>(undefined);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -35,48 +35,42 @@
     return getISOWeek(new Date(ms).toISOString().slice(0, 10));
   }
 
-  function buildData(bouts: FighterBout[], rawVideoDates: string[]) {
-    // Weeks that have at least one bout-tagged video
+  function buildData(bouts: FighterBout[], rawVideos: any[]) {
     const taggedWeeks = new Map<string, number>();
     for (const b of bouts) {
       const week = getISOWeek(b.video_date);
       taggedWeeks.set(week, (taggedWeeks.get(week) ?? 0) + 1);
     }
-
-    // All weeks that have any video (tagged or not)
-    const allVideoWeeks = new Set<string>();
-    for (const d of rawVideoDates) {
-      if (d) allVideoWeeks.add(getISOWeek(d));
+    
+    const untaggedWeeks = new Map<string, number>();
+    for (const v of rawVideos) {
+      if (v.date && !v.is_tagged) {
+        const week = getISOWeek(v.date);
+        untaggedWeeks.set(week, (untaggedWeeks.get(week) ?? 0) + 1);
+      }
     }
-    // Merge tagged weeks in too
-    for (const w of taggedWeeks.keys()) allVideoWeeks.add(w);
 
-    if (allVideoWeeks.size === 0 && taggedWeeks.size === 0)
-      return { labels: [], data: [], bgColors: [], yearBoundaries: [] };
+    const allVideoWeeks = new Set<string>([...taggedWeeks.keys(), ...untaggedWeeks.keys()]);
+
+    if (allVideoWeeks.size === 0) return { labels: [], taggedData: [], untaggedData: [], yearBoundaries: [] };
 
     const sortedWeeks = [...allVideoWeeks].sort();
-    const first = sortedWeeks[0];
-    const last = sortedWeeks[sortedWeeks.length - 1];
+    const firstYear = parseInt(sortedWeeks[0].split('-W')[0]);
+    const currentYear = new Date().getFullYear();
+    
+    const firstWeek = `${firstYear}-W01`;
+    const lastWeek = `${currentYear}-W52`;
 
-    // Fill every week between first and last
     const allWeeks: string[] = [];
-    let cur = first;
-    while (cur <= last) {
+    let cur = firstWeek;
+    while (cur <= lastWeek) {
       allWeeks.push(cur);
       cur = addWeeks(cur, 1);
     }
 
-    const data = allWeeks.map(w => {
-      if (taggedWeeks.has(w)) return taggedWeeks.get(w)!;
-      if (allVideoWeeks.has(w)) return 0.3;  // show a thin bar for untagged weeks
-      return 0;
-    });
+    const taggedData = allWeeks.map(w => taggedWeeks.get(w) ?? 0);
+    const untaggedData = allWeeks.map(w => untaggedWeeks.get(w) ?? 0);
 
-    const bgColors = allWeeks.map(w =>
-      taggedWeeks.has(w) ? '#fbbf24' : allVideoWeeks.has(w) ? 'rgba(100,130,160,0.4)' : 'transparent'
-    );
-
-    // Find year boundary indices (where ISO year changes)
     const yearBoundaries: number[] = [];
     for (let i = 1; i < allWeeks.length; i++) {
       if (allWeeks[i].split('-W')[0] !== allWeeks[i - 1].split('-W')[0]) {
@@ -84,21 +78,25 @@
       }
     }
 
-    // Labels: year at week-1, week number every 4 weeks, empty otherwise
+    const monthNames = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
     const labels = allWeeks.map((w, i) => {
       const [year, wStr] = w.split('-W');
       const wNum = parseInt(wStr);
-      if (wNum === 1 || i === 0) return `${year.slice(2)} W01`;
-      if (wNum % 8 === 0) return `W${wStr}`;
+      const date = new Date(parseInt(year), 0, 1 + (wNum - 1) * 7);
+      const month = date.getMonth();
+      const prevDate = i > 0 ? new Date(parseInt(allWeeks[i-1].split('-W')[0]), 0, 1 + (parseInt(allWeeks[i-1].split('-W')[1]) - 1) * 7) : null;
+      if (i === 0 || (prevDate && month !== prevDate.getMonth())) {
+        return monthNames[month];
+      }
       return '';
     });
 
-    return { labels, data, bgColors, yearBoundaries, allWeeks };
+    return { labels, taggedData, untaggedData, yearBoundaries, allWeeks };
   }
 
   $effect(() => {
     if (!canvas) return;
-    const { labels, data, bgColors, yearBoundaries, allWeeks = [] } = buildData(bouts, rawVideoDates);
+    const { labels, taggedData, untaggedData, yearBoundaries, allWeeks = [] } = buildData(bouts, rawVideos);
 
     const yearLinePlugin = {
       id: 'yearLines',
@@ -118,7 +116,6 @@
           ctx.moveTo(x, chartArea.top);
           ctx.lineTo(x, chartArea.bottom);
           ctx.stroke();
-          // Year label
           const year = '20' + (allWeeks[idx]?.split('-W')[0]?.slice(2) ?? '');
           ctx.setLineDash([]);
           ctx.fillStyle = 'rgba(160,180,200,0.7)';
@@ -138,14 +135,24 @@
         plugins: [yearLinePlugin],
         data: {
           labels,
-          datasets: [{
-            label: 'Бои',
-            data,
-            backgroundColor: bgColors,
-            borderRadius: 2,
-            borderSkipped: false,
-            barPercentage: 0.7,
-          }],
+          datasets: [
+            {
+              label: 'Размечено',
+              data: taggedData,
+              backgroundColor: '#fbbf24',
+              borderRadius: 2,
+              borderSkipped: false,
+              barPercentage: 0.7,
+            },
+            {
+              label: 'Не размечено',
+              data: untaggedData,
+              backgroundColor: 'rgba(100,130,160,0.3)',
+              borderRadius: 2,
+              borderSkipped: false,
+              barPercentage: 0.7,
+            }
+          ],
         },
         options: {
           responsive: true,
@@ -171,11 +178,13 @@
           },
           scales: {
             x: {
+              stacked: true,
               ticks: { color: '#6b7280', font: { family: 'Inter', size: 10 }, maxRotation: 0 },
               grid: { display: false },
               border: { display: false }
             },
             y: {
+              stacked: true,
               beginAtZero: true,
               ticks: { display: true, color: '#6b7280', font: { size: 10 }, stepSize: 1 },
               grid: { display: false },

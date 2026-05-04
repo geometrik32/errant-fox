@@ -48,6 +48,13 @@
   let mostUsed = $derived(topBy(bouts, (b) => b.my_technique_name));
   let mostMissed = $derived(topBy(bouts.filter(b => b.my_result === 'miss'), (b) => b.my_technique_name));
   let mostReceived = $derived(topBy(bouts.filter(b => b.opponent_result === 'hit'), (b) => b.opponent_technique_name));
+
+  let defenseStats = $derived.by(() => {
+    const relevant = bouts.filter(b => b.opponent_result === 'hit' || b.opponent_result === 'miss' || b.opponent_result === 'blocked');
+    if (relevant.length === 0) return 0;
+    const defended = relevant.filter(b => b.opponent_result === 'miss' || b.opponent_result === 'blocked').length;
+    return Math.round((defended / relevant.length) * 100);
+  });
 </script>
 
 <div class="kpi-grid">
@@ -113,6 +120,18 @@
     <div class="kpi-info">
       <div class="kpi-label">Винрейт по сходам</div>
       <div class="kpi-value">{boutWinRate}%</div>
+    </div>
+  </div>
+
+  <div class="kpi-card glass-card">
+    <div class="kpi-icon" style="background: rgba(46, 204, 113, 0.1); color: #2ecc71;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+    </div>
+    <div class="kpi-info">
+      <div class="kpi-label">Защита</div>
+      <div class="kpi-value">{defenseStats}%</div>
     </div>
   </div>
 

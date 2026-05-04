@@ -14,21 +14,22 @@
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let chart: any = null;
 
-  function buildVideoScores(bouts: FighterBout[]) {
-    const videoMap = new Map<string, { video_id: string; date: string; score: number }>();
+  function buildChartData(bouts: FighterBout[]) {
+    const videoMap = new Map<string, { video_id: string; date: string; opponent_name: string; my: number; opp: number }>();
     for (const b of bouts) {
       const v = videoMap.get(b.video_id);
-      if (v) { v.score += b.my_score; }
-      else videoMap.set(b.video_id, { video_id: b.video_id, date: b.video_date, score: b.my_score });
+      if (v) { v.my += b.my_score; v.opp += b.opponent_score; }
+      else videoMap.set(b.video_id, { video_id: b.video_id, date: b.video_date, opponent_name: b.opponent_name, my: b.my_score, opp: b.opponent_score });
     }
     return [...videoMap.values()].sort((a, b) => a.date.localeCompare(b.date));
   }
 
   $effect(() => {
     if (!canvas) return;
-    const sessions = buildVideoScores(bouts);
-    const labels = sessions.map(s => videoLabels.get(s.video_id) ?? s.date);
-    const data = sessions.map(s => s.score);
+    const sessions = buildChartData(bouts);
+    const labels = sessions.map(s => s.opponent_name || s.date.slice(5));
+    const myData = sessions.map(s => s.my);
+    const oppData = sessions.map(s => s.opp);
 
     import('chart.js').then(({ Chart, registerables }) => {
       Chart.register(...registerables);
@@ -37,19 +38,32 @@
         type: 'line',
         data: {
           labels,
-          datasets: [{
-            label: 'Очки',
-            data,
-            borderColor: '#fbbf24',
-            backgroundColor: 'rgba(251, 191, 36, 0.2)',
-            pointBackgroundColor: '#ffffff',
-            pointBorderColor: '#fbbf24',
-            pointBorderWidth: 2,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-            tension: 0.4,
-            fill: true,
-          }],
+          datasets: [
+            {
+              label: 'Мои баллы',
+              data: myData,
+              borderColor: '#fbbf24',
+              backgroundColor: 'rgba(251, 191, 36, 0.1)',
+              pointBackgroundColor: '#ffffff',
+              pointBorderColor: '#fbbf24',
+              pointBorderWidth: 2,
+              pointRadius: 4,
+              tension: 0.4,
+              fill: true,
+            },
+            {
+              label: 'Баллы оппонента',
+              data: oppData,
+              borderColor: '#60a5fa',
+              backgroundColor: 'transparent',
+              pointBackgroundColor: '#ffffff',
+              pointBorderColor: '#60a5fa',
+              pointBorderWidth: 2,
+              pointRadius: 4,
+              tension: 0.4,
+              fill: false,
+            }
+          ],
         },
         options: {
           responsive: true,

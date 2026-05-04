@@ -13,33 +13,36 @@
   let recentOpponents = $derived.by(() => {
     // Group bouts by (opponent_id, video_id) to get per-fight scores
     type FightKey = string;
-    const fights = new Map<FightKey, { oppId: string; oppName: string; myScore: number; oppScore: number }>();
+    const fights = new Map<FightKey, { oppId: string; myScore: number; oppScore: number }>();
     for (const b of bouts) {
       const key: FightKey = `${b.opponent_id}::${b.video_id}`;
       const f = fights.get(key);
       if (f) { f.myScore += b.my_score; f.oppScore += b.opponent_score; }
-      else fights.set(key, { oppId: b.opponent_id, oppName: b.opponent_name, myScore: b.my_score, oppScore: b.opponent_score });
+      else fights.set(key, { oppId: b.opponent_id, myScore: b.my_score, oppScore: b.opponent_score });
     }
 
-    const uniqueMap = new Map<string, { id: string; name: string; wins: number; losses: number; total: number }>();
-    for (const { oppId, oppName, myScore, oppScore } of fights.values()) {
-      if (!uniqueMap.has(oppId)) {
-        uniqueMap.set(oppId, { id: oppId, name: oppName, wins: 0, losses: 0, total: 0 });
-      }
-      const opp = uniqueMap.get(oppId)!;
-      opp.total += 1;
-      if (myScore > oppScore) opp.wins += 1;
-      else if (myScore < oppScore) opp.losses += 1;
+    const fightStats = new Map<string, { wins: number; losses: number; total: number }>();
+    for (const { oppId, myScore, oppScore } of fights.values()) {
+      if (!fightStats.has(oppId)) fightStats.set(oppId, { wins: 0, losses: 0, total: 0 });
+      const s = fightStats.get(oppId)!;
+      s.total += 1;
+      if (myScore > oppScore) s.wins += 1;
+      else if (myScore < oppScore) s.losses += 1;
     }
 
-    return [...uniqueMap.values()].map(opp => {
-      const f = $fighters.find(f => f.id === opp.id);
-      const balance = opp.wins - opp.losses;
+    // Map all fighters from the store
+    return $fighters.map(f => {
+      const stats = fightStats.get(f.id) || { wins: 0, losses: 0, total: 0 };
+      const balance = stats.wins - stats.losses;
       return {
-        ...opp,
+        id: f.id,
+        name: f.display_name || f.username,
+        wins: stats.wins,
+        losses: stats.losses,
+        total: stats.total,
         balance,
-        avatar_url: f?.avatar_url,
-        color: resolveColor(opp.id, f?.color)
+        avatar_url: f.avatar_url,
+        color: resolveColor(f.id, f.color)
       };
     });
   });

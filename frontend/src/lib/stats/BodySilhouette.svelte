@@ -152,7 +152,7 @@
     <svg viewBox="0 0 350 1055" xmlns="http://www.w3.org/2000/svg" class="svg">
 
       <!-- Голова -->
-      <rect x="113" y="0" width="125" height="125" rx="20"
+      <rect x="112.5" y="0" width="125" height="125" rx="20"
         fill={fill('Голова')} stroke={strokeColor('Голова')} stroke-width="2" class="zone"
         onclick={() => handleZoneClick('Голова')}><title>Голова: {cnt('Голова')}</title></rect>
 
@@ -276,9 +276,10 @@
 
   .card-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
     margin-bottom: 16px;
+    position: relative;
   }
 
   .card-title {
@@ -286,6 +287,7 @@
     font-weight: 700;
     color: var(--text-primary);
     margin: 0;
+    text-align: center;
   }
 
   /* Header zones: head/neck | total | body/pelvis */
@@ -304,6 +306,7 @@
   .header-group {
     display: flex;
     gap: 6px;
+    flex: 1;
   }
 
   .header-group--left { justify-content: flex-start; }
@@ -432,6 +435,8 @@
   }
 
   .zone-filter-badge {
+    position: absolute;
+    right: 0;
     display: flex;
     align-items: center;
     gap: 6px;
