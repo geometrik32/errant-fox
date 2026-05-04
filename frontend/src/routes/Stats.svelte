@@ -12,6 +12,7 @@
   import TopTechniques from '../lib/stats/TopTechniques.svelte';
   import RecentOpponents from '../lib/stats/RecentOpponents.svelte';
   import HistoryTable from '../lib/stats/HistoryTable.svelte';
+  import RadarChart from '../lib/stats/RadarChart.svelte';
   import type { TableFilters } from '../lib/stats/HistoryTable.svelte';
   import type { Fighter, FighterBout } from '../lib/api/types';
   import { buildVideoLabels } from '../lib/api/types';
@@ -19,7 +20,7 @@
   let selectedFighter = $state<Fighter | null>(null);
   let rawBouts = $state<FighterBout[]>([]);
   let totalVideos = $state(0);
-  let rawVideoDates = $state<string[]>([]);
+  let rawVideos = $state<any[]>([]);
   let loading = $state(false);
   let errorMsg = $state('');
 
@@ -133,7 +134,7 @@
       ]);
       rawBouts = bouts;
       totalVideos = vids.length;
-      rawVideoDates = vids.map(v => v.date ?? '').filter(Boolean);
+      rawVideos = vids;
     } catch (e) {
       errorMsg = e instanceof Error ? e.message : 'Ошибка загрузки данных';
     } finally {
@@ -236,7 +237,12 @@
           {/if}
         </div>
 
-        <QuickStats bouts={filteredBouts} {totalVideos} />
+        <div class="quick-stats-wrapper">
+          <QuickStats bouts={filteredBouts} {totalVideos} />
+        </div>
+        <div class="radar-chart-wrapper">
+          <RadarChart bouts={filteredBouts} />
+        </div>
       </div>
 
       <!-- Trends row: win dynamics + fight frequency -->
@@ -245,7 +251,7 @@
           <ResultsChart bouts={filteredBouts} {videoLabels} onfilter={(date) => handleFilter({...tableFilters, date})} />
         </div>
         <div class="trends-side">
-          <FrequencyChart bouts={filteredBouts} {rawVideoDates} onfilter={(week) => handleFilter({...tableFilters, date_week: week})} />
+          <FrequencyChart bouts={filteredBouts} {rawVideos} onfilter={(week) => handleFilter({...tableFilters, date_week: week})} />
         </div>
       </div>
 
@@ -330,6 +336,17 @@
     display: flex;
     gap: 20px;
     align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .quick-stats-wrapper {
+    flex: 2;
+    min-width: 300px;
+  }
+
+  .radar-chart-wrapper {
+    flex: 1;
+    min-width: 250px;
   }
 
   .fighter-hero {

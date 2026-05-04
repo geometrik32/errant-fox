@@ -40,7 +40,7 @@
   };
   // 'date' hidden by default (available in column picker); 'video' shown
   let visibleCols = $state<Set<ColKey>>(new Set(
-    (Object.keys(COL_LABELS) as ColKey[]).filter(k => k !== 'date')
+    (Object.keys(COL_LABELS) as ColKey[])
   ));
   let showColPicker = $state(false);
 
@@ -400,6 +400,7 @@
     padding: 10px 12px;
     color: var(--text-primary);
     vertical-align: middle;
+    text-align: left;
   }
 
   .td.empty {
