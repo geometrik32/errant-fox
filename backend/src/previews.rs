@@ -23,10 +23,13 @@ struct FfprobeFormat {
 }
 
 /// Run ffprobe on `input` (URL or file path), return duration in seconds.
+/// The `-user_agent` flag is only added for HTTP inputs.
 async fn get_duration(input: &str) -> Result<f64, String> {
-    let output = Command::new("ffprobe")
-        .arg("-user_agent")
-        .arg(FAKE_USER_AGENT)
+    let mut cmd = Command::new("ffprobe");
+    if input.starts_with("http") {
+        cmd.arg("-user_agent").arg(FAKE_USER_AGENT);
+    }
+    let output = cmd
         .arg("-v")
         .arg("error")
         .arg("-show_entries")
@@ -55,10 +58,13 @@ async fn get_duration(input: &str) -> Result<f64, String> {
 }
 
 /// Run ffmpeg on `input` (URL or file path), extract one frame at `seek_secs`.
+/// The `-user_agent` flag is only added for HTTP inputs.
 async fn extract_frame(input: &str, seek_secs: f64, output_pattern: &str) -> Result<(), String> {
-    let output = Command::new("ffmpeg")
-        .arg("-user_agent")
-        .arg(FAKE_USER_AGENT)
+    let mut cmd = Command::new("ffmpeg");
+    if input.starts_with("http") {
+        cmd.arg("-user_agent").arg(FAKE_USER_AGENT);
+    }
+    let output = cmd
         .arg("-y")
         .arg("-ss")
         .arg(format!("{:.3}", seek_secs))
