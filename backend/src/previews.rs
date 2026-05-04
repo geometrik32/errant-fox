@@ -49,12 +49,13 @@ async fn get_duration(download_url: &str) -> Result<f64, String> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(stderr.to_string());
+        let code = output.status.code().unwrap_or(-1);
+        return Err(format!("ffprobe exit={code}: {stderr}"));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let parsed: FfprobeOutput =
-        serde_json::from_str(&stdout).map_err(|e| format!("ffprobe json: {e}"))?;
+        serde_json::from_str(&stdout).map_err(|e| format!("ffprobe json: {e} (stdout: {stdout:.200})"))?;
     let secs: f64 = parsed.format.duration.parse().unwrap_or(60.0);
     Ok(secs)
 }
@@ -89,8 +90,9 @@ async fn extract_frame(
         .map_err(|e| format!("ffmpeg spawn: {e}"))?;
 
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        return Err(stderr);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let code = output.status.code().unwrap_or(-1);
+        return Err(format!("ffmpeg exit={code}: {stderr}"));
     }
     Ok(())
 }
