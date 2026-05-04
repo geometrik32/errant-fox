@@ -215,33 +215,13 @@ pub async fn generate_previews(
         .await
         .map_err(|e| AppError::Internal(format!("create_dir_all: {e}")))?;
 
-    let preview_file = output_dir.join("0.jpg");
     let output_pattern = output_dir
         .join("%d.jpg")
         .to_string_lossy()
         .into_owned();
     let tmp_path = output_dir.join("video.tmp");
 
-    // ── 1. Try Seafile server-side thumbnail API (no ffmpeg at all) ──────
-    match seafile.get_thumbnail(seafile_path, 480).await {
-        Ok(Some(bytes)) => {
-            tokio::fs::write(&preview_file, &bytes)
-                .await
-                .map_err(|e| AppError::Internal(format!("write preview: {e}")))?;
-            set_preview_count(db, video_id, N_FRAMES as i32).await?;
-            tracing::info!("previews generated for {video_id} via Seafile API");
-            return Ok(());
-        }
-        Ok(None) => {
-            // seafevents not installed — fall through to ffmpeg.
-            tracing::debug!("Seafile thumbnail API not available, falling back to ffmpeg");
-        }
-        Err(e) => {
-            tracing::warn!("Seafile thumbnail API error for {video_id}: {e}, falling back to ffmpeg");
-        }
-    }
-
-    // ── 2. ffmpeg: try remote (fast path) ─────────────────────────────────
+    // ── 1. ffmpeg: try remote (fast path) ─────────────────────────────────
     match attempt_remote(seafile, seafile_path, &output_pattern).await {
         Ok(dur) => {
             set_duration(db, video_id, (dur * 1000.0) as i32).await?;
