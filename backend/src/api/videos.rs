@@ -559,20 +559,16 @@ pub async fn get_preview_frame(
         let vid_id = video_id.clone();
 
         tokio::spawn(async move {
-            match seafile.get_download_url(&seafile_path).await {
-                Ok(url) => {
-                    if let Err(e) = crate::previews::generate_previews(
-                        &vid_id,
-                        &url,
-                        std::path::Path::new(&previews_dir),
-                        &db,
-                    )
-                    .await
-                    {
-                        tracing::error!("generate_previews failed for {vid_id}: {e:?}");
-                    }
-                }
-                Err(e) => tracing::error!("get_download_url failed for {vid_id}: {e}"),
+            if let Err(e) = crate::previews::generate_previews(
+                &vid_id,
+                &seafile,
+                &seafile_path,
+                std::path::Path::new(&previews_dir),
+                &db,
+            )
+            .await
+            {
+                tracing::error!("generate_previews failed for {vid_id}: {e:?}");
             }
         });
 
