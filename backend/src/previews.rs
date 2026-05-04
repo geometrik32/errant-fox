@@ -1,55 +1,20 @@
 use std::path::Path;
 use std::process::Stdio;
 
-use futures_util::StreamExt;
-use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
 use crate::{db::DbPool, errors::AppError, seafile::SeafileClient};
 
-const SEEK_SECS: f64 = 10.0;
+const FAKE_USER_AGENT: &str = "Mozilla/5.0";
 const PREVIEW_FAILED: i32 = -1;
 
-/// Download `url` to `tmp_path` using streaming (no full-file RAM buffer).
-async fn download_to_file(video_id: &str, url: &str, tmp_path: &Path) -> Result<(), String> {
-    let response = reqwest::get(url)
-        .await
-        .map_err(|e| format!("GET: {e}"))?;
-
-    if !response.status().is_success() {
-        return Err(format!("HTTP {}", response.status().as_u16()));
-    }
-
-    let size_hint = response.content_length();
-    tracing::info!(
-        "[{video_id}] downloading  size={:.0}MB",
-        size_hint.unwrap_or(0) as f64 / 1_048_576.0
-    );
-
-    let mut file = tokio::fs::File::create(tmp_path)
-        .await
-        .map_err(|e| format!("create tmp: {e}"))?;
-
-    let mut stream = response.bytes_stream();
-    let mut total: u64 = 0;
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| format!("stream: {e}"))?;
-        total += chunk.len() as u64;
-        file.write_all(&chunk).await.map_err(|e| format!("write: {e}"))?;
-    }
-
-    tracing::info!("[{video_id}] downloaded {total}B ({:.1}MB)", total as f64 / 1_048_576.0);
-    Ok(())
-}
-
-/// Extract one frame at SEEK_SECS from a local file path.
-async fn extract_frame(video_id: &str, input: &str, output: &str) -> Result<(), String> {
-    tracing::info!("[{video_id}] ffmpeg  seek={SEEK_SECS}s  input={input}");
+async fn extract_frame(video_id: &str, url: &str, output: &str) -> Result<(), String> {
+    tracing::info!("[{video_id}] ffmpeg extract first frame");
 
     let result = Command::new("ffmpeg")
         .arg("-y")
-        .arg("-ss").arg(format!("{:.3}", SEEK_SECS))
-        .arg("-i").arg(input)
+        .arg("-user_agent").arg(FAKE_USER_AGENT)
+        .arg("-i").arg(url)
         .arg("-vf").arg("scale=480:-1")
         .arg("-vframes").arg("1")
         .arg("-start_number").arg("0")
@@ -63,7 +28,7 @@ async fn extract_frame(video_id: &str, input: &str, output: &str) -> Result<(), 
     if !result.status.success() {
         let stderr = String::from_utf8_lossy(&result.stderr);
         let code = result.status.code().unwrap_or(-1);
-        tracing::warn!("[{video_id}] ffmpeg FAILED (exit={code}):\n{stderr:.600}");
+        tracing::warn!("[{video_id}] ffmpeg FAILED (exit={code}):\n{stderr:.500}");
         return Err(format!("ffmpeg exit={code}"));
     }
 
@@ -113,27 +78,14 @@ pub async fn generate_previews(
         .await
         .map_err(|e| AppError::Internal(format!("mkdir: {e}")))?;
 
-    let tmp_path = output_dir.join("video.tmp");
     let output_pattern = output_dir.join("%d.jpg").to_string_lossy().into_owned();
 
-    let result: Result<(), String> = async {
-        let url = seafile
-            .get_download_url(seafile_path)
-            .await
-            .map_err(|e| format!("seafile url: {e}"))?;
+    let download_url = seafile
+        .get_download_url(seafile_path)
+        .await
+        .map_err(|e| AppError::Internal(format!("seafile url: {e}")))?;
 
-        download_to_file(video_id, &url, &tmp_path).await?;
-
-        let tmp_str = tmp_path.to_string_lossy().into_owned();
-        extract_frame(video_id, &tmp_str, &output_pattern).await?;
-
-        Ok(())
-    }
-    .await;
-
-    let _ = tokio::fs::remove_file(&tmp_path).await;
-
-    match result {
+    match extract_frame(video_id, &download_url, &output_pattern).await {
         Ok(()) => {
             set_preview_count(db, video_id, 1).await?;
             tracing::info!("[{video_id}] DONE");
