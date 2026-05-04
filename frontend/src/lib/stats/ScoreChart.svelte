@@ -57,7 +57,7 @@
           onClick: (e, elements) => {
             if (elements.length > 0 && onfilter) {
               const index = elements[0].index;
-              const date = rawData[index].video_date;
+              const date = sessions[index].date;
               if (date) onfilter(date);
             }
           },

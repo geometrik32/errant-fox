@@ -15,6 +15,7 @@
     opponent_zone: string;
     score: string;
     date_week: string;
+    video: string;
     sort_col: string;
     sort_dir: 'asc' | 'desc';
   }
@@ -117,7 +118,9 @@
         {#if visibleCols.has('video')}
         <th class="th sortable" onclick={() => toggleSort('video_date')}>
           <span>Видео <span class="sort-icon">{sortIcon('video_date')}</span></span>
-          <div class="filter-spacer"></div>
+          <input class="filter-input" type="text" placeholder="Поиск…" value={filters.video ?? ''}
+            oninput={(e) => setFilter('video', (e.target as HTMLInputElement).value)}
+            onclick={(e) => e.stopPropagation()} />
         </th>
         {/if}
         {#if visibleCols.has('date')}
@@ -248,7 +251,7 @@
           <td class="td score">
             <span class:win={bout.my_score > bout.opponent_score} class:loss={bout.my_score < bout.opponent_score}>{bout.my_score}</span>
             <span class="sep">:</span>
-            <span class:win={bout.opponent_score > bout.my_score} class:loss={bout.opponent_score < bout.my_score}>{bout.opponent_score}</span>
+            <span class:win={bout.my_score > bout.opponent_score} class:loss={bout.my_score < bout.opponent_score}>{bout.opponent_score}</span>
           </td>
           {/if}
           {#if visibleCols.has('my_tech')}<td class="td">{bout.my_technique_name ?? '—'}</td>{/if}

@@ -21,22 +21,23 @@
       else fights.set(key, { oppId: b.opponent_id, oppName: b.opponent_name, myScore: b.my_score, oppScore: b.opponent_score });
     }
 
-    const uniqueMap = new Map<string, { id: string; name: string; scoreDiff: number; wins: number; losses: number; total: number }>();
+    const uniqueMap = new Map<string, { id: string; name: string; wins: number; losses: number; total: number }>();
     for (const { oppId, oppName, myScore, oppScore } of fights.values()) {
       if (!uniqueMap.has(oppId)) {
-        uniqueMap.set(oppId, { id: oppId, name: oppName, scoreDiff: 0, wins: 0, losses: 0, total: 0 });
+        uniqueMap.set(oppId, { id: oppId, name: oppName, wins: 0, losses: 0, total: 0 });
       }
       const opp = uniqueMap.get(oppId)!;
       opp.total += 1;
-      opp.scoreDiff += myScore - oppScore;
       if (myScore > oppScore) opp.wins += 1;
       else if (myScore < oppScore) opp.losses += 1;
     }
 
     return [...uniqueMap.values()].map(opp => {
       const f = $fighters.find(f => f.id === opp.id);
+      const balance = opp.wins - opp.losses;
       return {
         ...opp,
+        balance,
         avatar_url: f?.avatar_url,
         color: resolveColor(opp.id, f?.color)
       };
@@ -70,8 +71,8 @@
           <div>Поражений: <span class="stat-val">{opp.losses}</span></div>
           <div>Всего: <span class="stat-val">{opp.total}</span></div>
         </div>
-        <div class="opp-score" class:positive={opp.scoreDiff > 0} class:negative={opp.scoreDiff < 0}>
-          Баланс: {opp.scoreDiff > 0 ? '+' : ''}{opp.scoreDiff}
+        <div class="opp-score" class:positive={opp.balance > 0} class:negative={opp.balance < 0}>
+          Баланс: {opp.balance > 0 ? '+' : ''}{opp.balance}
         </div>
       </div>
     {:else}
