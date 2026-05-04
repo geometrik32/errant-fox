@@ -230,6 +230,12 @@
     return RESULT_OPTIONS.find(o => o.value === val)?.label ?? val;
   }
 
+  // ── Portal action (escape backdrop-filter containing block) ─────────────────
+  function portal(node: HTMLElement): { destroy: () => void } {
+    document.body.appendChild(node);
+    return { destroy() { if (node.parentNode) node.parentNode.removeChild(node); } };
+  }
+
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
   function fmtMs(ms: number): string {
@@ -383,11 +389,11 @@
 
     </div>
 
-    <!-- Result dropdown rendered at viewport level to escape overflow clipping -->
+    <!-- Result dropdown — appended to body via portal to escape backdrop-filter containing block -->
     {#if resDropdown && resDropdownPos}
       <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-      <div class="dropdown-backdrop" onclick={closeResDropdown}></div>
-      <div class="res-dropdown" style="top: {resDropdownPos.top}px; left: {resDropdownPos.left}px; width: {resDropdownPos.width}px">
+      <div class="dropdown-backdrop" use:portal onclick={closeResDropdown}></div>
+      <div class="res-dropdown" use:portal style="top: {resDropdownPos.top}px; left: {resDropdownPos.left}px; width: {resDropdownPos.width}px">
         {#each RESULT_OPTIONS as opt (opt.value)}
           <button
             class="res-option"
@@ -400,13 +406,14 @@
       </div>
     {/if}
 
-    <!-- Tooltip rendered at viewport level to escape overflow clipping -->
+    <!-- Tooltip — appended to body via portal to escape backdrop-filter containing block -->
     {#if showTooltip && tooltipPos}
       {@const desc = showTooltip === 'a' ? techADescription : techBDescription}
       {#if desc}
         <div
           class="tech-tooltip"
-          style="top: {tooltipPos.top}px; left: {tooltipPos.left}px; min-width: {tooltipPos.width}px"
+          use:portal
+          style="top: {tooltipPos.top}px; left: {tooltipPos.left}px;"
         >
           <!-- eslint-disable-next-line svelte/no-at-html-tags -->
           {@html desc}

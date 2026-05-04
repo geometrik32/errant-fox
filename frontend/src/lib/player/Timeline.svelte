@@ -80,11 +80,13 @@
   }
 
   function fmtWithFrame(sec: number): string {
-    const m = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60);
-    const f = Math.floor((sec % 1) * fps);
+    const totalFrames = Math.round(sec * fps);
+    const framesInSec = totalFrames % fps;
+    const totalSecs = Math.floor(totalFrames / fps);
+    const m = Math.floor(totalSecs / 60);
+    const s = totalSecs % 60;
     const padLen = String(fps).length < 3 ? 3 : String(fps).length;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}:${String(f).padStart(padLen, '0')}`;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}:${String(framesInSec).padStart(padLen, '0')}`;
   }
 
   let progressEl: HTMLDivElement | null = $state(null);
