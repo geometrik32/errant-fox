@@ -122,9 +122,6 @@
         <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showProfile = true; }}>
           Профиль
         </button>
-        <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; toggleTheme(); }}>
-          Сменить тему
-        </button>
 
         <div class="dropdown-divider"></div>
         <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showTechniques = true; }}>
