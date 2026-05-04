@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { fighters, currentUser } from '../stores';
   import { getFighterBouts } from '../lib/api/fighters';
   import { getVideos } from '../lib/api/videos';
@@ -20,6 +19,7 @@
   let selectedFighter = $state<Fighter | null>(null);
   let rawBouts = $state<FighterBout[]>([]);
   let totalVideos = $state(0);
+  let rawVideoDates = $state<string[]>([]);
   let loading = $state(false);
   let errorMsg = $state('');
 
@@ -27,7 +27,7 @@
     date: '', opponent_id: '', opponent_name: '',
     my_technique: '', my_result: '', my_zone: '',
     opponent_technique: '', opponent_result: '', opponent_zone: '',
-    score: '', date_week: '',
+    score: '', date_week: '', video: '',
     sort_col: 'video_date', sort_dir: 'desc'
   };
 
@@ -77,6 +77,10 @@
       result = result.filter(b => `${b.my_score}:${b.opponent_score}`.includes(tableFilters.score));
     if (tableFilters.date_week)
       result = result.filter(b => getISOWeek(b.video_date) === tableFilters.date_week);
+    if (tableFilters.video) {
+      const q = tableFilters.video.toLowerCase();
+      result = result.filter(b => (videoLabels.get(b.video_id) ?? b.video_id).toLowerCase().includes(q));
+    }
 
     if (tableFilters.sort_col) {
       const col = tableFilters.sort_col as keyof FighterBout;
@@ -129,6 +133,7 @@
       ]);
       rawBouts = bouts;
       totalVideos = vids.length;
+      rawVideoDates = vids.map(v => v.date ?? '').filter(Boolean);
     } catch (e) {
       errorMsg = e instanceof Error ? e.message : 'Ошибка загрузки данных';
     } finally {
@@ -136,12 +141,14 @@
     }
   }
 
-  // Auto-select the fighter matching the current user on mount
-  onMount(() => {
-    const me = $currentUser;
-    if (me && !selectedFighter) {
-      const myFighter = $fighters.find(f => f.id === me.id);
-      if (myFighter) selectFighter(myFighter);
+  // Auto-select current user's fighter once fighters store is populated
+  $effect(() => {
+    if ($fighters.length > 0 && !selectedFighter) {
+      const me = $currentUser;
+      if (me) {
+        const myFighter = $fighters.find(f => f.id === me.id);
+        if (myFighter) selectFighter(myFighter);
+      }
     }
   });
 
@@ -238,11 +245,11 @@
           <ResultsChart bouts={filteredBouts} {videoLabels} onfilter={(date) => handleFilter({...tableFilters, date})} />
         </div>
         <div class="trends-side">
-          <FrequencyChart bouts={filteredBouts} onfilter={(week) => handleFilter({...tableFilters, date_week: week})} />
+          <FrequencyChart bouts={filteredBouts} {rawVideoDates} onfilter={(week) => handleFilter({...tableFilters, date_week: week})} />
         </div>
       </div>
 
-      <!-- Score + opponents row -->
+      <!-- Score + opponents + techniques row -->
       <div class="main-row">
         <div class="main-chart-wrapper">
           <ScoreChart bouts={filteredBouts} {videoLabels} onfilter={(date) => handleFilter({...tableFilters, date})} />
@@ -250,13 +257,13 @@
         <div class="side-panel-wrapper">
           <RecentOpponents bouts={filteredBouts} onfilter={(oppId) => handleFilter({...tableFilters, opponent_id: oppId})} />
         </div>
-      </div>
-
-      <!-- Style row: techniques + hit zones -->
-      <div class="style-row">
         <div class="style-techniques">
           <TopTechniques bouts={filteredBouts} onfilter={(tech) => handleFilter({...tableFilters, my_technique: tech})} />
         </div>
+      </div>
+
+      <!-- Hit zones full width -->
+      <div class="silhouettes-row">
         <BodySilhouette bouts={filteredBouts} type="dealt" selectedZone={zoneFilter} onzoneclick={(z) => { zoneFilter = z; }} />
         <BodySilhouette bouts={filteredBouts} type="received" selectedZone={zoneFilter} onzoneclick={(z) => { zoneFilter = z; }} />
       </div>
@@ -500,32 +507,32 @@
     min-width: 0;
   }
 
-  /* Score + opponents */
+  /* Score + opponents + techniques */
   .main-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
     gap: 20px;
   }
 
   .main-chart-wrapper {
-    flex: 2;
     min-width: 0;
   }
 
   .side-panel-wrapper {
-    flex: 1;
     min-width: 0;
     align-self: flex-start;
   }
 
-  /* Style row: techniques + 2 silhouettes */
-  .style-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 20px;
-  }
-
   .style-techniques {
     min-width: 0;
+    align-self: flex-start;
+  }
+
+  /* Hit zones — full width, 2 equal columns */
+  .silhouettes-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
   }
 
   /* History table section */
@@ -553,10 +560,10 @@
       width: 60px;
       height: 60px;
     }
-    .trends-row, .main-row {
+    .trends-row {
       flex-direction: column;
     }
-    .style-row {
+    .main-row, .silhouettes-row {
       grid-template-columns: 1fr;
     }
   }

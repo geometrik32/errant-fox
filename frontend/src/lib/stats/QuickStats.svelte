@@ -59,10 +59,12 @@
     </div>
     <div class="kpi-info">
       <div class="kpi-label">Всего боёв</div>
-      <div class="kpi-value">{totalBattles}</div>
-      {#if totalVideos > 0}
-        <div class="kpi-sub"><span class="sub-green">{totalBattles} с тегами</span> · <span class="sub-dim">{untaggedVideos} без</span></div>
-      {/if}
+      <div class="kpi-value">
+        <span class="fights-tagged">{totalBattles}</span>
+        {#if totalVideos > 0}
+          <span class="fights-sep"> / </span><span class="fights-total">{totalVideos}</span>
+        {/if}
+      </div>
     </div>
   </div>
 
@@ -75,7 +77,18 @@
     <div class="kpi-info">
       <div class="kpi-label">Всего сходов</div>
       <div class="kpi-value">{totalBouts}</div>
-      <div class="kpi-sub"><span class="sub-dim">ср. {avgBoutsPerFight} за бой</span></div>
+    </div>
+  </div>
+
+  <div class="kpi-card glass-card">
+    <div class="kpi-icon" style="background: rgba(80, 160, 200, 0.1); color: #50a0c8;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
+      </svg>
+    </div>
+    <div class="kpi-info">
+      <div class="kpi-label">Сходов за бой</div>
+      <div class="kpi-value">{avgBoutsPerFight}</div>
     </div>
   </div>
 
@@ -208,6 +221,10 @@
 
   .sub-green { color: #4caf82; }
   .sub-dim   { color: var(--text-secondary); }
+
+  .fights-tagged { font-weight: 700; }
+  .fights-sep    { color: var(--text-secondary); font-weight: 300; font-size: 1.4rem; margin: 0 1px; }
+  .fights-total  { font-weight: 300; font-size: 1.4rem; color: var(--text-secondary); }
 
   .text-kpi {
     padding: 16px 24px;
