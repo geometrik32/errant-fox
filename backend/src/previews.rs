@@ -7,23 +7,10 @@ use crate::{db::DbPool, errors::AppError};
 
 const N_FRAMES: u32 = 1;
 
-async fn get_duration(url: &str) -> f64 {
-    let out = Command::new("ffprobe")
-        .args([
-            "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "csv=p=0",
-            url,
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .output()
-        .await;
-    out.ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .and_then(|s| s.trim().parse::<f64>().ok())
-        .unwrap_or(60.0)
-}
+// Seek 10 seconds into the video for the thumbnail.
+// A fixed offset avoids a separate ffprobe round-trip (which would consume
+// the Seafile one-time download token before ffmpeg can use it).
+const PREVIEW_SEEK_SECS: f64 = 10.0;
 
 pub async fn generate_previews(
     video_id: &str,
@@ -36,22 +23,17 @@ pub async fn generate_previews(
         .await
         .map_err(|e| AppError::Internal(format!("create_dir_all: {e}")))?;
 
-    // We'll use 1.jpg as the filename (ffmpeg %d starts from 1)
     let output_pattern = output_dir
         .join("%d.jpg")
         .to_string_lossy()
         .into_owned();
 
-    // Get video duration to seek to the middle
-    let duration = get_duration(download_url).await;
-    let seek_time = duration / 2.0;
-
     let output = Command::new("ffmpeg")
         .arg("-y")
+        .arg("-ss")
+        .arg(format!("{:.3}", PREVIEW_SEEK_SECS))
         .arg("-i")
         .arg(download_url)
-        .arg("-ss")
-        .arg(format!("{:.3}", seek_time))
         .arg("-vf")
         .arg("scale=480:-1")
         .arg("-vframes")
@@ -87,6 +69,6 @@ pub async fn generate_previews(
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
-    tracing::info!("previews generated for {log_id} (duration={duration:.1}s)");
+    tracing::info!("previews generated for {log_id}");
     Ok(())
 }
