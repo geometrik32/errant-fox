@@ -302,7 +302,6 @@
 
   .technique-item {
     border-radius: 5px;
-    overflow: hidden;
   }
 
   .technique-row {

@@ -20,7 +20,6 @@
   let selectedIds = $state<Set<string>>(new Set(initialFilter?.fighter_ids ?? []));
   let dateFrom = $state(initialFilter?.date_from ?? '');
   let dateTo = $state(initialFilter?.date_to ?? '');
-  let collapsed = $state(false);
   let dateMode = $state<'year' | 'classic'>('year');
   let calYear = $state(new Date().getFullYear());
   let selWeekStart = $state('');
@@ -120,18 +119,7 @@
   }
 </script>
 
-{#if collapsed}
-  <div class="sidebar-slim">
-    <button class="slim-toggle" onclick={() => { collapsed = false; }} title="Развернуть фильтры">›</button>
-  </div>
-{:else}
-  <aside class="sidebar">
-    <!-- Header -->
-    <div class="sidebar-head">
-      <span class="head-title">Фильтры</span>
-      <button class="head-toggle" onclick={() => { collapsed = true; }} title="Свернуть">‹</button>
-    </div>
-
+<aside class="sidebar">
     <!-- Fighters -->
     <section class="section">
       <h3 class="section-title">Бойцы</h3>
@@ -213,27 +201,14 @@
       {/if}
     </section>
   </aside>
-{/if}
 
 <style>
   .sidebar-slim {
-    width: 22px;
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding-top: 4px;
+    display: none;
   }
 
   .slim-toggle {
-    background: none;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    color: var(--text-secondary);
-    width: 22px;
-    height: 28px;
-    cursor: pointer;
-    font-size: 1rem;
+    display: none;
     line-height: 1;
     transition: var(--transition);
   }
