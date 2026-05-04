@@ -34,7 +34,7 @@ async fn get_duration(download_url: &str) -> Result<f64, String> {
         .arg("-user_agent")
         .arg(FAKE_USER_AGENT)
         .arg("-v")
-        .arg("quiet")
+        .arg("error")
         .arg("-show_entries")
         .arg("format=duration")
         .arg("-of")
