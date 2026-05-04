@@ -10,23 +10,21 @@
 
   let { bouts, type, selectedZone = '', onzoneclick }: Props = $props();
 
-  const LEFT_ZONES = [
-    'Голова', 'Плечо пр.', 'Предплечье пр.', 'Кисть пр.', 'Тело', 'Бедро пр.', 'Голень пр.', 'Стопа пр.'
-  ] as const;
+  // Central body zones go in the header row
+  const HEAD_ZONES   = ['Голова', 'Шея'] as const;
+  const TORSO_ZONES  = ['Тело', 'Таз']  as const;
 
-  const RIGHT_ZONES = [
-    'Шея', 'Плечо лев.', 'Предплечье лев.', 'Кисть лев.', 'Таз', 'Бедро лев.', 'Голень лев.', 'Стопа лев.'
-  ] as const;
+  // Limb zones go in side legends (right-side arm/leg first)
+  const LEFT_LIMB_ZONES  = ['Плечо пр.', 'Предплечье пр.', 'Кисть пр.', 'Бедро пр.', 'Голень пр.', 'Стопа пр.'] as const;
+  const RIGHT_LIMB_ZONES = ['Плечо лев.', 'Предплечье лев.', 'Кисть лев.', 'Бедро лев.', 'Голень лев.', 'Стопа лев.'] as const;
 
-  const ZONES = [...LEFT_ZONES, ...RIGHT_ZONES];
+  const ALL_ZONES = [...HEAD_ZONES, ...TORSO_ZONES, ...LEFT_LIMB_ZONES, ...RIGHT_LIMB_ZONES];
 
-  // Parse "ZoneName" or "ZoneName:x:y" — returns zone name only
   function parseZone(s: string | null): string {
     if (!s) return '';
     return s.split(':')[0];
   }
 
-  // Parse coordinates from "ZoneName:x:y" — returns null if no coords stored
   function parseCoords(s: string | null): { x: number; y: number } | null {
     if (!s) return null;
     const parts = s.split(':');
@@ -38,10 +36,10 @@
   }
 
   let counts = $derived.by(() => {
-    const map = new Map<string, number>(ZONES.map(z => [z, 0]));
+    const map = new Map<string, number>(ALL_ZONES.map(z => [z, 0]));
     for (const b of bouts) {
-      const raw = type === 'dealt' ? b.my_hit_zone : b.opponent_hit_zone;
-      const result = type === 'dealt' ? b.my_result : b.opponent_result;
+      const raw    = type === 'dealt' ? b.my_hit_zone : b.opponent_hit_zone;
+      const result = type === 'dealt' ? b.my_result   : b.opponent_result;
       if (result === 'hit') {
         const zone = parseZone(raw);
         if (map.has(zone)) map.set(zone, (map.get(zone) ?? 0) + 1);
@@ -50,12 +48,13 @@
     return map;
   });
 
-  // Hit dots (for bouts that have coordinate data)
+  let totalHits = $derived([...counts.values()].reduce((a, b) => a + b, 0));
+
   let dots = $derived.by(() => {
     const result: Array<{ x: number; y: number; zone: string }> = [];
     for (const b of bouts) {
-      const raw = type === 'dealt' ? b.my_hit_zone : b.opponent_hit_zone;
-      const hitResult = type === 'dealt' ? b.my_result : b.opponent_result;
+      const raw       = type === 'dealt' ? b.my_hit_zone : b.opponent_hit_zone;
+      const hitResult = type === 'dealt' ? b.my_result   : b.opponent_result;
       if (hitResult !== 'hit') continue;
       const coords = parseCoords(raw);
       if (coords) result.push({ ...coords, zone: parseZone(raw) });
@@ -63,7 +62,6 @@
     return result;
   });
 
-  // SVG viewBox is 0 0 350 1055, dot coords are 0-1 fractions of that
   const VW = 350;
   const VH = 1055;
 
@@ -86,30 +84,71 @@
 </script>
 
 <div class="silhouette-card">
+
+  <!-- Title + filter badge -->
   <div class="card-header">
     <h3 class="card-title">{type === 'dealt' ? 'Нанесённый урон' : 'Полученный урон'}</h3>
+    {#if selectedZone}
+      <div class="zone-filter-badge">
+        {selectedZone}
+        <button class="clear-filter" onclick={() => onzoneclick?.('')}>✕</button>
+      </div>
+    {/if}
   </div>
-  <div class="silhouette-wrap">
 
-    <!-- Left Legend -->
-    <div class="legend left-legend">
-      {#each LEFT_ZONES as zone}
+  <!-- Header zones row: head/neck | total | body/pelvis -->
+  <div class="header-zones">
+    <div class="header-group header-group--left">
+      {#each HEAD_ZONES as zone}
         {@const c = cnt(zone)}
         <!-- svelte-ignore a11y_interactive_supports_focus -->
-        <div
-          class="legend-row"
-          class:selected={selectedZone === zone}
-          role="button"
-          tabindex="0"
+        <div class="header-zone" class:selected={selectedZone === zone}
+          role="button" tabindex="0"
           onclick={() => handleZoneClick(zone)}
-          onkeydown={(e) => e.key === 'Enter' && handleZoneClick(zone)}
-        >
+          onkeydown={(e) => e.key === 'Enter' && handleZoneClick(zone)}>
+          <span class="hz-name">{zone}</span>
+          <span class="hz-count">{c}</span>
+        </div>
+      {/each}
+    </div>
+    <div class="total-badge">
+      <span class="total-num">{totalHits}</span>
+      <span class="total-label">всего</span>
+    </div>
+    <div class="header-group header-group--right">
+      {#each TORSO_ZONES as zone}
+        {@const c = cnt(zone)}
+        <!-- svelte-ignore a11y_interactive_supports_focus -->
+        <div class="header-zone" class:selected={selectedZone === zone}
+          role="button" tabindex="0"
+          onclick={() => handleZoneClick(zone)}
+          onkeydown={(e) => e.key === 'Enter' && handleZoneClick(zone)}>
+          <span class="hz-count">{c}</span>
+          <span class="hz-name">{zone}</span>
+        </div>
+      {/each}
+    </div>
+  </div>
+
+  <!-- Silhouette row: left legend | SVG | right legend -->
+  <div class="silhouette-wrap">
+
+    <!-- Left Legend: right-side limbs -->
+    <div class="legend left-legend">
+      {#each LEFT_LIMB_ZONES as zone}
+        {@const c = cnt(zone)}
+        <!-- svelte-ignore a11y_interactive_supports_focus -->
+        <div class="legend-row" class:selected={selectedZone === zone}
+          role="button" tabindex="0"
+          onclick={() => handleZoneClick(zone)}
+          onkeydown={(e) => e.key === 'Enter' && handleZoneClick(zone)}>
           <span class="legend-zone">{zone}</span>
           <span class="legend-count">{c}</span>
         </div>
       {/each}
     </div>
 
+    <!-- SVG silhouette -->
     <svg viewBox="0 0 350 1055" xmlns="http://www.w3.org/2000/svg" class="svg">
 
       <!-- Голова -->
@@ -190,7 +229,7 @@
       <!-- Стопа лев. -->
       <rect x="180" y="1010" width="90" height="45" rx="20"
         fill={fill('Стопа лев.')} stroke={strokeColor('Стопа лев.')} stroke-width="2" class="zone"
-        onclick={() => handleZoneClick('Стопа лев.')}><title>Стопа лев.: {cnt('Стопа лев')}</title></rect>
+        onclick={() => handleZoneClick('Стопа лев.')}><title>Стопа лев.: {cnt('Стопа лев.')}</title></rect>
 
       <!-- Hit dots at stored coordinates -->
       {#each dots as dot}
@@ -206,19 +245,15 @@
 
     </svg>
 
-    <!-- Right Legend -->
+    <!-- Right Legend: left-side limbs -->
     <div class="legend right-legend">
-      {#each RIGHT_ZONES as zone}
+      {#each RIGHT_LIMB_ZONES as zone}
         {@const c = cnt(zone)}
         <!-- svelte-ignore a11y_interactive_supports_focus -->
-        <div
-          class="legend-row"
-          class:selected={selectedZone === zone}
-          role="button"
-          tabindex="0"
+        <div class="legend-row" class:selected={selectedZone === zone}
+          role="button" tabindex="0"
           onclick={() => handleZoneClick(zone)}
-          onkeydown={(e) => e.key === 'Enter' && handleZoneClick(zone)}
-        >
+          onkeydown={(e) => e.key === 'Enter' && handleZoneClick(zone)}>
           <span class="legend-count">{c}</span>
           <span class="legend-zone">{zone}</span>
         </div>
@@ -226,12 +261,6 @@
     </div>
 
   </div>
-  {#if selectedZone}
-    <div class="zone-filter-badge">
-      Фильтр: {selectedZone}
-      <button class="clear-filter" onclick={() => onzoneclick?.('')}>✕</button>
-    </div>
-  {/if}
 </div>
 
 <style>
@@ -249,7 +278,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 24px;
+    margin-bottom: 16px;
   }
 
   .card-title {
@@ -259,24 +288,94 @@
     margin: 0;
   }
 
-  .legend {
+  /* Header zones: head/neck | total | body/pelvis */
+  .header-zones {
     display: flex;
-    flex-direction: column;
+    align-items: center;
     justify-content: space-between;
-    align-items: stretch;
-    min-width: 100px;
-    flex: 1;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding: 10px 14px;
+    background: var(--surface-hover);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
   }
 
+  .header-group {
+    display: flex;
+    gap: 6px;
+  }
+
+  .header-group--left { justify-content: flex-start; }
+  .header-group--right { justify-content: flex-end; }
+
+  .header-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.1s;
+    border: 1px solid transparent;
+  }
+
+  .header-zone:hover {
+    background: var(--surface-solid);
+    border-color: var(--border-color);
+  }
+
+  .header-zone.selected {
+    background: rgba(219, 132, 31, 0.15);
+    border-color: rgba(219, 132, 31, 0.4);
+  }
+
+  .hz-name {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+
+  .hz-count {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+
+  .total-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  .total-num {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--accent-yellow);
+    line-height: 1;
+  }
+
+  .total-label {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* Silhouette main row */
   .silhouette-wrap {
     display: flex;
-    align-items: stretch; /* Make children stretch to match height */
+    align-items: stretch;
     justify-content: center;
-    gap: 16px;
+    gap: 12px;
   }
 
   .svg {
-    width: 140px;
+    width: 120px;
     flex-shrink: 0;
   }
 
@@ -287,11 +386,19 @@
 
   .zone:hover { filter: brightness(1.3); }
 
+  .legend {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: stretch;
+    flex: 1;
+    min-width: 90px;
+  }
+
   .legend-row {
     display: flex;
     align-items: center;
-    justify-content: flex-start;
-    gap: 8px;
+    gap: 6px;
     padding: 2px 5px;
     border-radius: 4px;
     cursor: pointer;
@@ -307,27 +414,32 @@
     background: rgba(219, 132, 31, 0.15);
   }
 
+  .left-legend .legend-row { justify-content: flex-end; }
+  .right-legend .legend-row { justify-content: flex-start; }
+
   .legend-zone {
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     color: var(--text-secondary);
+    white-space: nowrap;
   }
 
   .legend-count {
-    font-size: 0.85rem;
+    font-size: 0.82rem;
     font-weight: 600;
     color: var(--text-primary);
+    min-width: 16px;
+    text-align: center;
   }
 
   .zone-filter-badge {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-top: 12px;
-    padding: 6px 12px;
+    gap: 6px;
+    padding: 3px 10px;
     background: rgba(219, 132, 31, 0.12);
     border: 1px solid rgba(219, 132, 31, 0.3);
     border-radius: var(--radius-sm);
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     color: var(--accent-yellow);
   }
 
