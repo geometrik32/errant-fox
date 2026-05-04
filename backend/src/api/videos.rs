@@ -575,6 +575,12 @@ pub async fn get_preview_frame(
         return Ok(StatusCode::ACCEPTED.into_response());
     }
 
+    // preview_count == -1 means previous generation attempts failed with
+    // permanent HTTP errors (403/404/410) — don't retry.
+    if preview_count < 0 {
+        return Err(AppError::NotFound);
+    }
+
     let file_path = PathBuf::from(&state.previews_dir)
         .join(&video_id)
         .join(format!("{}.jpg", frame));
