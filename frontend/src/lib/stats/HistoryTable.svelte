@@ -5,6 +5,7 @@
 
   export interface TableFilters {
     date: string;
+    video_id: string;
     opponent_id: string;
     opponent_name: string;
     my_technique: string;
@@ -34,7 +35,7 @@
   // Visible column config
   type ColKey = 'video' | 'date' | 'opponent' | 'score' | 'my_tech' | 'my_result' | 'my_zone' | 'opp_tech' | 'opp_result' | 'opp_zone';
   const COL_LABELS: Record<ColKey, string> = {
-    video: 'Видео', date: 'Дата', opponent: 'Оппонент', score: 'Счёт',
+    video: 'Бой', date: 'Дата', opponent: 'Оппонент', score: 'Счёт',
     my_tech: 'Мой приём', my_result: 'Мой рез.', my_zone: 'Моя зона',
     opp_tech: 'Приём опп.', opp_result: 'Рез. опп.', opp_zone: 'Зона опп.',
   };
@@ -90,34 +91,12 @@
 </script>
 
 <div class="table-wrap">
-  <div class="table-header-bar">
-    <h3 class="table-title">История сходов</h3>
-    <div class="col-picker-wrap">
-      <button class="eye-btn" onclick={() => { showColPicker = !showColPicker; }} title="Выбрать столбцы" aria-expanded={showColPicker}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-          <circle cx="12" cy="12" r="3"/>
-        </svg>
-      </button>
-      {#if showColPicker}
-        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-        <div class="col-picker" role="menu" onclick={(e) => e.stopPropagation()}>
-          {#each Object.entries(COL_LABELS) as [key, label]}
-            <label class="col-option">
-              <input type="checkbox" checked={visibleCols.has(key as ColKey)} onchange={() => toggleCol(key as ColKey)} />
-              {label}
-            </label>
-          {/each}
-        </div>
-      {/if}
-    </div>
-  </div>
   <table class="table">
     <thead>
       <tr class="header-row">
         {#if visibleCols.has('video')}
         <th class="th sortable" onclick={() => toggleSort('video_date')}>
-          <span>Видео <span class="sort-icon">{sortIcon('video_date')}</span></span>
+          <span>БОЙ <span class="sort-icon">{sortIcon('video_date')}</span></span>
           <input class="filter-input" type="text" placeholder="Поиск…" value={filters.video ?? ''}
             oninput={(e) => setFilter('video', (e.target as HTMLInputElement).value)}
             onclick={(e) => e.stopPropagation()} />
@@ -125,7 +104,7 @@
         {/if}
         {#if visibleCols.has('date')}
         <th class="th sortable" onclick={() => toggleSort('video_date')}>
-          <span>Дата <span class="sort-icon">{sortIcon('video_date')}</span></span>
+          <span>ДАТА <span class="sort-icon">{sortIcon('video_date')}</span></span>
           <input class="filter-input" type="date" value={filters.date}
             oninput={(e) => setFilter('date', (e.target as HTMLInputElement).value)}
             onclick={(e) => e.stopPropagation()} />
@@ -133,11 +112,11 @@
         {/if}
         {#if visibleCols.has('opponent')}
         <th class="th sortable" onclick={() => toggleSort('opponent_name')}>
-          <span>Оппонент <span class="sort-icon">{sortIcon('opponent_name')}</span></span>
+          <span>ОППОНЕНТ <span class="sort-icon">{sortIcon('opponent_name')}</span></span>
           <select class="filter-input" value={filters.opponent_id}
             onchange={(e) => setFilter('opponent_id', (e.target as HTMLSelectElement).value)}
             onclick={(e) => e.stopPropagation()}>
-            <option value="">Все</option>
+            <option value="">ВСЕ</option>
             {#each opponents as opp}
               <option value={opp.id}>{opp.name}</option>
             {/each}
@@ -145,8 +124,8 @@
         </th>
         {/if}
         {#if visibleCols.has('score')}
-        <th class="th sortable" onclick={() => toggleSort('my_score')}>
-          <span>Счёт <span class="sort-icon">{sortIcon('my_score')}</span></span>
+        <th class="th sortable score-th" onclick={() => toggleSort('my_score')}>
+          <span>СЧЁТ <span class="sort-icon">{sortIcon('my_score')}</span></span>
           <input class="filter-input" type="text" placeholder="Фильтр…" value={filters.score}
             oninput={(e) => setFilter('score', (e.target as HTMLInputElement).value)}
             onclick={(e) => e.stopPropagation()} />
@@ -154,11 +133,11 @@
         {/if}
         {#if visibleCols.has('my_tech')}
         <th class="th sortable" onclick={() => toggleSort('my_technique_name')}>
-          <span>Мой приём <span class="sort-icon">{sortIcon('my_technique_name')}</span></span>
+          <span>МОЙ ПРИЁМ <span class="sort-icon">{sortIcon('my_technique_name')}</span></span>
           <select class="filter-input" value={filters.my_technique}
             onchange={(e) => setFilter('my_technique', (e.target as HTMLSelectElement).value)}
             onclick={(e) => e.stopPropagation()}>
-            <option value="">Все</option>
+            <option value="">ВСЕ</option>
             {#each $techniques as t (t.id)}
               <option value={t.name}>{t.name}</option>
             {/each}
@@ -167,28 +146,28 @@
         {/if}
         {#if visibleCols.has('my_result')}
         <th class="th sortable" onclick={() => toggleSort('my_result')}>
-          <span>Мой рез. <span class="sort-icon">{sortIcon('my_result')}</span></span>
+          <span>МОЙ РЕЗ. <span class="sort-icon">{sortIcon('my_result')}</span></span>
           <select class="filter-input" value={filters.my_result}
             onchange={(e) => setFilter('my_result', (e.target as HTMLSelectElement).value)}
             onclick={(e) => e.stopPropagation()}>
-            <option value="">Все</option>
-            <option value="hit">Попал</option>
-            <option value="miss">Промах</option>
-            <option value="blocked">Заблокировали</option>
-            <option value="late">Опоздал</option>
-            <option value="no_strike">Не бил</option>
-            <option value="disqualification">Неквалификация</option>
-            <option value="afterblow">Афтерблоу</option>
+            <option value="">ВСЕ</option>
+            <option value="hit">ПОПАЛ</option>
+            <option value="miss">ПРОМАХ</option>
+            <option value="blocked">ЗАБЛОКИРОВАЛИ</option>
+            <option value="late">ОПОЗДАЛ</option>
+            <option value="no_strike">НЕ БИЛ</option>
+            <option value="disqualification">НЕКВАЛИФИКАЦИЯ</option>
+            <option value="afterblow">АФТЕРБЛОУ</option>
           </select>
         </th>
         {/if}
         {#if visibleCols.has('my_zone')}
         <th class="th sortable" onclick={() => toggleSort('my_hit_zone')}>
-          <span>Моя зона <span class="sort-icon">{sortIcon('my_hit_zone')}</span></span>
+          <span>МОЯ ЗОНА <span class="sort-icon">{sortIcon('my_hit_zone')}</span></span>
           <select class="filter-input" value={filters.my_zone}
             onchange={(e) => setFilter('my_zone', (e.target as HTMLSelectElement).value)}
             onclick={(e) => e.stopPropagation()}>
-            <option value="">Все</option>
+            <option value="">ВСЕ</option>
             {#each HIT_ZONES as zone}
               <option value={zone}>{zone}</option>
             {/each}
@@ -197,11 +176,11 @@
         {/if}
         {#if visibleCols.has('opp_tech')}
         <th class="th sortable" onclick={() => toggleSort('opponent_technique_name')}>
-          <span>Приём опп. <span class="sort-icon">{sortIcon('opponent_technique_name')}</span></span>
+          <span>ПРИЁМ ОПП. <span class="sort-icon">{sortIcon('opponent_technique_name')}</span></span>
           <select class="filter-input" value={filters.opponent_technique}
             onchange={(e) => setFilter('opponent_technique', (e.target as HTMLSelectElement).value)}
             onclick={(e) => e.stopPropagation()}>
-            <option value="">Все</option>
+            <option value="">ВСЕ</option>
             {#each $techniques as t (t.id)}
               <option value={t.name}>{t.name}</option>
             {/each}
@@ -210,35 +189,55 @@
         {/if}
         {#if visibleCols.has('opp_result')}
         <th class="th sortable" onclick={() => toggleSort('opponent_result')}>
-          <span>Рез. опп. <span class="sort-icon">{sortIcon('opponent_result')}</span></span>
+          <span>РЕЗ. ОПП. <span class="sort-icon">{sortIcon('opponent_result')}</span></span>
           <select class="filter-input" value={filters.opponent_result}
             onchange={(e) => setFilter('opponent_result', (e.target as HTMLSelectElement).value)}
             onclick={(e) => e.stopPropagation()}>
-            <option value="">Все</option>
-            <option value="hit">Попал</option>
-            <option value="miss">Промах</option>
-            <option value="blocked">Заблокировали</option>
-            <option value="late">Опоздал</option>
-            <option value="no_strike">Не бил</option>
-            <option value="disqualification">Неквалификация</option>
-            <option value="afterblow">Афтерблоу</option>
+            <option value="">ВСЕ</option>
+            <option value="hit">ПОПАЛ</option>
+            <option value="miss">ПРОМАХ</option>
+            <option value="blocked">ЗАБЛОКИРОВАЛИ</option>
+            <option value="late">ОПОЗДАЛ</option>
+            <option value="no_strike">НЕ БИЛ</option>
+            <option value="disqualification">НЕКВАЛИФИКАЦИЯ</option>
+            <option value="afterblow">АФТЕРБЛОУ</option>
           </select>
         </th>
         {/if}
         {#if visibleCols.has('opp_zone')}
         <th class="th sortable" onclick={() => toggleSort('opponent_hit_zone')}>
-          <span>Зона опп. <span class="sort-icon">{sortIcon('opponent_hit_zone')}</span></span>
+          <span>ЗОНА ОПП. <span class="sort-icon">{sortIcon('opponent_hit_zone')}</span></span>
           <select class="filter-input" value={filters.opponent_zone}
             onchange={(e) => setFilter('opponent_zone', (e.target as HTMLSelectElement).value)}
             onclick={(e) => e.stopPropagation()}>
-            <option value="">Все</option>
+            <option value="">ВСЕ</option>
             {#each HIT_ZONES as zone}
               <option value={zone}>{zone}</option>
             {/each}
           </select>
         </th>
         {/if}
-        <th class="th th--nav"></th>
+        <th class="th th--nav">
+          <div class="col-picker-wrap">
+            <button class="eye-btn" onclick={() => { showColPicker = !showColPicker; }} title="Выбрать столбцы" aria-expanded={showColPicker}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+            {#if showColPicker}
+              <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+              <div class="col-picker" role="menu" tabindex="0" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.key === 'Escape' && (showColPicker = false)}>
+                {#each Object.entries(COL_LABELS) as [key, label]}
+                  <label class="col-option">
+                    <input type="checkbox" checked={visibleCols.has(key as ColKey)} onchange={() => toggleCol(key as ColKey)} />
+                    {label}
+                  </label>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        </th>
       </tr>
     </thead>
     <tbody>
@@ -301,12 +300,13 @@
 <style>
   .table-wrap {
     overflow-x: auto;
-    background: var(--surface);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
+    overflow-y: auto;
+    background: var(--surface-solid);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-sm);
+    border-radius: var(--radius-2xl);
+    box-shadow: none;
+    height: 677px;
+    box-sizing: border-box;
   }
 
   .table {
@@ -316,7 +316,7 @@
   }
 
   .th {
-    background: var(--surface-hover);
+    background: #0f172a;
     color: var(--text-secondary);
     font-weight: 600;
     font-size: 0.72rem;
@@ -354,8 +354,9 @@
   }
 
   .th--nav {
-    width: 40px;
+    width: 50px;
     cursor: default;
+    padding: 14px 4px 6px;
   }
 
   .filter-input {
@@ -382,11 +383,6 @@
     cursor: pointer;
   }
 
-  .filter-spacer {
-    height: 26px;
-    margin-bottom: 4px;
-  }
-
   .body-row {
     border-bottom: 1px solid var(--border-color);
     transition: var(--transition);
@@ -409,9 +405,18 @@
     padding: 24px;
   }
 
+  .score-th {
+    text-align: center;
+  }
+
+  .score-th span {
+    justify-content: center;
+  }
+
   .score {
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+    text-align: center;
   }
 
   .sep {
@@ -498,39 +503,23 @@
   }
 
   /* Column picker */
-  .table-header-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border-color);
-  }
-
-  .table-title {
-    font-size: 0.9rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-primary);
-    margin: 0;
-  }
-
   .col-picker-wrap {
     position: relative;
   }
 
   .eye-btn {
     background: none;
-    border: 1px solid var(--border-color);
+    border: none;
     border-radius: var(--radius-sm);
     color: var(--text-secondary);
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: var(--transition);
+    margin: 0 auto;
   }
 
   .eye-btn:hover {
@@ -541,17 +530,17 @@
   .col-picker {
     position: absolute;
     right: 0;
-    top: calc(100% + 8px);
+    top: calc(100% + 12px);
     background: var(--surface-solid);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     padding: 12px 16px;
-    z-index: 20;
+    z-index: 50;
     min-width: 150px;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    box-shadow: var(--shadow-lg);
+    box-shadow: none;
   }
 
   .col-option {

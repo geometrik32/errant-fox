@@ -162,8 +162,8 @@
   .header {
     height: 64px;
     background: var(--surface);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: blur(var(--blur-amount));
+    -webkit-backdrop-filter: blur(var(--blur-amount));
     border-bottom: 1px solid var(--border-color);
     display: flex;
     align-items: center;
@@ -334,9 +334,6 @@
   .dropdown-item.danger:hover {
     background: #fef2f2;
     color: #dc2626;
-  }
-  [data-theme="dark"] .dropdown-item.danger:hover {
-    background: rgba(239, 68, 68, 0.1);
   }
 
   .dropdown-divider {

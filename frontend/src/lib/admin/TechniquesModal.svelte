@@ -94,7 +94,8 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="modal-backdrop" onclick={handleBackdrop} role="dialog" aria-modal="true" aria-label="Техники">
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<div class="modal-backdrop" onclick={handleBackdrop} onkeydown={(e) => e.key === 'Escape' && onclose?.()} role="dialog" aria-modal="true" aria-label="Техники" tabindex="-1">
   <div class="modal">
     <div class="modal-header">
       <h2>Техники</h2>
@@ -115,6 +116,7 @@
               {#if editingId === t.id}
                 <!-- Edit mode (admin only) -->
                 <div class="edit-block">
+                  <!-- svelte-ignore a11y_autofocus -->
                   <input
                     class="input-glass edit-inp"
                     type="text"
@@ -224,9 +226,7 @@
   }
 
   .modal {
-    background: var(--surface);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
+    background: var(--surface-solid);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
@@ -436,32 +436,6 @@
     gap: 6px;
   }
 
-  .btn-save-edit {
-    background: rgba(76, 175, 130, 0.12);
-    border: 1px solid rgba(76, 175, 130, 0.3);
-    color: #4caf82;
-    font-size: 0.82rem;
-    padding: 5px 12px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: var(--transition);
-  }
-
-  .btn-save-edit:hover { background: rgba(76, 175, 130, 0.2); }
-
-  .btn-cancel-edit {
-    background: none;
-    border: 1px solid var(--border-color);
-    color: var(--text-secondary);
-    font-size: 0.82rem;
-    padding: 5px 12px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: var(--transition);
-  }
-
-  .btn-cancel-edit:hover { background: var(--surface-hover); color: var(--text-primary); }
-
   .btn-edit {
     background: none;
     border: none;
@@ -502,76 +476,11 @@
     flex-shrink: 0;
   }
 
-  .input {
-    background: var(--surface-solid);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
-    font-size: 0.9rem;
-    padding: 8px 10px;
-    outline: none;
-    flex: 1;
-    transition: var(--transition);
-  }
-
-  .input:focus {
-    border-color: var(--accent-yellow);
-  }
-
-  .btn-add {
-    background: var(--surface-hover);
-    border: 1px solid var(--border-color);
-    color: var(--text-secondary);
-    font-size: 0.88rem;
-    font-weight: 500;
-    padding: 8px 16px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    white-space: nowrap;
-    transition: var(--transition);
-    flex-shrink: 0;
-  }
-
-  .btn-add:hover:not(:disabled) {
-    background: var(--accent-yellow);
-    border-color: var(--accent-yellow);
-    color: #fff;
-  }
-
-  .btn-add:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-
   .error {
     font-size: 0.83rem;
     color: #e05252;
     margin: 0;
     flex-shrink: 0;
-  }
-
-  .actions {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 8px;
-    flex-shrink: 0;
-  }
-
-  .btn-close {
-    background: var(--surface-solid);
-    border: 1px solid var(--border-color);
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-    font-weight: 500;
-    padding: 10px 24px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: var(--transition);
-  }
-
-  .btn-close:hover {
-    background: var(--surface-hover);
-    color: var(--text-primary);
   }
 
   .btn-sm {

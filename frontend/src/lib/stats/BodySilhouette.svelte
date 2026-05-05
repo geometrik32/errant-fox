@@ -18,6 +18,12 @@
   const LEFT_LIMB_ZONES  = ['Плечо пр.', 'Предплечье пр.', 'Кисть пр.', 'Бедро пр.', 'Голень пр.', 'Стопа пр.'] as const;
   const RIGHT_LIMB_ZONES = ['Плечо лев.', 'Предплечье лев.', 'Кисть лев.', 'Бедро лев.', 'Голень лев.', 'Стопа лев.'] as const;
 
+  const ARM_ZONES_LEFT = ['Плечо пр.', 'Предплечье пр.', 'Кисть пр.'] as const;
+  const LEG_ZONES_LEFT = ['Бедро пр.', 'Голень пр.', 'Стопа пр.'] as const;
+
+  const ARM_ZONES_RIGHT = ['Плечо лев.', 'Предплечье лев.', 'Кисть лев.'] as const;
+  const LEG_ZONES_RIGHT = ['Бедро лев.', 'Голень лев.', 'Стопа лев.'] as const;
+
   const ALL_ZONES = [...HEAD_ZONES, ...TORSO_ZONES, ...LEFT_LIMB_ZONES, ...RIGHT_LIMB_ZONES];
 
   function parseZone(s: string | null): string {
@@ -71,7 +77,7 @@
   }
 
   function strokeColor(zone: string): string {
-    return selectedZone === zone ? 'var(--accent-yellow)' : 'var(--text-secondary)';
+    return selectedZone === zone ? 'var(--accent-yellow)' : 'rgba(255, 255, 255, 0.2)';
   }
 
   function cnt(zone: string): number {
@@ -87,13 +93,7 @@
 
   <!-- Title + filter badge -->
   <div class="card-header">
-    <h3 class="card-title">{type === 'dealt' ? 'Нанесённый урон' : 'Полученный урон'}</h3>
-    {#if selectedZone}
-      <div class="zone-filter-badge">
-        {selectedZone}
-        <button class="clear-filter" onclick={() => onzoneclick?.('')}>✕</button>
-      </div>
-    {/if}
+    <h3 class="card-title">{type === 'dealt' ? 'Нанесенный урон' : 'Полученный урон'}</h3>
   </div>
 
   <!-- Header zones row: head/neck | total | body/pelvis -->
@@ -113,7 +113,6 @@
     </div>
     <div class="total-badge">
       <span class="total-num">{totalHits}</span>
-      <span class="total-label">всего</span>
     </div>
     <div class="header-group header-group--right">
       {#each TORSO_ZONES as zone}
@@ -123,8 +122,8 @@
           role="button" tabindex="0"
           onclick={() => handleZoneClick(zone)}
           onkeydown={(e) => e.key === 'Enter' && handleZoneClick(zone)}>
-          <span class="hz-count">{c}</span>
           <span class="hz-name">{zone}</span>
+          <span class="hz-count">{c}</span>
         </div>
       {/each}
     </div>
@@ -135,101 +134,146 @@
 
     <!-- Left Legend: right-side limbs -->
     <div class="legend left-legend">
-      {#each LEFT_LIMB_ZONES as zone}
-        {@const c = cnt(zone)}
-        <!-- svelte-ignore a11y_interactive_supports_focus -->
-        <div class="legend-row" class:selected={selectedZone === zone}
-          role="button" tabindex="0"
-          onclick={() => handleZoneClick(zone)}
-          onkeydown={(e) => e.key === 'Enter' && handleZoneClick(zone)}>
-          <span class="legend-zone">{zone}</span>
-          <span class="legend-count">{c}</span>
-        </div>
-      {/each}
+      <div class="legend-group">
+        {#each ARM_ZONES_LEFT as zone}
+          {@const c = cnt(zone)}
+          <div class="legend-row" class:selected={selectedZone === zone}
+            role="button" tabindex="0"
+            onclick={() => handleZoneClick(zone)}
+            onkeydown={(e) => e.key === 'Enter' && handleZoneClick(zone)}>
+            <span class="legend-count">{c}</span>
+            <span class="legend-zone">{zone}</span>
+          </div>
+        {/each}
+      </div>
+      <div class="legend-group">
+        {#each LEG_ZONES_LEFT as zone}
+          {@const c = cnt(zone)}
+          <div class="legend-row" class:selected={selectedZone === zone}
+            role="button" tabindex="0"
+            onclick={() => handleZoneClick(zone)}
+            onkeydown={(e) => e.key === 'Enter' && handleZoneClick(zone)}>
+            <span class="legend-count">{c}</span>
+            <span class="legend-zone">{zone}</span>
+          </div>
+        {/each}
+      </div>
     </div>
 
     <!-- SVG silhouette -->
     <svg viewBox="0 0 350 1055" xmlns="http://www.w3.org/2000/svg" class="svg">
 
-      <!-- Голова -->
-      <rect x="112.5" y="0" width="125" height="125" rx="20"
+      <!-- 1. Голова -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <rect x="113" y="0" width="125" height="125" rx="20" role="button" tabindex="0"
         fill={fill('Голова')} stroke={strokeColor('Голова')} stroke-width="2" class="zone"
-        onclick={() => handleZoneClick('Голова')}><title>Голова: {cnt('Голова')}</title></rect>
+        onclick={() => handleZoneClick('Голова')}
+        onkeydown={(e) => e.key === 'Enter' && handleZoneClick('Голова')}><title>Голова: {cnt('Голова')}</title></rect>
 
-      <!-- Шея -->
-      <rect x="130" y="130" width="90" height="45" rx="20"
+      <!-- 2. Шея -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <rect x="130" y="130" width="90" height="45" rx="20" role="button" tabindex="0"
         fill={fill('Шея')} stroke={strokeColor('Шея')} stroke-width="2" class="zone"
-        onclick={() => handleZoneClick('Шея')}><title>Шея: {cnt('Шея')}</title></rect>
+        onclick={() => handleZoneClick('Шея')}
+        onkeydown={(e) => e.key === 'Enter' && handleZoneClick('Шея')}><title>Шея: {cnt('Шея')}</title></rect>
 
-      <!-- Тело -->
-      <rect x="80" y="180" width="190" height="290" rx="20"
-        fill={fill('Тело')} stroke={strokeColor('Тело')} stroke-width="2" class="zone"
-        onclick={() => handleZoneClick('Тело')}><title>Тело: {cnt('Тело')}</title></rect>
-
-      <!-- Таз -->
-      <rect x="80" y="475" width="190" height="100" rx="20"
-        fill={fill('Таз')} stroke={strokeColor('Таз')} stroke-width="2" class="zone"
-        onclick={() => handleZoneClick('Таз')}><title>Таз: {cnt('Таз')}</title></rect>
-
-      <!-- Плечо пр. -->
-      <rect x="0" y="180" width="70" height="195" rx="20"
+      <!-- 3. Плечо пр. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <rect x="0" y="180" width="70" height="195" rx="20" role="button" tabindex="0"
         fill={fill('Плечо пр.')} stroke={strokeColor('Плечо пр.')} stroke-width="2" class="zone"
-        onclick={() => handleZoneClick('Плечо пр.')}><title>Плечо пр.: {cnt('Плечо пр.')}</title></rect>
+        onclick={() => handleZoneClick('Плечо пр.')}
+        onkeydown={(e) => e.key === 'Enter' && handleZoneClick('Плечо пр.')}><title>Плечо пр.: {cnt('Плечо пр.')}</title></rect>
 
-      <!-- Предплечье пр. -->
-      <rect x="0" y="380" width="70" height="195" rx="20"
+      <!-- 4. Предплечье пр. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <rect x="0" y="380" width="70" height="195" rx="20" role="button" tabindex="0"
         fill={fill('Предплечье пр.')} stroke={strokeColor('Предплечье пр.')} stroke-width="2" class="zone"
-        onclick={() => handleZoneClick('Предплечье пр.')}><title>Предплечье пр.: {cnt('Предплечье пр.')}</title></rect>
+        onclick={() => handleZoneClick('Предплечье пр.')}
+        onkeydown={(e) => e.key === 'Enter' && handleZoneClick('Предплечье пр.')}><title>Предплечье пр.: {cnt('Предплечье пр.')}</title></rect>
 
-      <!-- Кисть пр. -->
-      <rect x="0" y="580" width="70" height="70" rx="20"
+      <!-- 5. Кисть пр. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <rect x="0" y="580" width="70" height="70" rx="20" role="button" tabindex="0"
         fill={fill('Кисть пр.')} stroke={strokeColor('Кисть пр.')} stroke-width="2" class="zone"
-        onclick={() => handleZoneClick('Кисть пр.')}><title>Кисть пр.: {cnt('Кисть пр.')}</title></rect>
+        onclick={() => handleZoneClick('Кисть пр.')}
+        onkeydown={(e) => e.key === 'Enter' && handleZoneClick('Кисть пр.')}><title>Кисть пр.: {cnt('Кисть пр.')}</title></rect>
 
-      <!-- Плечо лев. -->
-      <rect x="280" y="180" width="70" height="195" rx="20"
+      <!-- 9. Тело -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <rect x="80" y="180" width="190" height="290" rx="20" role="button" tabindex="0"
+        fill={fill('Тело')} stroke={strokeColor('Тело')} stroke-width="2" class="zone"
+        onclick={() => handleZoneClick('Тело')}
+        onkeydown={(e) => e.key === 'Enter' && handleZoneClick('Тело')}><title>Тело: {cnt('Тело')}</title></rect>
+
+      <!-- 10. Таз -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <rect x="80" y="475" width="190" height="100" rx="20" role="button" tabindex="0"
+        fill={fill('Таз')} stroke={strokeColor('Таз')} stroke-width="2" class="zone"
+        onclick={() => handleZoneClick('Таз')}
+        onkeydown={(e) => e.key === 'Enter' && handleZoneClick('Таз')}><title>Таз: {cnt('Таз')}</title></rect>
+
+      <!-- 6. Плечо лев. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <rect x="280" y="180" width="70" height="195" rx="20" role="button" tabindex="0"
         fill={fill('Плечо лев.')} stroke={strokeColor('Плечо лев.')} stroke-width="2" class="zone"
-        onclick={() => handleZoneClick('Плечо лев.')}><title>Плечо лев.: {cnt('Плечо лев.')}</title></rect>
+        onclick={() => handleZoneClick('Плечо лев.')}
+        onkeydown={(e) => e.key === 'Enter' && handleZoneClick('Плечо лев.')}><title>Плечо лев.: {cnt('Плечо лев.')}</title></rect>
 
-      <!-- Предплечье лев. -->
-      <rect x="280" y="380" width="70" height="195" rx="20"
+      <!-- 7. Предплечье лев. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <rect x="280" y="380" width="70" height="195" rx="20" role="button" tabindex="0"
         fill={fill('Предплечье лев.')} stroke={strokeColor('Предплечье лев.')} stroke-width="2" class="zone"
-        onclick={() => handleZoneClick('Предплечье лев.')}><title>Предплечье лев.: {cnt('Предплечье лев.')}</title></rect>
+        onclick={() => handleZoneClick('Предплечье лев.')}
+        onkeydown={(e) => e.key === 'Enter' && handleZoneClick('Предплечье лев.')}><title>Предплечье лев.: {cnt('Предплечье лев.')}</title></rect>
 
-      <!-- Кисть лев. -->
-      <rect x="280" y="580" width="70" height="70" rx="20"
+      <!-- 8. Кисть лев. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <rect x="280" y="580" width="70" height="70" rx="20" role="button" tabindex="0"
         fill={fill('Кисть лев.')} stroke={strokeColor('Кисть лев.')} stroke-width="2" class="zone"
-        onclick={() => handleZoneClick('Кисть лев.')}><title>Кисть лев.: {cnt('Кисть лев.')}</title></rect>
+        onclick={() => handleZoneClick('Кисть лев.')}
+        onkeydown={(e) => e.key === 'Enter' && handleZoneClick('Кисть лев.')}><title>Кисть лев.: {cnt('Кисть лев.')}</title></rect>
 
-      <!-- Бедро пр. -->
-      <rect x="80" y="580" width="90" height="210" rx="20"
+      <!-- 11. Бедро пр. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <rect x="80" y="580" width="90" height="210" rx="20" role="button" tabindex="0"
         fill={fill('Бедро пр.')} stroke={strokeColor('Бедро пр.')} stroke-width="2" class="zone"
-        onclick={() => handleZoneClick('Бедро пр.')}><title>Бедро пр.: {cnt('Бедро пр.')}</title></rect>
+        onclick={() => handleZoneClick('Бедро пр.')}
+        onkeydown={(e) => e.key === 'Enter' && handleZoneClick('Бедро пр.')}><title>Бедро пр.: {cnt('Бедро пр.')}</title></rect>
 
-      <!-- Голень пр. -->
-      <rect x="80" y="795" width="90" height="210" rx="20"
+      <!-- 12. Голень пр. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <rect x="80" y="795" width="90" height="210" rx="20" role="button" tabindex="0"
         fill={fill('Голень пр.')} stroke={strokeColor('Голень пр.')} stroke-width="2" class="zone"
-        onclick={() => handleZoneClick('Голень пр.')}><title>Голень пр.: {cnt('Голень пр.')}</title></rect>
+        onclick={() => handleZoneClick('Голень пр.')}
+        onkeydown={(e) => e.key === 'Enter' && handleZoneClick('Голень пр.')}><title>Голень пр.: {cnt('Голень пр.')}</title></rect>
 
-      <!-- Стопа пр. -->
-      <rect x="80" y="1010" width="90" height="45" rx="20"
+      <!-- 13. Стопа пр. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <rect x="80" y="1010" width="90" height="45" rx="20" role="button" tabindex="0"
         fill={fill('Стопа пр.')} stroke={strokeColor('Стопа пр.')} stroke-width="2" class="zone"
-        onclick={() => handleZoneClick('Стопа пр.')}><title>Стопа пр.: {cnt('Стопа пр.')}</title></rect>
+        onclick={() => handleZoneClick('Стопа пр.')}
+        onkeydown={(e) => e.key === 'Enter' && handleZoneClick('Стопа пр.')}><title>Стопа пр.: {cnt('Стопа пр.')}</title></rect>
 
-      <!-- Бедро лев. -->
-      <rect x="180" y="580" width="90" height="210" rx="20"
+      <!-- 14. Бедро лев. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <rect x="180" y="580" width="90" height="210" rx="20" role="button" tabindex="0"
         fill={fill('Бедро лев.')} stroke={strokeColor('Бедро лев.')} stroke-width="2" class="zone"
-        onclick={() => handleZoneClick('Бедро лев.')}><title>Бедро лев.: {cnt('Бедро лев.')}</title></rect>
+        onclick={() => handleZoneClick('Бедро лев.')}
+        onkeydown={(e) => e.key === 'Enter' && handleZoneClick('Бедро лев.')}><title>Бедро лев.: {cnt('Бедро лев.')}</title></rect>
 
-      <!-- Голень лев. -->
-      <rect x="180" y="795" width="90" height="210" rx="20"
+      <!-- 15. Голень лев. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <rect x="180" y="795" width="90" height="210" rx="20" role="button" tabindex="0"
         fill={fill('Голень лев.')} stroke={strokeColor('Голень лев.')} stroke-width="2" class="zone"
-        onclick={() => handleZoneClick('Голень лев.')}><title>Голень лев.: {cnt('Голень лев.')}</title></rect>
+        onclick={() => handleZoneClick('Голень лев.')}
+        onkeydown={(e) => e.key === 'Enter' && handleZoneClick('Голень лев.')}><title>Голень лев.: {cnt('Голень лев.')}</title></rect>
 
-      <!-- Стопа лев. -->
-      <rect x="180" y="1010" width="90" height="45" rx="20"
+      <!-- 16. Стопа лев. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <rect x="180" y="1010" width="90" height="45" rx="20" role="button" tabindex="0"
         fill={fill('Стопа лев.')} stroke={strokeColor('Стопа лев.')} stroke-width="2" class="zone"
-        onclick={() => handleZoneClick('Стопа лев.')}><title>Стопа лев.: {cnt('Стопа лев.')}</title></rect>
+        onclick={() => handleZoneClick('Стопа лев.')}
+        onkeydown={(e) => e.key === 'Enter' && handleZoneClick('Стопа лев.')}><title>Стопа лев.: {cnt('Стопа лев.')}</title></rect>
 
       <!-- Hit dots at stored coordinates -->
       {#each dots as dot}
@@ -247,17 +291,30 @@
 
     <!-- Right Legend: left-side limbs -->
     <div class="legend right-legend">
-      {#each RIGHT_LIMB_ZONES as zone}
-        {@const c = cnt(zone)}
-        <!-- svelte-ignore a11y_interactive_supports_focus -->
-        <div class="legend-row" class:selected={selectedZone === zone}
-          role="button" tabindex="0"
-          onclick={() => handleZoneClick(zone)}
-          onkeydown={(e) => e.key === 'Enter' && handleZoneClick(zone)}>
-          <span class="legend-count">{c}</span>
-          <span class="legend-zone">{zone}</span>
-        </div>
-      {/each}
+      <div class="legend-group">
+        {#each ARM_ZONES_RIGHT as zone}
+          {@const c = cnt(zone)}
+          <div class="legend-row" class:selected={selectedZone === zone}
+            role="button" tabindex="0"
+            onclick={() => handleZoneClick(zone)}
+            onkeydown={(e) => e.key === 'Enter' && handleZoneClick(zone)}>
+            <span class="legend-zone">{zone}</span>
+            <span class="legend-count">{c}</span>
+          </div>
+        {/each}
+      </div>
+      <div class="legend-group">
+        {#each LEG_ZONES_RIGHT as zone}
+          {@const c = cnt(zone)}
+          <div class="legend-row" class:selected={selectedZone === zone}
+            role="button" tabindex="0"
+            onclick={() => handleZoneClick(zone)}
+            onkeydown={(e) => e.key === 'Enter' && handleZoneClick(zone)}>
+            <span class="legend-zone">{zone}</span>
+            <span class="legend-count">{c}</span>
+          </div>
+        {/each}
+      </div>
     </div>
 
   </div>
@@ -266,28 +323,34 @@
 <style>
   .silhouette-card {
     background: var(--surface);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: blur(var(--blur-amount));
+    -webkit-backdrop-filter: blur(var(--blur-amount));
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-sm);
-    padding: 20px;
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-md);
+    padding: 24px;
+    height: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
   }
 
   .card-header {
     display: flex;
     justify-content: center;
     align-items: center;
-    margin-bottom: 16px;
+    margin-bottom: 20px;
     position: relative;
   }
 
   .card-title {
-    font-size: 1rem;
-    font-weight: 700;
+    font-size: 0.9rem;
+    font-weight: 500;
     color: var(--text-primary);
     margin: 0;
     text-align: center;
+    text-transform: none;
+    letter-spacing: 0.02em;
   }
 
   /* Header zones: head/neck | total | body/pelvis */
@@ -296,11 +359,12 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    margin-bottom: 16px;
-    padding: 10px 14px;
-    background: var(--surface-hover);
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border-color);
+    margin-bottom: 30px;
+    padding: 15px 0;
+    background: #1e293b;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05);
   }
 
   .header-group {
@@ -309,15 +373,16 @@
     flex: 1;
   }
 
-  .header-group--left { justify-content: flex-start; }
-  .header-group--right { justify-content: flex-end; }
+  .header-group--left { justify-content: flex-start; padding-left: 40px; }
+  .header-group--right { justify-content: flex-end; padding-right: 40px; }
 
   .header-zone {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 2px;
-    padding: 6px 10px;
+    padding: 6px 0;
+    width: 80px;
     border-radius: var(--radius-sm);
     cursor: pointer;
     transition: background 0.1s;
@@ -335,13 +400,15 @@
   }
 
   .hz-name {
-    font-size: 0.7rem;
+    font-size: 0.85rem;
     color: var(--text-secondary);
     white-space: nowrap;
+    font-weight: 500;
+    text-transform: none;
   }
 
   .hz-count {
-    font-size: 1rem;
+    font-size: 1.2rem;
     font-weight: 700;
     color: var(--text-primary);
     line-height: 1;
@@ -356,30 +423,28 @@
   }
 
   .total-num {
-    font-size: 1.6rem;
+    font-size: 2rem;
     font-weight: 700;
     color: var(--accent-yellow);
     line-height: 1;
   }
 
-  .total-label {
-    font-size: 0.65rem;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
-
   /* Silhouette main row */
   .silhouette-wrap {
     display: flex;
-    align-items: stretch;
+    align-items: center;
     justify-content: center;
-    gap: 12px;
+    gap: 40px;
+    flex: 1;
+    min-height: 0;
   }
 
   .svg {
-    width: 120px;
-    flex-shrink: 0;
+    width: 220px;
+    height: auto;
+    max-height: 650px;
+    margin: 0 auto;
+    overflow: visible;
   }
 
   .zone {
@@ -394,8 +459,18 @@
     flex-direction: column;
     justify-content: space-between;
     align-items: stretch;
-    flex: 1;
-    min-width: 90px;
+    min-width: 140px;
+    height: 100%;
+    padding: 30px 0 60px 0;
+  }
+
+  .left-legend { margin-left: 62px; }
+  .right-legend { margin-right: 62px; }
+
+  .legend-group {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
   }
 
   .legend-row {
@@ -417,44 +492,24 @@
     background: rgba(219, 132, 31, 0.15);
   }
 
-  .left-legend .legend-row { justify-content: flex-end; }
-  .right-legend .legend-row { justify-content: flex-start; }
+  .left-legend .legend-row { justify-content: flex-start; }
+  .right-legend .legend-row { justify-content: flex-end; }
 
   .legend-zone {
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     color: var(--text-secondary);
     white-space: nowrap;
   }
 
   .legend-count {
-    font-size: 0.82rem;
-    font-weight: 600;
+    font-size: 1.2rem;
+    font-weight: 700;
     color: var(--text-primary);
-    min-width: 16px;
-    text-align: center;
+    width: 36px;
+    flex-shrink: 0;
   }
 
-  .zone-filter-badge {
-    position: absolute;
-    right: 0;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 3px 10px;
-    background: rgba(219, 132, 31, 0.12);
-    border: 1px solid rgba(219, 132, 31, 0.3);
-    border-radius: var(--radius-sm);
-    font-size: 0.75rem;
-    color: var(--accent-yellow);
-  }
+  .left-legend .legend-count { text-align: left; }
+  .right-legend .legend-count { text-align: right; }
 
-  .clear-filter {
-    background: none;
-    border: none;
-    color: var(--accent-yellow);
-    cursor: pointer;
-    font-size: 0.85rem;
-    padding: 0;
-    line-height: 1;
-  }
 </style>

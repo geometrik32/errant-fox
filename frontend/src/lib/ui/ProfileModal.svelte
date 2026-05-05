@@ -146,7 +146,6 @@
         <label for="color-pick">Цвет</label>
         <div class="color-row">
           <input id="color-pick" type="color" bind:value={color} class="color-input" />
-          <span class="color-val">{color || effectiveColor}</span>
         </div>
       </div>
 
@@ -192,9 +191,7 @@
   }
 
   .modal {
-    background: var(--surface);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
+    background: var(--surface-solid);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
@@ -320,12 +317,6 @@
   .color-input::-webkit-color-swatch {
     border: none;
     border-radius: 50%;
-  }
-
-  .color-val {
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-    font-family: monospace;
   }
 
   .field {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { fighters } from '../../stores';
   import type { Video } from '../api/types';
   import { resolveColor } from '../api/types';
@@ -17,9 +18,9 @@
 
   let { videos, onfilter, initialFilter }: Props = $props();
 
-  let selectedIds = $state<Set<string>>(new Set(initialFilter?.fighter_ids ?? []));
-  let dateFrom = $state(initialFilter?.date_from ?? '');
-  let dateTo = $state(initialFilter?.date_to ?? '');
+  let selectedIds = $state<Set<string>>(new Set(untrack(() => initialFilter?.fighter_ids ?? [])));
+  let dateFrom = $state(untrack(() => initialFilter?.date_from ?? ''));
+  let dateTo = $state(untrack(() => initialFilter?.date_to ?? ''));
   let dateMode = $state<'year' | 'classic'>('year');
   let calYear = $state(new Date().getFullYear());
   let selWeekStart = $state('');
@@ -95,10 +96,25 @@
   }
 
   function countForFighter(id: string): number {
+    if (selectedIds.size === 1) {
+      const [selectedId] = selectedIds;
+      if (selectedId === id) {
+        return videos.filter(v => v.fighter_a?.id === id || v.fighter_b?.id === id).length;
+      }
+      return videos.filter(v =>
+        (v.fighter_a?.id === selectedId || v.fighter_b?.id === selectedId) &&
+        (v.fighter_a?.id === id || v.fighter_b?.id === id)
+      ).length;
+    }
     return videos.filter(v => v.fighter_a?.id === id || v.fighter_b?.id === id).length;
   }
 
+  function isDisabled(id: string): boolean {
+    return selectedIds.size >= 2 && !selectedIds.has(id);
+  }
+
   function toggleFighter(id: string) {
+    if (isDisabled(id)) return;
     const next = new Set(selectedIds);
     if (next.has(id)) next.delete(id);
     else next.add(id);
@@ -125,8 +141,9 @@
       <h3 class="section-title">Бойцы</h3>
       {#each $fighters as fighter (fighter.id)}
         {@const count = countForFighter(fighter.id)}
-        <label class="row">
-          <input type="checkbox" checked={selectedIds.has(fighter.id)} onchange={() => toggleFighter(fighter.id)} />
+        {@const disabled = isDisabled(fighter.id)}
+        <label class="row" class:row--disabled={disabled}>
+          <input type="checkbox" checked={selectedIds.has(fighter.id)} disabled={disabled} tabindex="-1" onchange={() => toggleFighter(fighter.id)} />
           <div class="fighter-info">
             <div class="color-dot" style:background={resolveColor(fighter.id, fighter.color)}></div>
             <span class="fighter-name">{fighter.display_name}</span>
@@ -203,65 +220,11 @@
   </aside>
 
 <style>
-  .sidebar-slim {
-    display: none;
-  }
-
-  .slim-toggle {
-    display: none;
-    line-height: 1;
-    transition: var(--transition);
-  }
-
-  .slim-toggle:hover {
-    color: var(--text-primary);
-    border-color: var(--accent-yellow);
-  }
-
   .sidebar {
-    width: 280px;
-    flex-shrink: 0;
     display: flex;
     flex-direction: column;
     gap: 24px;
-    padding: 20px;
-  }
-
-  .sidebar-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--border-color);
-  }
-
-  .head-title {
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--text-secondary);
-  }
-
-  .head-toggle {
-    background: none;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    color: var(--text-secondary);
-    width: 28px;
-    height: 28px;
-    cursor: pointer;
-    font-size: 1.2rem;
-    line-height: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: var(--transition);
-  }
-
-  .head-toggle:hover {
-    color: var(--text-primary);
-    background: var(--surface-hover);
+    padding: 24px 20px 20px;
   }
 
   .section {
@@ -318,11 +281,22 @@
   .row:hover { background: var(--surface-hover); }
 
   .row input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
     width: 14px;
     height: 14px;
-    accent-color: #DB841F;
-    flex-shrink: 0;
+    border: 1.5px solid rgba(255, 255, 255, 0.5);
+    border-radius: 50%;
+    background: transparent;
     cursor: pointer;
+    position: relative;
+    transition: var(--transition);
+    flex-shrink: 0;
+  }
+  
+  .row input[type="checkbox"]:checked {
+    background: #DB841F;
+    border-color: #DB841F;
   }
 
   .fighter-info {
@@ -352,6 +326,15 @@
     font-size: 0.8rem;
     color: var(--text-secondary);
     flex-shrink: 0;
+    min-width: 2ch;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .row--disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
   }
 
   .empty {
@@ -418,7 +401,7 @@
   }
 
   .cal-year {
-    font-size: 0.85rem;
+    font-size: 1rem;
     font-weight: 700;
     color: var(--text-secondary);
     letter-spacing: 0.04em;
@@ -441,11 +424,12 @@
   }
 
   .cal-month-lbl {
-    font-size: 0.66rem;
+    font-size: 0.9rem;
     color: var(--text-secondary);
-    width: 26px;
+    width: 36px;
     flex-shrink: 0;
     text-align: right;
+    font-weight: 500;
   }
 
   .cal-weeks {
@@ -455,9 +439,9 @@
   }
 
   .cal-week {
-    width: 12px;
-    height: 12px;
-    border-radius: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
     border: none;
     background: var(--surface-solid);
     cursor: pointer;
