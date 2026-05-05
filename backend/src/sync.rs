@@ -80,7 +80,7 @@ async fn sync_once(
             }
 
             let new_id = Uuid::new_v4().to_string();
-            let new_video = NewVideo {
+            let mut new_video = NewVideo {
                 id: new_id.clone(),
                 seafile_path: seafile_path.clone(),
                 fighter_a_id: None,
@@ -88,7 +88,35 @@ async fn sync_once(
                 date,
                 duration_ms: None,
                 preview_count: 0,
+                fps: None,
             };
+
+            // Try to extract FPS from the moov atom (first 1 MB of the file)
+            match seafile
+                .fetch_range(&seafile_path, Some("bytes=0-1048576"))
+                .await
+            {
+                Ok(resp) => match resp.bytes().await {
+                    Ok(data) => match crate::moov::parse_fps(&data) {
+                        Ok(info) => {
+                            tracing::info!(
+                                "extracted fps={:.2} for {seafile_path}",
+                                info.fps
+                            );
+                            new_video.fps = Some(info.fps);
+                        }
+                        Err(e) => {
+                            tracing::warn!("moov parse failed for {seafile_path}: {e:#}");
+                        }
+                    },
+                    Err(e) => {
+                        tracing::warn!("failed to read body for {seafile_path}: {e:#}");
+                    }
+                },
+                Err(e) => {
+                    tracing::warn!("fetch_range failed for {seafile_path}: {e:#}");
+                }
+            }
 
             let db_clone = db.clone();
             if let Err(e) = tokio::task::spawn_blocking(move || {

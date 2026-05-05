@@ -87,6 +87,7 @@ pub struct VideoFullDto {
     pub fighter_b: Option<VideoFighterDto>,
     pub stream_url: String,
     pub duration_ms: Option<i32>,
+    pub fps: Option<f32>,
     pub bouts: Vec<BoutDto>,
     pub comments: Vec<CommentDto>,
 }
@@ -195,6 +196,7 @@ fn build_video_full(
         fighter_b,
         stream_url,
         duration_ms: video.duration_ms,
+        fps: video.fps,
         bouts: bouts.iter().map(bout_dto).collect(),
         comments: comment_dtos,
     }

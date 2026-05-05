@@ -144,14 +144,12 @@
 
   .panel {
     pointer-events: all;
-    background: var(--surface);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
+    background: var(--surface-solid);
     border: 1px solid var(--border-color);
     border-top: none;
     border-radius: 0 0 var(--radius-lg) var(--radius-lg);
     width: min(760px, 96vw);
-    box-shadow: var(--shadow-lg);
+    box-shadow: none;
     display: flex;
     flex-direction: column;
     max-height: calc(100vh - 80px);
@@ -238,7 +236,6 @@
     position: sticky;
     top: 0;
     background: var(--surface-solid);
-    backdrop-filter: var(--glass-blur);
   }
 
   tbody tr {

@@ -98,6 +98,7 @@ export interface VideoFull {
   fighter_b: VideoFighter | null;
   stream_url: string;
   duration_ms: number;
+  fps?: number | null;
   bouts: Bout[];
   comments: Comment[];
 }

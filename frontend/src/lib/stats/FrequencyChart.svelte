@@ -5,10 +5,11 @@
   interface Props {
     bouts: FighterBout[];
     rawVideos?: any[];
+    selectedWeek?: string;
     onfilter?: (week: string) => void;
   }
 
-  let { bouts, rawVideos = [], onfilter }: Props = $props();
+  let { bouts, rawVideos = [], selectedWeek = '', onfilter }: Props = $props();
 
   let canvas = $state<HTMLCanvasElement | undefined>(undefined);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -36,21 +37,38 @@
   }
 
   function buildData(bouts: FighterBout[], rawVideos: any[]) {
-    const taggedWeeks = new Map<string, number>();
+    // 1. Count unique videos that HAVE bouts (tagged/marked)
+    const taggedVideoIdsPerWeek = new Map<string, Set<string>>();
     for (const b of bouts) {
       const week = getISOWeek(b.video_date);
-      taggedWeeks.set(week, (taggedWeeks.get(week) ?? 0) + 1);
+      if (!taggedVideoIdsPerWeek.has(week)) taggedVideoIdsPerWeek.set(week, new Set());
+      taggedVideoIdsPerWeek.get(week)!.add(b.video_id);
     }
     
-    const untaggedWeeks = new Map<string, number>();
+    const taggedCountPerWeek = new Map<string, number>();
+    for (const [week, ids] of taggedVideoIdsPerWeek.entries()) {
+      taggedCountPerWeek.set(week, ids.size);
+    }
+    
+    // 2. Count TOTAL unique videos from rawVideos
+    const totalVideoIdsPerWeek = new Map<string, Set<string>>();
     for (const v of rawVideos) {
-      if (v.date && !v.is_tagged) {
+      if (v.date) {
         const week = getISOWeek(v.date);
-        untaggedWeeks.set(week, (untaggedWeeks.get(week) ?? 0) + 1);
+        if (!totalVideoIdsPerWeek.has(week)) totalVideoIdsPerWeek.set(week, new Set());
+        totalVideoIdsPerWeek.get(week)!.add(v.id || v.video_id);
       }
     }
 
-    const allVideoWeeks = new Set<string>([...taggedWeeks.keys(), ...untaggedWeeks.keys()]);
+    const untaggedCountPerWeek = new Map<string, number>();
+    const allVideoWeeks = new Set<string>([...taggedCountPerWeek.keys(), ...totalVideoIdsPerWeek.keys()]);
+
+    for (const week of allVideoWeeks) {
+      const total = totalVideoIdsPerWeek.get(week)?.size ?? 0;
+      const tagged = taggedCountPerWeek.get(week) ?? 0;
+      // We take max(0, total - tagged) just in case data is inconsistent
+      untaggedCountPerWeek.set(week, Math.max(0, total - tagged));
+    }
 
     if (allVideoWeeks.size === 0) return { labels: [], taggedData: [], untaggedData: [], yearBoundaries: [] };
 
@@ -68,8 +86,8 @@
       cur = addWeeks(cur, 1);
     }
 
-    const taggedData = allWeeks.map(w => taggedWeeks.get(w) ?? 0);
-    const untaggedData = allWeeks.map(w => untaggedWeeks.get(w) ?? 0);
+    const taggedData = allWeeks.map(w => taggedCountPerWeek.get(w) ?? 0);
+    const untaggedData = allWeeks.map(w => untaggedCountPerWeek.get(w) ?? 0);
 
     const yearBoundaries: number[] = [];
     for (let i = 1; i < allWeeks.length; i++) {
@@ -78,79 +96,103 @@
       }
     }
 
-    const monthNames = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
     const labels = allWeeks.map((w, i) => {
       const [year, wStr] = w.split('-W');
-      const wNum = parseInt(wStr);
-      const date = new Date(parseInt(year), 0, 1 + (wNum - 1) * 7);
-      const month = date.getMonth();
-      const prevDate = i > 0 ? new Date(parseInt(allWeeks[i-1].split('-W')[0]), 0, 1 + (parseInt(allWeeks[i-1].split('-W')[1]) - 1) * 7) : null;
-      if (i === 0 || (prevDate && month !== prevDate.getMonth())) {
-        return monthNames[month];
-      }
-      return '';
+      return parseInt(wStr); // Just the week number
     });
 
     return { labels, taggedData, untaggedData, yearBoundaries, allWeeks };
   }
 
+  let isDestroyed = false;
   $effect(() => {
     if (!canvas) return;
+    isDestroyed = false;
     const { labels, taggedData, untaggedData, yearBoundaries, allWeeks = [] } = buildData(bouts, rawVideos);
 
-    const yearLinePlugin = {
-      id: 'yearLines',
+    const monthBoundaryPlugin = {
+      id: 'monthBoundaries',
       beforeDraw(ch: any) {
-        if (!yearBoundaries.length) return;
         const { ctx, chartArea, scales } = ch;
-        if (!chartArea || !scales?.x) return;
+        if (!chartArea || !scales?.x || allWeeks.length === 0) return;
         ctx.save();
-        ctx.strokeStyle = 'rgba(180,190,200,0.25)';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 3]);
-        for (const idx of yearBoundaries) {
-          const meta = ch.getDatasetMeta(0);
-          if (!meta.data[idx] || !meta.data[idx - 1]) continue;
-          const x = (meta.data[idx - 1].x + meta.data[idx].x) / 2;
-          ctx.beginPath();
-          ctx.moveTo(x, chartArea.top);
-          ctx.lineTo(x, chartArea.bottom);
-          ctx.stroke();
-          const year = '20' + (allWeeks[idx]?.split('-W')[0]?.slice(2) ?? '');
-          ctx.setLineDash([]);
-          ctx.fillStyle = 'rgba(160,180,200,0.7)';
-          ctx.font = '10px Inter, sans-serif';
-          ctx.textAlign = 'left';
-          ctx.fillText(year, x + 3, chartArea.top + 12);
+        const meta = ch.getDatasetMeta(0);
+        const monthNames = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+        
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.font = 'bold 10px Inter';
+        ctx.textAlign = 'center';
+
+        let monthStartIdx = 0;
+        const getMonth = (w: string) => {
+          const [year, wStr] = w.split('-W');
+          const d = new Date(parseInt(year), 0, 1 + (parseInt(wStr) - 1) * 7);
+          return d.getMonth();
+        };
+
+        for (let i = 0; i <= allWeeks.length; i++) {
+          if (i === allWeeks.length || (i > 0 && getMonth(allWeeks[i]) !== getMonth(allWeeks[i-1]))) {
+            const startX = meta.data[monthStartIdx].x;
+            const endX = meta.data[i-1].x;
+            const y = chartArea.bottom + 35; // Matches ResultsChart
+            const monthIdx = getMonth(allWeeks[monthStartIdx]);
+
+            // Draw bracket if month has more than 1 week or it's just a small dash
+            ctx.beginPath();
+            ctx.moveTo(startX, y - 5);
+            ctx.lineTo(startX, y);
+            ctx.lineTo(endX, y);
+            ctx.lineTo(endX, y - 5);
+            ctx.stroke();
+
+            // Draw month name
+            ctx.fillText(monthNames[monthIdx], (startX + endX) / 2, y + 15);
+            
+            monthStartIdx = i;
+          }
         }
         ctx.restore();
       }
     };
 
     import('chart.js').then(({ Chart, registerables }) => {
+      if (isDestroyed) return;
       Chart.register(...registerables);
       if (chart) { chart.destroy(); chart = null; }
-      chart = new Chart(canvas!, {
+      if (!canvas) return;
+
+      chart = new Chart(canvas, {
         type: 'bar',
-        plugins: [yearLinePlugin],
+        plugins: [monthBoundaryPlugin],
         data: {
-          labels,
+          labels: labels as string[],
           datasets: [
             {
               label: 'Размечено',
               data: taggedData,
-              backgroundColor: '#fbbf24',
+              backgroundColor: (ctx: any) => {
+                const week = allWeeks[ctx.dataIndex];
+                if (!selectedWeek || week === selectedWeek) return '#f59e0b';
+                return 'rgba(245, 158, 11, 0.2)';
+              },
               borderRadius: 2,
               borderSkipped: false,
-              barPercentage: 0.7,
+              barPercentage: 0.8,
+              categoryPercentage: 0.8,
             },
             {
-              label: 'Не размечено',
+              label: 'Всего боёв',
               data: untaggedData,
-              backgroundColor: 'rgba(100,130,160,0.3)',
+              backgroundColor: (ctx: any) => {
+                const week = allWeeks[ctx.dataIndex];
+                if (!selectedWeek || week === selectedWeek) return '#334155';
+                return 'rgba(51, 65, 85, 0.2)';
+              },
               borderRadius: 2,
               borderSkipped: false,
-              barPercentage: 0.7,
+              barPercentage: 0.8,
+              categoryPercentage: 0.8,
             }
           ],
         },
@@ -160,7 +202,11 @@
           onClick: (_e, elements) => {
             if (elements.length > 0 && onfilter) {
               const week = allWeeks[elements[0].index];
-              if (week) onfilter(week);
+              if (week === selectedWeek) {
+                onfilter('');
+              } else {
+                onfilter(week);
+              }
             }
           },
           plugins: {
@@ -172,14 +218,36 @@
               titleColor: '#a0b4c8',
               bodyColor: '#e8edf2',
               callbacks: {
-                title: (items) => allWeeks[items[0].dataIndex] ?? '',
+                title: (items) => {
+                  const idx = items[0].dataIndex;
+                  return allWeeks[idx] ?? '';
+                },
+                label: (ctx) => {
+                  const idx = ctx.dataIndex;
+                  const tagged = taggedData[idx];
+                  const untagged = untaggedData[idx];
+                  const total = tagged + untagged;
+                  if (ctx.datasetIndex === 0) return `Размечено: ${tagged}`;
+                  return `Всего: ${total}`;
+                }
               },
             },
+          },
+          layout: {
+            padding: { left: 10, right: 10, top: 10, bottom: 60 }
           },
           scales: {
             x: {
               stacked: true,
-              ticks: { color: '#6b7280', font: { family: 'Inter', size: 10 }, maxRotation: 0 },
+              ticks: { 
+                color: '#6b7280', 
+                font: { family: 'Inter', size: 9 }, 
+                maxRotation: 0,
+                autoSkip: false,
+                callback: function(val, index) {
+                  return labels[index];
+                }
+              },
               grid: { display: false },
               border: { display: false }
             },
@@ -187,7 +255,7 @@
               stacked: true,
               beginAtZero: true,
               ticks: { display: true, color: '#6b7280', font: { size: 10 }, stepSize: 1 },
-              grid: { display: false },
+              grid: { display: true, color: 'rgba(255,255,255,0.03)' },
               border: { display: false }
             },
           },
@@ -195,14 +263,17 @@
       });
     });
 
-    return () => { chart?.destroy(); chart = null; };
+    return () => { 
+      isDestroyed = true;
+      if (chart) { chart.destroy(); chart = null; }
+    };
   });
 
   onMount(() => () => { chart?.destroy(); chart = null; });
 </script>
 
 <div class="chart-card">
-  <div class="chart-title">Частота поединков</div>
+  <div class="chart-title">Частота боёв</div>
   <div class="chart-body">
     <canvas bind:this={canvas}></canvas>
   </div>
@@ -211,12 +282,10 @@
 <style>
   .chart-card {
     background: var(--surface);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-2xl);
     box-shadow: var(--shadow-sm);
-    padding: 24px;
+    padding: 24px 24px 12px 24px;
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -231,7 +300,7 @@
 
   .chart-body {
     flex: 1;
-    min-height: 240px;
+    min-height: 0;
     position: relative;
   }
 

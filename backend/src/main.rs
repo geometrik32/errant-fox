@@ -8,6 +8,7 @@ mod config;
 mod db;
 mod errors;
 mod middleware;
+mod moov;
 mod previews;
 mod seafile;
 mod state;

@@ -22,6 +22,7 @@ diesel::table! {
         date          -> Date,
         duration_ms   -> Nullable<Integer>,
         preview_count -> Integer,
+        fps           -> Nullable<Float>,
         created_at    -> Timestamp,
     }
 }

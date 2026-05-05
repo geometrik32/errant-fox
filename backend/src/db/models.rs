@@ -43,6 +43,7 @@ pub struct Video {
     pub date: NaiveDate,
     pub duration_ms: Option<i32>,
     pub preview_count: i32,
+    pub fps: Option<f32>,
     pub created_at: NaiveDateTime,
 }
 
@@ -56,6 +57,7 @@ pub struct NewVideo {
     pub date: NaiveDate,
     pub duration_ms: Option<i32>,
     pub preview_count: i32,
+    pub fps: Option<f32>,
 }
 
 // ── techniques ────────────────────────────────────────────────────────────────
