@@ -219,7 +219,6 @@
             <label class="label" for="new-color">Цвет</label>
             <div class="color-row">
               <input id="new-color" type="color" class="color-input" bind:value={newColor} />
-              <span class="color-val">{newColor}</span>
             </div>
           </div>
         </div>
@@ -273,7 +272,6 @@
                   <input class="input-glass" type="password" bind:value={editPassword} placeholder="Новый пароль (необязательно)" autocomplete="new-password" />
                   <div class="color-row">
                     <input type="color" class="color-input" bind:value={editColor} />
-                    <span class="color-val">{editColor}</span>
                     <label class="checkbox-row" style="margin-left: auto">
                       <input type="checkbox" bind:checked={editIsAdmin} />
                       <span>Админ</span>
@@ -350,9 +348,7 @@
   }
 
   .modal {
-    background: var(--surface);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
+    background: var(--surface-solid);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     width: 100%;
@@ -482,21 +478,6 @@
     font-weight: 500;
   }
 
-  .input {
-    background: var(--surface-solid);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
-    font-size: 0.875rem;
-    padding: 7px 10px;
-    outline: none;
-    width: 100%;
-    transition: var(--transition);
-    box-sizing: border-box;
-  }
-
-  .input:focus { border-color: var(--accent-yellow); }
-
   .color-row {
     display: flex;
     align-items: center;
@@ -521,12 +502,6 @@
   .color-input::-webkit-color-swatch {
     border: none;
     border-radius: 50%;
-  }
-
-  .color-val {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    font-family: monospace;
   }
 
   .checkbox-row {

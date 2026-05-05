@@ -29,34 +29,34 @@
       ? resolveColor(fighters[0]?.id ?? 'a', fighters[0]?.color ?? null)
       : bout.score_b > bout.score_a
         ? resolveColor(fighters[1]?.id ?? 'b', fighters[1]?.color ?? null)
-        : null
+        : '#ffffff'
   );
 
   // ── Form state ──────────────────────────────────────────────────────────────
 
-  let timeStartMs = $state(bout.time_start_ms);
-  let timeEndMs   = $state(bout.time_end_ms);
-  let scoreA   = $state(bout.score_a);
-  let scoreB   = $state(bout.score_b);
-  let techAId  = $state<number | null>(bout.technique_a_id);
-  let techBId  = $state<number | null>(bout.technique_b_id);
-  let zoneA    = $state<string>(bout.hit_zone_a ?? '');
-  let zoneB    = $state<string>(bout.hit_zone_b ?? '');
-  let resA     = $state<ResultType>((bout.result_a as ResultType | null) ?? 'hit');
-  let resB     = $state<ResultType>((bout.result_b as ResultType | null) ?? 'hit');
+  let timeStartMs = $state(untrack(() => bout.time_start_ms));
+  let timeEndMs   = $state(untrack(() => bout.time_end_ms));
+  let scoreA   = $state(untrack(() => bout.score_a));
+  let scoreB   = $state(untrack(() => bout.score_b));
+  let techAId  = $state<number | null>(untrack(() => bout.technique_a_id));
+  let techBId  = $state<number | null>(untrack(() => bout.technique_b_id));
+  let zoneA    = $state<string>(untrack(() => bout.hit_zone_a ?? ''));
+  let zoneB    = $state<string>(untrack(() => bout.hit_zone_b ?? ''));
+  let resA     = $state<ResultType>(untrack(() => (bout.result_a as ResultType | null) ?? 'hit'));
+  let resB     = $state<ResultType>(untrack(() => (bout.result_b as ResultType | null) ?? 'hit'));
 
   // ── Committed snapshot (last saved) ─────────────────────────────────────────
 
-  let cTimeStart = $state(bout.time_start_ms);
-  let cTimeEnd   = $state(bout.time_end_ms);
-  let cScoreA  = $state(bout.score_a);
-  let cScoreB  = $state(bout.score_b);
-  let cTechAId = $state<number | null>(bout.technique_a_id);
-  let cTechBId = $state<number | null>(bout.technique_b_id);
-  let cZoneA   = $state<string>(bout.hit_zone_a ?? '');
-  let cZoneB   = $state<string>(bout.hit_zone_b ?? '');
-  let cResA    = $state<ResultType>((bout.result_a as ResultType | null) ?? 'hit');
-  let cResB    = $state<ResultType>((bout.result_b as ResultType | null) ?? 'hit');
+  let cTimeStart = $state(untrack(() => bout.time_start_ms));
+  let cTimeEnd   = $state(untrack(() => bout.time_end_ms));
+  let cScoreA  = $state(untrack(() => bout.score_a));
+  let cScoreB  = $state(untrack(() => bout.score_b));
+  let cTechAId = $state<number | null>(untrack(() => bout.technique_a_id));
+  let cTechBId = $state<number | null>(untrack(() => bout.technique_b_id));
+  let cZoneA   = $state<string>(untrack(() => bout.hit_zone_a ?? ''));
+  let cZoneB   = $state<string>(untrack(() => bout.hit_zone_b ?? ''));
+  let cResA    = $state<ResultType>(untrack(() => (bout.result_a as ResultType | null) ?? 'hit'));
+  let cResB    = $state<ResultType>(untrack(() => (bout.result_b as ResultType | null) ?? 'hit'));
 
   let dirty = $derived(
     timeStartMs !== cTimeStart || timeEndMs !== cTimeEnd ||
@@ -120,8 +120,8 @@
         technique_b_id: techBId,
         hit_zone_a: zoneA || null,
         hit_zone_b: zoneB || null,
-        result_a: resA,
-        result_b: resB,
+        result_a: resA as any,
+        result_b: resB as any,
       });
       cTimeStart = timeStartMs;
       cTimeEnd   = timeEndMs;
@@ -193,11 +193,11 @@
 
   const RESULT_OPTIONS: { value: ResultType; label: string }[] = [
     { value: 'hit',             label: 'Попал' },
-    { value: 'miss',            label: 'Промахнулся' },
-    { value: 'blocked',         label: 'Заблокировали' },
+    { value: 'miss',            label: 'Промах' },
+    { value: 'blocked',         label: 'Заблок.' },
     { value: 'late',            label: 'Опоздал' },
     { value: 'no_strike',       label: 'Не бил' },
-    { value: 'disqualification',label: 'Неквалификация' },
+    { value: 'disqualification',label: 'Неквал.' },
     { value: 'afterblow',       label: 'Афтерблоу' },
   ];
 
@@ -292,6 +292,7 @@
         <span class="time-cap-label">Начало</span>
         <span class="time-cap-value">{fmtMs(timeStartMs)}</span>
       </button>
+      <div class="col-divider"></div>
       <button class="time-cap-btn" onclick={() => { timeEndMs = Math.round(currentTime * 1000); }} aria-label="Захватить конец схода">
         <span class="time-cap-label">Конец</span>
         <span class="time-cap-value">{fmtMs(timeEndMs)}</span>
@@ -312,8 +313,7 @@
         </div>
 
         <div class="field">
-          <span class="field-lbl">Техника</span>
-          <div class="tech-wrap"
+          <div class="tech-wrap" role="presentation"
             bind:this={techWrapA}
             onmouseenter={() => startTooltip('a')}
             onmouseleave={stopTooltip}
@@ -328,12 +328,10 @@
         </div>
 
         <div class="field">
-          <span class="field-lbl">Зона поражения</span>
           <HitZonePicker value={zoneA} onchange={(z) => { zoneA = z; }} />
         </div>
 
         <div class="field">
-          <span class="field-lbl">Результат</span>
           <div class="res-wrap" bind:this={resWrapA}>
             <button class="res-btn" onclick={() => openResDropdown('a')}>
               {resLabel(resA)}
@@ -356,8 +354,7 @@
         </div>
 
         <div class="field">
-          <span class="field-lbl">Техника</span>
-          <div class="tech-wrap"
+          <div class="tech-wrap" role="presentation"
             bind:this={techWrapB}
             onmouseenter={() => startTooltip('b')}
             onmouseleave={stopTooltip}
@@ -372,12 +369,10 @@
         </div>
 
         <div class="field">
-          <span class="field-lbl">Зона поражения</span>
           <HitZonePicker value={zoneB} onchange={(z) => { zoneB = z; }} />
         </div>
 
         <div class="field">
-          <span class="field-lbl">Результат</span>
           <div class="res-wrap" bind:this={resWrapB}>
             <button class="res-btn" onclick={() => openResDropdown('b')}>
               {resLabel(resB)}
@@ -392,7 +387,7 @@
     <!-- Result dropdown — appended to body via portal to escape backdrop-filter containing block -->
     {#if resDropdown && resDropdownPos}
       <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-      <div class="dropdown-backdrop" use:portal onclick={closeResDropdown}></div>
+      <div class="dropdown-backdrop" use:portal role="presentation" onclick={closeResDropdown}></div>
       <div class="res-dropdown" use:portal style="top: {resDropdownPos.top}px; left: {resDropdownPos.left}px; width: {resDropdownPos.width}px">
         {#each RESULT_OPTIONS as opt (opt.value)}
           <button
@@ -532,9 +527,10 @@
 
   /* ── Time row ───────────────────────────────────────────────────────────── */
   .time-row {
-    display: flex;
-    gap: 6px;
-    padding: 8px 10px 0;
+    display: grid;
+    grid-template-columns: 1fr 1px 1fr;
+    gap: 0;
+    padding: 10px 10px 0;
   }
 
   .time-cap-btn {
@@ -596,6 +592,7 @@
     text-transform: uppercase;
     padding-bottom: 4px;
     border-bottom: 1px solid var(--border-color);
+    text-align: center;
   }
 
   /* ── Score row ──────────────────────────────────────────────────────────── */
@@ -603,6 +600,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
+    justify-content: center;
   }
 
   .adj {
@@ -640,6 +638,7 @@
     padding: 4px 6px;
     outline: none;
     -moz-appearance: textfield;
+    appearance: textfield;
   }
 
   .score-inp::-webkit-inner-spin-button,
@@ -656,13 +655,6 @@
     display: flex;
     flex-direction: column;
     gap: 3px;
-  }
-
-  .field-lbl {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
   }
 
   .field-sel {

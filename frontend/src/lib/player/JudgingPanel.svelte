@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, untrack } from 'svelte';
   import { fighters } from '../../stores';
   import type { VideoFull, Bout, VideoFighter } from '../api/types';
   import { resolveColor } from '../api/types';
@@ -19,12 +19,12 @@
 
   // ── Local bouts state ────────────────────────────────────────────────────
 
-  let bouts = $state<Bout[]>([...video.bouts]);
+  let bouts = $state<Bout[]>([...untrack(() => video.bouts)]);
 
   // ── Fighter assignment ───────────────────────────────────────────────────
 
-  let fighterAId = $state<string>(video.fighter_a?.id ?? '');
-  let fighterBId = $state<string>(video.fighter_b?.id ?? '');
+  let fighterAId = $state<string>(untrack(() => video.fighter_a?.id ?? ''));
+  let fighterBId = $state<string>(untrack(() => video.fighter_b?.id ?? ''));
 
   let activeFighterA = $derived<VideoFighter | null>(
     $fighters.find(f => f.id === fighterAId) as VideoFighter | null ?? null

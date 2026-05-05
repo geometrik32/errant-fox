@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, untrack } from 'svelte';
   import { currentUser } from '../../stores';
   import type { Comment } from '../api/types';
   import { createComment, updateComment, deleteComment, reactComment, deleteReact } from '../api/comments';
@@ -15,7 +15,7 @@
 
   let { videoId, comments: initComments = [], currentTime = 0, highlightedId = null, onseek, oncommentschange }: Props = $props();
 
-  let comments = $state<Comment[]>([...initComments]);
+  let comments = $state<Comment[]>([...untrack(() => initComments)]);
   let text = $state('');
   let replyTo = $state<Comment | null>(null);
   let sending = $state(false);
@@ -233,8 +233,15 @@
           >👎 {#if c.dislikes > 0}<span class="react-count">{c.dislikes}</span>{/if}</button>
           <button class="reply-link" onclick={() => { replyTo = c; }}>Ответить</button>
           {#if $currentUser?.id === c.author.id}
-            <button class="edit-link" onclick={() => startEdit(c)}>Редактировать</button>
-            <button class="del-link" onclick={() => handleDelete(c.id)}>Удалить</button>
+            <button class="edit-link" onclick={() => startEdit(c)}>Ред.</button>
+            <button class="del-link" onclick={() => handleDelete(c.id)} title="Удалить">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+              </svg>
+            </button>
           {/if}
         </div>
       </div>
@@ -387,9 +394,10 @@
 
   .msg-footer {
     display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
+    gap: 12px;
     align-items: center;
+    margin-top: 2px;
+    white-space: nowrap;
   }
 
   .reply-link, .edit-link, .del-link {
@@ -397,18 +405,22 @@
     border: none;
     font-size: 0.75rem;
     cursor: pointer;
-    padding: 0;
+    padding: 2px 4px;
+    border-radius: var(--radius-sm);
     transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
-  .reply-link { color: var(--text-secondary); }
-  .reply-link:hover { color: var(--text-primary); }
+  .reply-link { color: var(--text-secondary); font-weight: 500; }
+  .reply-link:hover { color: var(--text-primary); background: var(--surface-solid); }
 
-  .edit-link { color: var(--text-secondary); }
-  .edit-link:hover { color: var(--text-primary); }
+  .edit-link { color: var(--text-secondary); font-weight: 500; }
+  .edit-link:hover { color: var(--text-primary); background: var(--surface-solid); }
 
-  .del-link { color: #ef4444; }
-  .del-link:hover { color: #dc2626; }
+  .del-link { color: var(--text-secondary); }
+  .del-link:hover { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
 
   .edit-area {
     display: flex;

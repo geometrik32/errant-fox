@@ -1,27 +1,41 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
+  import { extractFpsFromUrl } from './moov';
+
   interface Props {
     src: string;
+    fps?: number | null;
     speed?: number;
     volume?: number;
     ontimeupdate?: (t: number) => void;
     ondurationchange?: (d: number) => void;
     onplayingchange?: (p: boolean) => void;
     onloopingchange?: (l: boolean) => void;
-    onfpschange?: (fps: number) => void;
+    ondetectedfps?: (fps: number) => void;
   }
 
   let {
     src,
+    fps = null,
     speed = 1,
     volume = 1,
     ontimeupdate,
     ondurationchange,
     onplayingchange,
     onloopingchange,
-    onfpschange,
+    ondetectedfps,
   }: Props = $props();
 
   let videoEl: HTMLVideoElement;
+
+  /// Effective FPS (integer): API value → moov parser fallback → 30 as last resort.
+  let effectiveFps = $state<number>(untrack(() => fps != null && fps > 0 ? Math.round(fps) : 0));
+
+  // Re-sync if parent passes a new non-null fps (e.g. after API re-fetch)
+  $effect(() => {
+    if (fps != null && fps > 0) effectiveFps = Math.round(fps);
+  });
+
   let loopRange: { start: number; end: number } | null = null;
   let looping = false;
   let zoom = $state(1);
@@ -33,11 +47,9 @@
   let panStartPanX = 0;
   let panStartPanY = 0;
 
-  // Detected fps, used for frame-step
-  let detectedFps = 25;
-
-  // Integer frame target during stepping — bypasses browser's imprecise currentTime
+  // Integer frame target during stepping
   let stepFrameTarget: number | null = null;
+  let stepRetries = 0;
 
   // Track middle-click for double-click reset
   let lastMiddleClickTime = 0;
@@ -45,8 +57,38 @@
   $effect(() => { if (videoEl) videoEl.playbackRate = speed; });
   $effect(() => { if (videoEl) videoEl.volume = volume; });
 
+  // ── Moov-based FPS detection (fallback when API provides none) ──────────
+
+  let fpsFromMoov = $state<number | null>(null);
+
+  // Kick off FPS extraction from the moov atom on mount (when API has no fps).
+  // This parses the first 1 MB of the video file to find the real frame rate.
+  function detectFpsFromMoov(): void {
+    if (fps != null) return;  // already have FPS from API
+    if (fpsFromMoov !== null) return; // already tried
+    extractFpsFromUrl(src).then((detected) => {
+      if (detected != null && detected > 0) {
+        fpsFromMoov = detected;
+        effectiveFps = detected;
+        ondetectedfps?.(detected);
+      } else {
+        // Last resort — 30 fps is a safe universal fallback
+        fpsFromMoov = 30;
+        effectiveFps = 30;
+        ondetectedfps?.(30);
+      }
+    });
+  }
+
+  // Run detection when src is set
+  $effect(() => {
+    if (src) detectFpsFromMoov();
+  });
+
+  // ── Exports ──────────────────────────────────────────────────────────────
+
   export function seekTo(ms: number): void {
-    stepFrameTarget = null; // leave step mode on manual seek
+    stepFrameTarget = null;
     if (videoEl) videoEl.currentTime = ms / 1000;
   }
 
@@ -59,23 +101,47 @@
   }
 
   export function stepForward(): void {
-    if (!videoEl) return;
+    if (!videoEl || effectiveFps === 0) return;
+    videoEl.pause();
     if (stepFrameTarget === null)
-      stepFrameTarget = Math.round(videoEl.currentTime * detectedFps);
+      stepFrameTarget = Math.round(videoEl.currentTime * effectiveFps);
     stepFrameTarget++;
-    const t = Math.min(videoEl.duration || 0, stepFrameTarget / detectedFps);
+    const t = Math.min(videoEl.duration || 0, stepFrameTarget / effectiveFps);
     videoEl.currentTime = t;
-    ontimeupdate?.(t); // report intended time, not what the browser snaps to
+    ontimeupdate?.(t);
+    stepRetries = 0;
+    correctFrameStep();
   }
 
   export function stepBackward(): void {
-    if (!videoEl) return;
+    if (!videoEl || effectiveFps === 0) return;
+    videoEl.pause();
     if (stepFrameTarget === null)
-      stepFrameTarget = Math.round(videoEl.currentTime * detectedFps);
+      stepFrameTarget = Math.round(videoEl.currentTime * effectiveFps);
     stepFrameTarget = Math.max(0, stepFrameTarget - 1);
-    const t = stepFrameTarget / detectedFps;
+    const t = stepFrameTarget / effectiveFps;
     videoEl.currentTime = t;
     ontimeupdate?.(t);
+    stepRetries = 0;
+    correctFrameStep();
+  }
+
+  function correctFrameStep(): void {
+    if (!videoEl || stepFrameTarget === null || effectiveFps === 0) return;
+    if (!('requestVideoFrameCallback' in videoEl)) return;
+
+    const target = stepFrameTarget;
+    videoEl.requestVideoFrameCallback((_now, meta) => {
+      if (stepFrameTarget !== target) return;
+      const actualFrame = Math.round(meta.mediaTime * effectiveFps);
+      if (actualFrame !== target && stepRetries < 1) {
+        stepRetries++;
+        const t = target / effectiveFps;
+        videoEl!.currentTime = t;
+        ontimeupdate?.(t);
+        correctFrameStep();
+      }
+    });
   }
 
   export function setLoop(start: number, end: number, autoPlay = true): void {
@@ -95,10 +161,10 @@
     onloopingchange?.(looping);
   }
 
+  // ── Event handlers ───────────────────────────────────────────────────────
+
   function handleTimeUpdate() {
     if (!videoEl) return;
-    // During frame stepping, we already emit ontimeupdate with the intended frame time.
-    // Suppress the browser's imprecise timeupdate so the frame counter doesn't flicker.
     if (stepFrameTarget === null) ontimeupdate?.(videoEl.currentTime);
     if (looping && loopRange && videoEl.currentTime * 1000 >= loopRange.end) {
       videoEl.currentTime = loopRange.start / 1000;
@@ -112,35 +178,9 @@
 
   function handlePause() { onplayingchange?.(false); }
 
-  // FPS detection — measure first 16 frame intervals after play
-  let fpsSamples: number[] = [];
-  let lastMediaTime = -1;
-
-  function fpsCallback(_now: number, meta: { mediaTime: number }): void {
-    if (lastMediaTime >= 0) {
-      const diff = meta.mediaTime - lastMediaTime;
-      if (diff > 0 && diff < 0.2) fpsSamples.push(diff);
-    }
-    lastMediaTime = meta.mediaTime;
-
-    if (fpsSamples.length < 16) {
-      videoEl?.requestVideoFrameCallback(fpsCallback);
-    } else {
-      const avg = fpsSamples.reduce((a, b) => a + b) / fpsSamples.length;
-      const fps = Math.round(1 / avg);
-      detectedFps = fps;
-      onfpschange?.(fps);
-      fpsSamples = [];
-      lastMediaTime = -1;
-    }
-  }
-
-  function handlePlayForFps() {
-    stepFrameTarget = null; // leave step mode when playback resumes
+  function handlePlay() {
+    stepFrameTarget = null;
     onplayingchange?.(true);
-    if (fpsSamples.length === 0 && videoEl && 'requestVideoFrameCallback' in videoEl) {
-      videoEl.requestVideoFrameCallback(fpsCallback);
-    }
   }
 
   let wrapEl: HTMLDivElement | null = $state(null);
@@ -216,7 +256,7 @@
     {src}
     ontimeupdate={handleTimeUpdate}
     ondurationchange={handleDurationChange}
-    onplay={handlePlayForFps}
+    onplay={handlePlay}
     onpause={handlePause}
     onclick={handleClick}
     onmousedown={handleMousedown}

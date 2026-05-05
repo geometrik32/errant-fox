@@ -1,40 +1,50 @@
 <script lang="ts">
+  import { techniques } from '../../stores';
   import type { FighterBout } from '../api/types';
 
   interface Props {
     bouts: FighterBout[];
+    type?: 'my' | 'opponent';
     onfilter?: (tech: string) => void;
   }
 
-  let { bouts, onfilter }: Props = $props();
+  let { bouts, type = 'my', onfilter }: Props = $props();
 
-  function getTopTechniques(bouts: FighterBout[], limit: number) {
+  function getTopTechniques(bouts: FighterBout[]) {
     const counts = new Map<string, { count: number, success: number }>();
+    
+    // Initialize with all techniques from store
+    for (const t of $techniques) {
+      counts.set(t.name, { count: 0, success: 0 });
+    }
+
     for (const b of bouts) {
-      if (b.my_technique_name) {
-        const stats = counts.get(b.my_technique_name) || { count: 0, success: 0 };
+      const name = type === 'my' ? b.my_technique_name : b.opponent_technique_name;
+      const res = type === 'my' ? b.my_result : b.opponent_result;
+      
+      if (name) {
+        const stats = counts.get(name) || { count: 0, success: 0 };
         stats.count++;
-        if (b.my_result === 'hit') stats.success++;
-        counts.set(b.my_technique_name, stats);
+        if (res === 'hit') stats.success++;
+        counts.set(name, stats);
       }
     }
+
     return [...counts.entries()]
-      .sort((a, b) => b[1].count - a[1].count)
-      .slice(0, limit)
       .map(([name, stats]) => ({
         name,
         count: stats.count,
-        successRate: Math.round((stats.success / stats.count) * 100)
-      }));
+        successRate: stats.count > 0 ? Math.round((stats.success / stats.count) * 100) : 0
+      }))
+      .sort((a, b) => b.successRate - a.successRate || b.count - a.count);
   }
 
-  let topTechniques = $derived(getTopTechniques(bouts, 5));
+  let topTechniques = $derived(getTopTechniques(bouts));
 </script>
 
 <div class="top-techniques glass-card">
   <div class="card-header">
-    <h3 class="card-title">Топ техник</h3>
-    <span class="card-subtitle">по частоте использования</span>
+    <h3 class="card-title">{type === 'my' ? 'Топ моих техник' : 'Топ техник оппонента'}</h3>
   </div>
   <div class="tech-list">
     {#each topTechniques as t}
@@ -58,9 +68,8 @@
 <style>
   .top-techniques {
     background: var(--surface);
-    backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-2xl);
     padding: 24px;
     box-shadow: var(--shadow-sm);
     height: 100%;
@@ -82,16 +91,22 @@
     margin: 0;
   }
 
-  .card-subtitle {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-  }
-
   .tech-list {
     display: flex;
     flex-direction: column;
     gap: 12px;
     flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+    padding-right: 4px;
+  }
+
+  .tech-list::-webkit-scrollbar {
+    width: 4px;
+  }
+  .tech-list::-webkit-scrollbar-thumb {
+    background: var(--surface-solid);
+    border-radius: 4px;
   }
 
   .tech-item {
