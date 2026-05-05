@@ -1,4 +1,5 @@
 {
+  "enabledMcpjsonServers": ["figma"],
   "permissions": {
     "allow": [
       "Bash(git --version)",
@@ -32,7 +33,15 @@
       "PowerShell(Get-ChildItem -Path \"E:\\\\00_Curent project\\\\Errant Fox\" -Force | Select-Object Name, @{Name=\"Type\";Expression={if\\($_.PSIsContainer\\){\"DIR\"}else{\"FILE\"}}} | Format-Table -AutoSize)",
       "PowerShell(Get-ChildItem -Path \"E:\\\\00_Curent project\\\\Errant Fox\\\\backend\\\\src\" -Recurse -Directory | ForEach-Object {$_.FullName -replace [regex]::Escape\\(\"E:\\\\00_Curent project\\\\Errant Fox\\\\backend\\\\src\"\\), \"src\"} | Sort-Object)",
       "PowerShell(Get-ChildItem -Path \"E:\\\\00_Curent project\\\\Errant Fox\\\\frontend\\\\src\" -Recurse -Directory | ForEach-Object {$_.FullName -replace [regex]::Escape\\(\"E:\\\\00_Curent project\\\\Errant Fox\\\\frontend\\\\src\"\\), \"src\"} | Sort-Object)",
-      "PowerShell(Get-ChildItem -Path \"E:\\\\00_Curent project\\\\Errant Fox\\\\scripts\" -File | ForEach-Object {$_.Name})"
+      "PowerShell(Get-ChildItem -Path \"E:\\\\00_Curent project\\\\Errant Fox\\\\scripts\" -File | ForEach-Object {$_.Name})",
+      "Bash(docker compose *)",
+      "PowerShell(Get-ChildItem -Path \"e:\\\\00_Curent project\\\\Errant Fox\" -Recurse -Directory | Where-Object { $_.Name -eq \"backend\" })",
+      "Bash(docker build *)",
+      "Bash(docker restart *)",
+      "PowerShell(docker restart infra-backend-1)",
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:8081/api/auth/login\" -Method Post -Body '{\"username\":\"testlocal\",\"password\":\"testpass\"}' -ContentType \"application/json\")",
+      "PowerShell(docker logs infra-backend-1 2>&1 | Select-String \"DONE  duration|FAILED  reason\" | ForEach-Object { $_.Line })",
+      "PowerShell(docker logs infra-backend-1 2>&1 | Select-String \"e9a21833\" | ForEach-Object { $_.Line })"
     ]
   }
 }
