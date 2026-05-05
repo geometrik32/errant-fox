@@ -421,7 +421,7 @@
     {/if}
 
     <div class="card-actions">
-      <button class="btn btn-primary btn-sm" onclick={handleSave} disabled={saving || !dirty}>
+      <button class="btn btn-sm {dirty ? 'btn-primary' : 'btn-outline'}" onclick={handleSave} disabled={saving || !dirty}>
         {saving ? 'Сохранение…' : 'Сохранить'}
       </button>
       <button class="btn btn-outline btn-sm" onclick={handleCollapse}>Свернуть</button>
