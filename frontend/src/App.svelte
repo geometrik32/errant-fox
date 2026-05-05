@@ -63,7 +63,7 @@
 {:else}
   <div class="app">
     <Header {hash} />
-    <main class="main" class:main--player={routeName === 'player'}>
+    <main class="main" class:main--player={routeName === 'player'} class:main--stats={routeName === 'stats'}>
       {#if routeName === 'gallery'}
         <Gallery />
       {:else if routeName === 'stats'}
@@ -81,17 +81,23 @@
   .app {
     display: flex;
     flex-direction: column;
-    min-height: 100vh;
+    height: 100vh;
   }
 
   .main {
     flex: 1;
     padding: 24px;
+    overflow: auto;
   }
 
   .main--player {
     padding: 0;
     overflow: hidden;
   }
+
+  .main--stats {
+    padding: 0;
+  }
+
 
 </style>

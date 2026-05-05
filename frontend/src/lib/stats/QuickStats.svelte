@@ -25,186 +25,154 @@
   let totalBattles = $derived(videoResults.length);
   let battleWins = $derived(videoResults.filter(r => r === 1).length);
   let battleWinRate = $derived(totalBattles > 0 ? Math.round((battleWins / totalBattles) * 100) : 0);
-  
+
   let pointsScored = $derived(bouts.reduce((sum, b) => sum + b.my_score, 0));
   let pointsConceded = $derived(bouts.reduce((sum, b) => sum + b.opponent_score, 0));
-  let untaggedVideos = $derived(totalVideos > 0 ? totalVideos - totalBattles : 0);
   let avgBoutsPerFight = $derived(totalBattles > 0 ? (totalBouts / totalBattles).toFixed(1) : '—');
-
-  // Text Stats
-  function topBy(bouts: FighterBout[], getName: (b: FighterBout) => string | null): string {
-    const counts = new Map<string, number>();
-    for (const b of bouts) {
-      const name = getName(b);
-      if (name) counts.set(name, (counts.get(name) ?? 0) + 1);
-    }
-    let max = 0, top = '—';
-    for (const [name, count] of counts) {
-      if (count > max) { max = count; top = name; }
-    }
-    return top;
-  }
-
-  let mostUsed = $derived(topBy(bouts, (b) => b.my_technique_name));
-  let mostMissed = $derived(topBy(bouts.filter(b => b.my_result === 'miss'), (b) => b.my_technique_name));
-  let mostReceived = $derived(topBy(bouts.filter(b => b.opponent_result === 'hit'), (b) => b.opponent_technique_name));
-
-  let defenseStats = $derived.by(() => {
-    const relevant = bouts.filter(b => b.opponent_result === 'hit' || b.opponent_result === 'miss' || b.opponent_result === 'blocked');
-    if (relevant.length === 0) return 0;
-    const defended = relevant.filter(b => b.opponent_result === 'miss' || b.opponent_result === 'blocked').length;
-    return Math.round((defended / relevant.length) * 100);
-  });
 </script>
 
 <div class="kpi-grid">
-  <div class="kpi-card glass-card">
-    <div class="kpi-icon" style="background: rgba(142, 68, 173, 0.1); color: #8e44ad;">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M4 6h16M4 12h16M4 18h16"/>
-      </svg>
-    </div>
-    <div class="kpi-info">
-      <div class="kpi-label">Всего боёв</div>
-      <div class="kpi-value">
-        <span class="fights-tagged">{totalBattles}</span>
-        {#if totalVideos > 0}
-          <span class="fights-sep"> / </span><span class="fights-total">{totalVideos}</span>
-        {/if}
-      </div>
+  <!-- Row 1: Winrates and Points with Badges -->
+  <div class="kpi-card col-center">
+    <div class="kpi-content">
+      <div class="kpi-label">Винрейт по сходам</div>
+      <div class="kpi-value">{boutWinRate}%</div>
     </div>
   </div>
-
-  <div class="kpi-card glass-card">
-    <div class="kpi-icon" style="background: rgba(111, 160, 224, 0.1); color: #6fa0e0;">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-      </svg>
-    </div>
-    <div class="kpi-info">
-      <div class="kpi-label">Всего сходов</div>
-      <div class="kpi-value">{totalBouts}</div>
-    </div>
-  </div>
-
-  <div class="kpi-card glass-card">
-    <div class="kpi-icon" style="background: rgba(80, 160, 200, 0.1); color: #50a0c8;">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
-      </svg>
-    </div>
-    <div class="kpi-info">
-      <div class="kpi-label">Сходов за бой</div>
-      <div class="kpi-value">{avgBoutsPerFight}</div>
-    </div>
-  </div>
-
-  <div class="kpi-card glass-card">
-    <div class="kpi-icon" style="background: rgba(219, 132, 31, 0.1); color: var(--accent-yellow);">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/><path d="M16 12l-4-4-4 4M12 8v8"/>
-      </svg>
-    </div>
-    <div class="kpi-info">
+  
+  <div class="kpi-card col-center">
+    <div class="kpi-content">
       <div class="kpi-label">Винрейт по боям</div>
       <div class="kpi-value">{battleWinRate}%</div>
     </div>
   </div>
 
-  <div class="kpi-card glass-card">
-    <div class="kpi-icon" style="background: rgba(241, 196, 15, 0.1); color: #f1c40f;">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 2L2 22h20L12 2z"/>
-      </svg>
-    </div>
-    <div class="kpi-info">
-      <div class="kpi-label">Винрейт по сходам</div>
-      <div class="kpi-value">{boutWinRate}%</div>
-    </div>
-  </div>
-
-  <div class="kpi-card glass-card">
-    <div class="kpi-icon" style="background: rgba(46, 204, 113, 0.1); color: #2ecc71;">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-      </svg>
-    </div>
-    <div class="kpi-info">
-      <div class="kpi-label">Защита</div>
-      <div class="kpi-value">{defenseStats}%</div>
-    </div>
-  </div>
-
-  <div class="kpi-card glass-card">
-    <div class="kpi-icon" style="background: rgba(39, 174, 96, 0.1); color: #27ae60;">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M5 12l5 5L20 7"/>
-      </svg>
-    </div>
-    <div class="kpi-info">
-      <div class="kpi-label">Набрано очков</div>
-      <div class="kpi-value">{pointsScored}</div>
-    </div>
-  </div>
-
-  <div class="kpi-card glass-card">
-    <div class="kpi-icon" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+  <div class="kpi-card col-center">
+    <div class="kpi-badge badge-red">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
         <path d="M18 6L6 18M6 6l12 12"/>
       </svg>
     </div>
-    <div class="kpi-info">
+    <div class="kpi-content">
       <div class="kpi-label">Пропущено очков</div>
       <div class="kpi-value">{pointsConceded}</div>
     </div>
   </div>
 
-  <div class="kpi-card glass-card text-kpi">
-    <div class="kpi-info">
-      <div class="kpi-label">Попадаю чаще</div>
-      <div class="kpi-value text-val">{mostUsed}</div>
+  <div class="kpi-card col-center">
+    <div class="kpi-badge badge-green">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+        <path d="M20 6L9 17L4 12"/>
+      </svg>
+    </div>
+    <div class="kpi-content">
+      <div class="kpi-label">Набрано очков</div>
+      <div class="kpi-value">{pointsScored}</div>
     </div>
   </div>
 
-  <div class="kpi-card glass-card text-kpi">
-    <div class="kpi-info">
-      <div class="kpi-label">Промахиваюсь</div>
-      <div class="kpi-value text-val">{mostMissed}</div>
+  <!-- Row 2: Totals and Wide Battle card -->
+  <div class="kpi-card col-center">
+    <div class="kpi-content">
+      <div class="kpi-label">Всего сходов</div>
+      <div class="kpi-value">{totalBouts}</div>
     </div>
   </div>
 
-  <div class="kpi-card glass-card text-kpi">
-    <div class="kpi-info">
-      <div class="kpi-label">Пропускаю чаще</div>
-      <div class="kpi-value text-val">{mostReceived}</div>
+  <div class="kpi-card col-center">
+    <div class="kpi-content">
+      <div class="kpi-label">Сходов за бой</div>
+      <div class="kpi-value">{avgBoutsPerFight}</div>
+    </div>
+  </div>
+
+  <div class="kpi-card kpi-wide row-center">
+    <div class="kpi-icon-box" style="background: rgba(142, 68, 173, 0.15);">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-purple)" stroke-width="2">
+        <path d="M4 6h16M4 12h16M4 18h16"/>
+      </svg>
+    </div>
+    <div class="kpi-content text-left">
+      <div class="kpi-label">Всего боёв</div>
+      <div class="kpi-value-inline">
+        <span class="count-main">{totalBattles}</span>
+        {#if totalVideos > 0}
+          <span class="count-sep">/</span><span class="count-total">{totalVideos}</span>
+        {/if}
+      </div>
     </div>
   </div>
 </div>
 
 <style>
   .kpi-grid {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: 165px 165px;
     gap: 20px;
-    flex: 1;
+    height: 350px;
   }
+
+  .kpi-wide { grid-column: span 2; }
 
   .kpi-card {
-    flex: 1 1 180px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 24px;
     background: var(--surface);
-    backdrop-filter: var(--glass-blur);
+    backdrop-filter: blur(var(--blur-amount));
+    -webkit-backdrop-filter: blur(var(--blur-amount));
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
-    box-shadow: none;
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-md);
+    padding: 24px;
+    position: relative;
+    transition: var(--transition);
+    min-width: 0;
   }
 
-  .kpi-icon {
-    width: 48px;
-    height: 48px;
+  .col-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .row-center {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+  }
+
+  .kpi-card:hover {
+    box-shadow: var(--shadow-lg);
+    border-color: var(--border-strong);
+  }
+
+  .kpi-badge {
+    position: absolute;
+    top: 12px;
+    width: 100px;
+    height: 32px;
+    border-radius: 99px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .badge-red {
+    background: rgba(224, 82, 82, 0.1);
+    color: #ef4444;
+  }
+
+  .badge-green {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+  }
+
+  .kpi-icon-box {
+    width: 52px;
+    height: 52px;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -212,62 +180,55 @@
     flex-shrink: 0;
   }
 
-  .kpi-info {
+  .kpi-content {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
+    min-width: 0;
   }
 
+  .text-left { text-align: left; }
+
   .kpi-label {
-    font-size: 0.8rem;
+    font-size: 12px;
     color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.04em;
     font-weight: 600;
+    line-height: 1.1;
+    max-width: 140px;
   }
 
   .kpi-value {
-    font-size: 1.8rem;
+    font-size: 28px;
     font-weight: 700;
     color: var(--text-primary);
     line-height: 1;
   }
 
-  .kpi-sub {
-    font-size: 0.72rem;
-    margin-top: 3px;
+  .kpi-value-inline {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
   }
 
-  .sub-green { color: #4caf82; }
-  .sub-dim   { color: var(--text-secondary); }
-
-  .fights-tagged { font-weight: 700; }
-  .fights-sep    { color: var(--text-secondary); font-weight: 300; font-size: 1.4rem; margin: 0 1px; }
-  .fights-total  { font-weight: 300; font-size: 1.4rem; color: var(--text-secondary); }
-
-  .text-kpi {
-    padding: 16px 24px;
-    justify-content: center;
+  .count-main {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
   }
 
-  .text-val {
-    font-size: 1.2rem;
-    color: var(--accent-yellow);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
+  .count-sep {
+    color: var(--text-secondary);
+    font-weight: 300;
+    font-size: 28px;
+    margin: 0 4px;
   }
 
-  @media (max-width: 1024px) {
-    .kpi-card {
-      flex: 1 1 45%;
-    }
-  }
-
-  @media (max-width: 640px) {
-    .kpi-card {
-      flex: 1 1 100%;
-    }
+  .count-total {
+    font-weight: 300;
+    font-size: 28px;
+    color: var(--text-secondary);
   }
 </style>

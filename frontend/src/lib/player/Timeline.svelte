@@ -23,7 +23,7 @@
     onspeedchange?: (speed: number) => void;
     onvolumechange?: (volume: number) => void;
     onlooptoggle?: () => void;
-    fps?: number;
+    fps?: number | null;
   }
 
   let {
@@ -79,14 +79,35 @@
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   }
 
+  /// Format current time with 1-based frame number: MM:SS:FFF
+  /// Frames run from 1 to fps, then the next second starts.
+  /// The integer frame rate, rounded from potentially fractional fps (e.g. NTSC 29.97 → 30).
+  const fpsInt = $derived(fps ? Math.round(fps) : 0);
+
   function fmtWithFrame(sec: number): string {
-    const totalFrames = Math.round(sec * fps);
-    const framesInSec = totalFrames % fps;
-    const totalSecs = Math.floor(totalFrames / fps);
+    if (!fpsInt) return fmt(sec);
+    const totalFrames = Math.round(sec * fpsInt);
+    const framesInSec = totalFrames % fpsInt;           // 0-based within second
+    const totalSecs = Math.floor(totalFrames / fpsInt);
     const m = Math.floor(totalSecs / 60);
     const s = totalSecs % 60;
-    const padLen = String(fps).length < 3 ? 3 : String(fps).length;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}:${String(framesInSec).padStart(padLen, '0')}`;
+    const padLen = String(fpsInt).length < 3 ? 3 : String(fpsInt).length;
+    // 1-based: frame 0 → display "001", frame (fpsInt-1) → display fpsInt
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}:${String(framesInSec + 1).padStart(padLen, '0')}`;
+  }
+
+  /// Format duration showing the last valid frame (1-based within its second).
+  function fmtDuration(sec: number): string {
+    if (!fpsInt) return fmt(sec);
+    const totalFrames = Math.round(sec * fpsInt);
+    if (totalFrames === 0) return fmt(sec);
+    const lastFrameIdx = totalFrames - 1;
+    const totalSecs = Math.floor(lastFrameIdx / fpsInt);
+    const framesInSec = lastFrameIdx % fpsInt;
+    const m = Math.floor(totalSecs / 60);
+    const s = totalSecs % 60;
+    const padLen = String(fpsInt).length < 3 ? 3 : String(fpsInt).length;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}:${String(framesInSec + 1).padStart(padLen, '0')}`;
   }
 
   let progressEl: HTMLDivElement | null = $state(null);
@@ -245,7 +266,7 @@
       </div>
 
       <time class="time-disp" datetime="PT{Math.round(currentTime)}S">
-        {fmtWithFrame(currentTime)} / {fmt(duration)}
+        {fmtWithFrame(currentTime)} / {fmtDuration(duration)}
       </time>
 
     </div>
@@ -260,6 +281,8 @@
     width: 100%;
     background: transparent;
     user-select: none;
+    padding: 0 20px;
+    box-sizing: border-box;
   }
 
   /* ── Shared track base ── */
@@ -334,7 +357,6 @@
     height: 24px;
     background: transparent;
     border-top: 1px solid var(--border-color);
-    border-bottom: 1px solid var(--border-color);
   }
 
   .bout-seg {

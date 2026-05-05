@@ -5,13 +5,14 @@
 
   interface Props {
     bouts: FighterBout[];
+    currentFighterId?: string;
+    selectedOpponentId?: string;
     onfilter?: (opponentId: string) => void;
   }
 
-  let { bouts, onfilter }: Props = $props();
+  let { bouts, currentFighterId, selectedOpponentId = '', onfilter }: Props = $props();
 
   let recentOpponents = $derived.by(() => {
-    // Group bouts by (opponent_id, video_id) to get per-fight scores
     type FightKey = string;
     const fights = new Map<FightKey, { oppId: string; myScore: number; oppScore: number }>();
     for (const b of bouts) {
@@ -30,21 +31,22 @@
       else if (myScore < oppScore) s.losses += 1;
     }
 
-    // Map all fighters from the store
-    return $fighters.map(f => {
-      const stats = fightStats.get(f.id) || { wins: 0, losses: 0, total: 0 };
-      const balance = stats.wins - stats.losses;
-      return {
-        id: f.id,
-        name: f.display_name || f.username,
-        wins: stats.wins,
-        losses: stats.losses,
-        total: stats.total,
-        balance,
-        avatar_url: f.avatar_url,
-        color: resolveColor(f.id, f.color)
-      };
-    });
+    return $fighters
+      .filter(f => f.id !== currentFighterId)
+      .map(f => {
+        const stats = fightStats.get(f.id) || { wins: 0, losses: 0, total: 0 };
+        const balance = stats.wins - stats.losses;
+        return {
+          id: f.id,
+          name: f.display_name || f.username,
+          wins: stats.wins,
+          losses: stats.losses,
+          total: stats.total,
+          balance,
+          avatar_url: f.avatar_url,
+          color: resolveColor(f.id, f.color)
+        };
+      });
   });
 </script>
 
@@ -52,15 +54,16 @@
   <div class="card-header">
     <h3 class="card-title">Оппоненты</h3>
   </div>
-  
+
   <div class="opponents-list">
     {#each recentOpponents as opp (opp.id)}
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="opp-item" onclick={() => onfilter?.(opp.id)}>
+      <div class="opp-item" class:selected={opp.id === selectedOpponentId} onclick={() => onfilter?.(opp.id === selectedOpponentId ? '' : opp.id)}>
         <div class="avatar-wrap" style:background={opp.color}>
           {#if opp.avatar_url}
-            <img class="avatar-img" src={opp.avatar_url} alt={opp.name} onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            <img class="avatar-img" src={opp.avatar_url} alt={opp.name}
+              onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
           {:else}
             <svg class="avatar-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="1.5"/>
@@ -68,11 +71,10 @@
             </svg>
           {/if}
         </div>
-        <div class="opp-name">{opp.name}</div>
+        <div class="opp-name" title={opp.name}>{opp.name}</div>
         <div class="opp-stats">
           <div>Побед: <span class="stat-val">{opp.wins}</span></div>
           <div>Поражений: <span class="stat-val">{opp.losses}</span></div>
-          <div>Всего: <span class="stat-val">{opp.total}</span></div>
         </div>
         <div class="opp-score" class:positive={opp.balance > 0} class:negative={opp.balance < 0}>
           Баланс: {opp.balance > 0 ? '+' : ''}{opp.balance}
@@ -87,20 +89,21 @@
 <style>
   .recent-opponents {
     background: var(--surface);
-    backdrop-filter: var(--glass-blur);
+    backdrop-filter: blur(var(--blur-amount));
+    -webkit-backdrop-filter: blur(var(--blur-amount));
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
-    padding: 24px;
-    box-shadow: none;
+    border-radius: var(--radius-2xl);
+    padding: 20px;
     display: flex;
     flex-direction: column;
+    height: 100%;
   }
 
   .card-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 24px;
+    margin-bottom: 16px;
   }
 
   .card-title {
@@ -110,43 +113,46 @@
     margin: 0;
   }
 
-  .card-subtitle {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
+  .opponents-list {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    grid-auto-rows: 1fr;
+    gap: 20px 12px;
+    overflow-y: auto;
+    padding-bottom: 12px;
+    flex: 1;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
   }
 
-  .opponents-list {
-    display: flex;
-    gap: 16px;
-    overflow-x: auto;
-    padding-bottom: 8px;
-    flex: 1;
-  }
-  
-  .opponents-list::-webkit-scrollbar {
-    height: 4px;
-  }
-  
+  .opponents-list::-webkit-scrollbar { height: 6px; }
   .opponents-list::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.1);
-    border-radius: 2px;
+    border-radius: 3px;
   }
 
   .opp-item {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
-    min-width: 100px;
-    flex-shrink: 0;
-    padding: 8px;
-    border-radius: var(--radius-md);
+    gap: 6px;
+    min-width: 110px;
+    padding: 4px;
+    border-radius: var(--radius-xl);
     cursor: pointer;
-    transition: background 0.2s;
+    transition: var(--transition);
+    border: 1px solid transparent;
   }
 
   .opp-item:hover {
     background: var(--surface-hover);
+    border-color: var(--border-color);
+  }
+ 
+  .opp-item.selected {
+    background: rgba(219, 132, 31, 0.12);
+    border-color: rgba(219, 132, 31, 0.4);
+    box-shadow: 0 4px 12px rgba(219, 132, 31, 0.1);
   }
 
   .avatar-wrap {
@@ -159,13 +165,10 @@
     align-items: center;
     justify-content: center;
     overflow: hidden;
+    flex-shrink: 0;
   }
 
-  .avatar-icon {
-    position: absolute;
-    opacity: 0.6;
-  }
-
+  .avatar-icon { position: absolute; opacity: 0.6; }
   .avatar-img {
     position: absolute;
     inset: 0;
@@ -175,46 +178,51 @@
   }
 
   .opp-name {
-    font-size: 0.85rem;
-    font-weight: 600;
+    font-size: 1rem;
+    font-weight: 700;
     color: var(--text-primary);
     text-align: center;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    width: 100%;
+    width: 100px;
   }
 
   .opp-stats {
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     color: var(--text-secondary);
     text-align: center;
     line-height: 1.4;
-    margin-bottom: 4px;
+    display: flex;
+    flex-direction: column;
+    opacity: 0.8;
   }
 
   .stat-val {
-    color: var(--text-primary);
+    color: var(--text-secondary);
     font-weight: 600;
   }
 
   .opp-score {
     font-size: 0.75rem;
-    font-weight: 600;
-    padding: 4px 8px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-solid);
+    font-weight: 800;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.05);
     color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 4px;
   }
-  
+
   .opp-score.positive {
-    background: rgba(39, 174, 96, 0.1);
-    color: #27ae60;
+    background: var(--accent-green);
+    color: #fff;
   }
-  
+
   .opp-score.negative {
-    background: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
+    background: var(--accent-red);
+    color: #fff;
   }
 
   .empty {
@@ -222,6 +230,6 @@
     color: var(--text-secondary);
     text-align: center;
     width: 100%;
-    padding: 20px 0;
+    padding: 40px 0;
   }
 </style>

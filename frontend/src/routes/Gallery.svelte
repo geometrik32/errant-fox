@@ -146,12 +146,14 @@
     display: flex;
     gap: 24px;
     align-items: flex-start;
+    min-height: calc(100vh - 64px);
+    margin-top: -24px;
   }
 
   .sidebar-sticky {
     position: sticky;
-    top: 80px; /* 64px header + 16px gap */
-    max-height: calc(100vh - 80px);
+    top: 0;
+    max-height: calc(100vh - 64px);
     overflow-y: auto;
     flex-shrink: 0;
     align-self: flex-start;
@@ -161,6 +163,7 @@
   .content {
     flex: 1;
     min-width: 0;
+    padding-top: 24px; /* Restore padding only for video content */
   }
 
   @media (max-width: 768px) {

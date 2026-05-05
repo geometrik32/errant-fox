@@ -24,7 +24,7 @@
   let looping = $state(false);
   let speed = $state(1);
   let volume = $state(1);
-  let fps = $state(25);
+  let fps = $state<number | null>(null);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let player: any = $state(null);
@@ -56,6 +56,7 @@
     try {
       video = await getVideo(videoId);
       if (video.duration_ms) duration = video.duration_ms / 1000;
+      fps = video.fps ?? null;
       liveBouts = [...video.bouts];
       liveComments = [...video.comments];
     } catch (e) {
@@ -166,11 +167,12 @@
           src={video.stream_url}
           {speed}
           {volume}
+          fps={video.fps ?? null}
           ontimeupdate={(t) => { currentTime = t; }}
           ondurationchange={(d) => { duration = d; }}
           onplayingchange={(p) => { playing = p; }}
           onloopingchange={(l) => { looping = l; }}
-          onfpschange={(f) => { fps = f; }}
+          ondetectedfps={(f) => { if (fps == null) fps = f; }}
         />
       </div>
 
