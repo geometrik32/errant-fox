@@ -4,7 +4,7 @@
 
 - TrueNAS SCALE (24.04+) с включённым Docker
 - SSH-доступ к серверу
-- Работающий Seafile на TrueNAS (нужен URL, токен и ID библиотеки)
+- Работающий Seafile на TrueNAS (нужен URL и API-токен)
 
 ---
 
@@ -39,25 +39,27 @@ cd errant-fox
 
 ## 3. Создать .env
 
+Скопируйте пример и заполните все поля:
+
 ```bash
 cp backend/.env.example .env
 nano .env
 ```
 
-Заполните все поля:
+### Обязательные переменные:
 
 | Переменная | Откуда взять | Пример |
 |---|---|---|
+| `DATABASE_URL` | Путь внутри контейнера (не менять) | `/data/db/errant_fox.db` |
 | `JWT_SECRET` | Сгенерировать | `openssl rand -hex 32` |
-| `SEAFILE_URL` | Адрес вашего Seafile | `http://192.168.1.100:8082` |
-| `SEAFILE_TOKEN` | Открыть библиотеку → меню `···` → API Token | `abc123...` |
-| `SEAFILE_REPO_ID` | URL при открытии библиотеки в Seafile | `a1b2c3d4-...` |
-| `FRONTEND_ORIGIN` | IP вашего TrueNAS | `http://192.168.1.100` |
+| `SEAFILE_URL` | Адрес вашего Seafile | `https://seafile.aat-terra.ru` |
+| `SEAFILE_TOKEN` | Seafile → Admin → API Token | `abc123def456...` |
+| `PREVIEWS_DIR` | Путь внутри контейнера (не менять) | `/data/previews` |
+| `AVATARS_DIR` | Путь внутри контейнера (не менять) | `/data/avatars` |
+| `SERVER_PORT` | Порт внутри контейнера (не менять) | `8080` |
+| `FRONTEND_ORIGIN` | URL вашего приложения | `https://errantfox.aat-terra.ru` |
 
-Переменные `DATABASE_URL`, `PREVIEWS_DIR`, `AVATARS_DIR`, `SERVER_PORT` уже
-проставлены правильно в `docker-compose.yml` через `environment:` — менять не нужно.
-
-Сгенерировать JWT_SECRET:
+Сгенерировать `JWT_SECRET`:
 ```bash
 openssl rand -hex 32
 ```
@@ -66,22 +68,33 @@ openssl rand -hex 32
 
 ## 4. Собрать и запустить
 
+### Продакшн (с Traefik):
+
 ```bash
-docker compose up -d --build
+docker compose -f infra/docker-compose.yml up -d --build
 ```
 
 Первый запуск занимает 5–10 минут (сборка Rust и Node).
 
-Проверить статус:
+### Локальная разработка (без Traefik, порты наружу):
+
 ```bash
-docker compose ps
-docker compose logs backend   # логи бэкенда
-docker compose logs frontend  # логи nginx
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.local.yml up -d --build
+```
+
+При локальном запуске задайте `FRONTEND_ORIGIN=http://localhost:8081` в `.env`.
+
+### Проверить статус:
+
+```bash
+docker compose -f infra/docker-compose.yml ps
+docker compose -f infra/docker-compose.yml logs backend
+docker compose -f infra/docker-compose.yml logs frontend
 ```
 
 База данных создаётся и мигрирует **автоматически** при первом старте бэкенда.
 
-Приложение доступно по адресу: **http://\<ip-truenas\>**
+Приложение доступно по адресу, указанному в Traefik-лейблах (по умолчанию `https://errantfox.aat-terra.ru`).
 
 ---
 
@@ -100,8 +113,8 @@ python3 -c "import bcrypt; print(bcrypt.hashpw(b'your_password', bcrypt.gensalt(
 ### Шаг 2 — Вставить пользователя в базу
 
 ```bash
-docker compose exec backend sh
-apk add --no-cache sqlite
+docker compose -f infra/docker-compose.yml exec backend sh
+# Внутри контейнера:
 sqlite3 /data/db/errant_fox.db
 ```
 
@@ -119,7 +132,7 @@ VALUES (
 ```
 
 После этого войдите в приложение с этим логином и паролем.
-Дальнейших пользователей создаёт Admin через интерфейс (раздел настроек).
+Дальнейших пользователей создаёт Admin через интерфейс (Header → CreateUserModal).
 
 ---
 
@@ -127,7 +140,7 @@ VALUES (
 
 ```bash
 git pull
-docker compose up -d --build
+docker compose -f infra/docker-compose.yml up -d --build
 ```
 
 Миграции применяются автоматически при каждом старте.
@@ -136,7 +149,7 @@ docker compose up -d --build
 
 ## Резервное копирование
 
-Все данные хранятся в `./data/` рядом с `docker-compose.yml`:
+Все данные хранятся в `./data/` рядом с проектом:
 
 ```
 ./data/
@@ -149,11 +162,35 @@ docker compose up -d --build
 
 ---
 
+## Архитектура Docker
+
+```
+infra/
+├── docker-compose.yml        ← Продакшн: backend + frontend + Traefik labels
+├── docker-compose.local.yml  ← Локальное переопределение: порты наружу, без Traefik
+├── Dockerfile.backend        ← Multi-stage: rust:1.80-alpine → alpine:3.20
+├── Dockerfile.frontend       ← Multi-stage: node:20-alpine → nginx:alpine
+└── nginx.conf                ← Проксирование /api и /ws → backend:8080
+```
+
+- **backend**: порт 8080 (внутренний), volume `./data:/data`
+- **frontend**: порт 80 (внутренний), nginx раздаёт статику + проксирует `/api` и `/ws`
+- **Traefik**: HTTPS через Let's Encrypt, домен `errantfox.aat-terra.ru`
+
+При локальной разработке (`docker-compose.local.yml`):
+- Убирается зависимость от сети `proxy` (Traefik)
+- Порт фронтенда пробрасывается наружу: `8081:80`
+- `SEAFILE_URL` и `FRONTEND_ORIGIN` переопределяются для локального окружения
+
+---
+
 ## Устранение неполадок
 
 | Симптом | Причина | Решение |
 |---|---|---|
 | Белый экран | Nginx не получил dist | `docker compose logs frontend` |
 | `no such table` | Миграции не прошли | `docker compose logs backend` — смотреть ошибку |
-| Seafile sync error в логах | Неверный токен или ID репозитория | Проверить `SEAFILE_TOKEN` и `SEAFILE_REPO_ID` в `.env` |
-| Порт 80 занят | Другое приложение | Поменять `"80:80"` на `"8081:80"` в `docker-compose.yml` |
+| Seafile sync error в логах | Неверный токен или URL | Проверить `SEAFILE_TOKEN` и `SEAFILE_URL` в `.env` |
+| Порт 80 занят | Другое приложение | Использовать `docker-compose.local.yml` с портом 8081 |
+| Traefik не подхватывает | Сеть `proxy` не создана | `docker network create proxy` |
+| 502 Bad Gateway | Backend не запустился | `docker compose logs backend` |

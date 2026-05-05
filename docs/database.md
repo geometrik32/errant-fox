@@ -1,9 +1,10 @@
 # Errant Fox — База данных
 
-**Движок:** SQLite (один файл `errant_fox.sqlite` на сервере)
+**Движок:** SQLite (один файл `errant_fox.db` на сервере)
 **ORM:** Diesel (Rust)
+**Миграции:** 5 последовательных миграций в `backend/migrations/`
 
-Всего 5 таблиц. Схема намеренно минимальная.
+Всего 6 таблиц.
 
 ---
 
@@ -17,16 +18,10 @@
 | `username` | TEXT UNIQUE NOT NULL | Логин для входа (латиница, без пробелов) |
 | `display_name` | TEXT NOT NULL | Отображаемое имя (любые символы) |
 | `password_hash` | TEXT NOT NULL | bcrypt-хеш пароля |
-| `is_admin` | BOOLEAN NOT NULL DEFAULT false | Права администратора |
+| `is_admin` | BOOLEAN NOT NULL DEFAULT 0 | Права администратора |
 | `avatar_path` | TEXT | Путь к файлу аватара на сервере, nullable |
-| `color` | TEXT | HEX-цвет бойца для UI (например `#DB841F`), nullable |
-| `created_at` | TIMESTAMP NOT NULL DEFAULT now | Дата регистрации |
-
-**Изменения относительно текущей схемы:**
-- `login` → `username` (более понятное название)
-- `name` → `display_name`
-- `avatar` (base64/url) → `avatar_path` (путь к файлу, файл хранится локально)
-- Убрано: `color` остаётся (нужен для визуального различения бойцов)
+| `color` | TEXT | HEX-цвет бойца для UI (например `#DB841F`), nullable — генерируется автоматически при первом логине |
+| `created_at` | TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP | Дата регистрации |
 
 ---
 
@@ -41,19 +36,10 @@
 | `fighter_a_id` | TEXT FK→users.id | nullable — не назначен |
 | `fighter_b_id` | TEXT FK→users.id | nullable — не назначен |
 | `date` | DATE NOT NULL | Дата тренировки, парсится из имени папки Seafile |
-| `duration_ms` | INTEGER | Длительность в миллисекундах, nullable (заполняется при первом открытии) |
-| `preview_count` | INTEGER NOT NULL DEFAULT 0 | Сколько превью-кадров сгенерировано |
-| `created_at` | TIMESTAMP NOT NULL DEFAULT now | Когда появилось в системе |
-
-**Изменения относительно текущей схемы (`media_files`):**
-- Переименована: `media_files` → `videos`
-- Добавлено: `seafile_path` — раньше отсутствовало! (видео хранились локально)
-- Добавлено: `preview_count` — сколько кадров сгенерировано FFmpeg
-- Убрано: `total_score_a`, `total_score_b` — **счёт вычисляется динамически** из `bouts`, не хранится
-- Убрано: `user_id` (владелец файла) — у нас нет личных видео
-- Убрано: `title` — имена файлов в UI не показываются
-- Убрано: `has_thumbnail`, `thumb_sheet_cols/rows`, `recompression_done` — артефакты старой video pipeline
-- Убрано: `fps`, `raw_metadata_all` — лишние данные
+| `duration_ms` | INTEGER | Длительность в миллисекундах, nullable (заполняется FFprobe при первом открытии) |
+| `preview_count` | INTEGER NOT NULL DEFAULT 0 | Сколько превью-кадров сгенерировано (10) |
+| `fps` | REAL | FPS видео, nullable — заполняется через парсинг moov atom при синхронизации (миграция 0005) |
+| `created_at` | TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP | Когда появилось в системе |
 
 > **Вычисляемые значения (не хранятся):**
 > - `total_score_a` = `SUM(bouts.score_a)` где `video_id = videos.id`
@@ -77,24 +63,15 @@
 | `score_b` | INTEGER NOT NULL DEFAULT 0 | Очки бойца B |
 | `technique_a_id` | INTEGER FK→techniques.id | Приём бойца A, nullable |
 | `technique_b_id` | INTEGER FK→techniques.id | Приём бойца B, nullable |
-| `hit_zone_a` | TEXT | Зона попадания бойца A, nullable |
+| `hit_zone_a` | TEXT | Зона попадания бойца A в формате `"Зона:x:y"`, nullable |
 | `hit_zone_b` | TEXT | Зона попадания бойца B, nullable |
-| `result_a` | TEXT | Результат удара A: `hit` / `miss` / `blocked`, nullable |
-| `result_b` | TEXT | Результат удара B: `hit` / `miss` / `blocked`, nullable |
+| `result_a` | TEXT | Результат удара A: `hit` / `miss` / `blocked` / `late` / `no_strike` / `disqualification` / `afterblow`, nullable |
+| `result_b` | TEXT | Результат удара B: те же значения, nullable |
 
-**Допустимые значения `hit_zone`:** `Голова`, `Тело`, `Рука левая`, `Рука правая`, `Нога левая`, `Нога правая`
+**Допустимые значения `hit_zone` (16 зон):**
+`Голова`, `Шея`, `Плечо пр.`, `Предплечье пр.`, `Кисть пр.`, `Плечо лев.`, `Предплечье лев.`, `Кисть лев.`, `Тело`, `Таз`, `Бедро пр.`, `Голень пр.`, `Стопа пр.`, `Бедро лев.`, `Голень лев.`, `Стопа лев.`
 
-**Изменения относительно текущей схемы (`hema_bouts`):**
-- Переименована: `hema_bouts` → `bouts`
-- `video_hash` → `video_id` (более чёткое название)
-- `start_time`/`end_time` (FLOAT, секунды) → `time_start_ms`/`time_end_ms` (INTEGER, миллисекунды)
-- Добавлено: `order_index` — раньше порядок определялся только через время, что ненадёжно
-- Добавлено: `result_a`, `result_b` — **отсутствовали**, хотя были в ТЗ
-- Убрано: `start_timecode`/`end_timecode` (TEXT) — дублировали время в другом формате; таймкод вычисляется на фронте
-
-> **Аналитика получённого урона:**
-> Статистика "получил удар в голову" для бойца A строится из `hit_zone_b` и `result_b` в тех сходах,
-> где этот боец участвует как `fighter_a_id` видео. Отдельно не хранится.
+> Формат зоны: `"Название:x:y"` где x,y — нормализованные координаты (0..1) точки удара на SVG-силуэте. Пример: `"Голова:0.500:0.300"`.
 
 ---
 
@@ -106,10 +83,9 @@
 |---|---|---|
 | `id` | INTEGER PK AUTOINCREMENT | |
 | `name` | TEXT UNIQUE NOT NULL | Название техники (например «Цорнхау») |
+| `description` | TEXT | Описание техники, nullable (добавлено миграцией 0004) |
 
-**Изменения относительно текущей схемы (`hema_moves`):**
-- Переименована: `hema_moves` → `techniques`
-- Без изменений по структуре
+> При удалении техники ссылки в `bouts.technique_a_id` / `bouts.technique_b_id` обнуляются (`NULL`). Сходы не удаляются.
 
 ---
 
@@ -125,24 +101,37 @@
 | `timestamp_ms` | INTEGER NOT NULL | Позиция в видео (миллисекунды) |
 | `text` | TEXT NOT NULL | Текст комментария |
 | `reply_to_id` | INTEGER FK→comments.id | Ответ на другой комментарий, nullable |
-| `created_at` | TIMESTAMP NOT NULL DEFAULT now | |
+| `bout_id` | INTEGER FK→bouts.id | К какому сходу относится, nullable — заполняется автоматически (миграция 0003) |
+| `created_at` | TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP | |
 | `edited_at` | TIMESTAMP | Когда отредактирован, nullable |
 
-**Изменения относительно текущей схемы:**
-- `media_file_id` → `video_id`
-- `timecode` (TEXT) → `timestamp_ms` (INTEGER) — числовое значение точнее и удобнее
-- Убрано: `drawing` (base64 рисунок) — функция рисования поверх видео не входит в ТЗ
-- Убрано: `username_ifnull` — у нас нет анонимных комментариев
-- Убрано: `user_id nullable` — все комментарии от залогиненных пользователей
+> `bout_id` определяется бэкендом автоматически при создании комментария: если `timestamp_ms` попадает в диапазон `[time_start_ms, time_end_ms]` какого-либо схода этого видео — записывается его id.
 
 ---
 
-## Удалённые таблицы
+## Таблица `comment_reactions`
 
-| Таблица | Причина удаления |
+Реакции пользователей на комментарии (лайки/дизлайки). Добавлена миграцией 0002.
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `comment_id` | INTEGER NOT NULL FK→comments.id ON DELETE CASCADE | К какому комментарию |
+| `user_id` | TEXT NOT NULL FK→users.id ON DELETE CASCADE | Кто поставил |
+| `kind` | TEXT NOT NULL CHECK(kind IN ('like', 'dislike')) | Тип реакции |
+
+**PK:** (`comment_id`, `user_id`) — один пользователь может иметь только одну реакцию на комментарий.
+
+---
+
+## История миграций
+
+| Миграция | Содержание |
 |---|---|
-| `messages` | Уведомления через WebSocket, в БД не нужны |
-| `media_types` | Не используется в нашей логике |
+| `0001_initial` | Создание 5 таблиц: `users`, `videos`, `techniques`, `bouts`, `comments` + индексы |
+| `0002_comment_reactions` | Добавление таблицы `comment_reactions` |
+| `0003_comment_bout_search` | Добавление столбца `bout_id` в `comments` |
+| `0004_technique_description` | Добавление столбца `description` в `techniques` |
+| `0005_video_fps` | Добавление столбца `fps` в `videos` |
 
 ---
 
@@ -150,15 +139,15 @@
 
 ```sql
 -- Частые запросы при загрузке галереи
-CREATE INDEX idx_videos_date ON videos(date);
+CREATE INDEX idx_videos_date      ON videos(date);
 CREATE INDEX idx_videos_fighter_a ON videos(fighter_a_id);
 CREATE INDEX idx_videos_fighter_b ON videos(fighter_b_id);
 
 -- Загрузка сходов видео
-CREATE INDEX idx_bouts_video ON bouts(video_id);
+CREATE INDEX idx_bouts_video      ON bouts(video_id);
 
 -- Загрузка комментариев видео
-CREATE INDEX idx_comments_video ON comments(video_id);
+CREATE INDEX idx_comments_video   ON comments(video_id);
 
 -- Аналитика по бойцу
 CREATE INDEX idx_bouts_techniques ON bouts(technique_a_id, technique_b_id);
@@ -166,7 +155,7 @@ CREATE INDEX idx_bouts_techniques ON bouts(technique_a_id, technique_b_id);
 
 ---
 
-## ER-диаграмма (упрощённо)
+## ER-диаграмма
 
 ```
 users
@@ -187,11 +176,18 @@ bouts
 
 techniques
   ├── id (PK)
-  └── name
+  ├── name
+  └── description
 
 comments
   ├── id (PK)
   ├── video_id ──────→ videos.id
   ├── author_id ─────→ users.id
-  └── reply_to_id ───→ comments.id
+  ├── reply_to_id ───→ comments.id
+  └── bout_id ───────→ bouts.id
+
+comment_reactions
+  ├── comment_id ────→ comments.id (CASCADE)
+  ├── user_id ───────→ users.id (CASCADE)
+  └── kind
 ```
