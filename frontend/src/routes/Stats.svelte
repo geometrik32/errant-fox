@@ -114,8 +114,24 @@
       : null
   );
 
-  // Charts should NOT re-build (remove points) when date/week is selected.
-  // They should only re-build when the overall scope (opponent/zone) changes.
+  // Bouts for technique lists (we don't want them to filter themselves out)
+  let boutsForMyTechniques = $derived.by(() => {
+    let result = [...rawBouts];
+    if (tableFilters.opponent_id) result = result.filter(b => b.opponent_id === tableFilters.opponent_id);
+    if (zoneFilter) result = result.filter(b => (b.my_hit_zone ?? '').split(':')[0] === zoneFilter || (b.opponent_hit_zone ?? '').split(':')[0] === zoneFilter);
+    if (tableFilters.opponent_technique) result = result.filter(b => b.opponent_technique_name === tableFilters.opponent_technique);
+    return result;
+  });
+
+  let boutsForOpponentTechniques = $derived.by(() => {
+    let result = [...rawBouts];
+    if (tableFilters.opponent_id) result = result.filter(b => b.opponent_id === tableFilters.opponent_id);
+    if (zoneFilter) result = result.filter(b => (b.my_hit_zone ?? '').split(':')[0] === zoneFilter || (b.opponent_hit_zone ?? '').split(':')[0] === zoneFilter);
+    if (tableFilters.my_technique) result = result.filter(b => b.my_technique_name === tableFilters.my_technique);
+    return result;
+  });
+
+  // Charts should respect technique filters
   let boutsForCharts = $derived.by(() => {
     let result = [...rawBouts];
     if (tableFilters.opponent_id)
@@ -127,6 +143,10 @@
         return mz === zoneFilter || oz === zoneFilter;
       });
     }
+    if (tableFilters.my_technique)
+      result = result.filter(b => b.my_technique_name === tableFilters.my_technique);
+    if (tableFilters.opponent_technique)
+      result = result.filter(b => b.opponent_technique_name === tableFilters.opponent_technique);
     return result;
   });
 
@@ -277,7 +297,13 @@
 
           <!-- Chart slots -->
           <div class="chart-slot">
-            <FrequencyChart bouts={boutsForCharts} rawVideos={filteredVideos} selectedWeek={activeWeek} onfilter={(week) => handleFilter({...tableFilters, date_week: week, video_id: ''})} />
+            <FrequencyChart 
+              bouts={boutsForCharts} 
+              rawVideos={filteredVideos} 
+              selectedWeek={activeWeek} 
+              isDrillDown={!!(tableFilters.my_technique || tableFilters.opponent_technique)}
+              onfilter={(week) => handleFilter({...tableFilters, date_week: week, video_id: ''})} 
+            />
           </div>
           <div class="chart-slot">
             <ResultsChart bouts={boutsForCharts} {videoLabels} selectedVideoId={tableFilters.video_id} selectedWeek={activeWeek} onfilter={(vid) => handleFilter({...tableFilters, video_id: vid, date_week: ''})} />
@@ -297,10 +323,20 @@
           <!-- Two narrow cards: Techniques -->
           <div class="right-narrow-row">
             <div class="right-narrow">
-              <TopTechniques bouts={filteredBouts} type="my" onfilter={(tech) => handleFilter({...tableFilters, my_technique: tech})} />
+              <TopTechniques 
+                bouts={boutsForMyTechniques} 
+                type="my" 
+                selectedTechnique={tableFilters.my_technique}
+                onfilter={(tech) => handleFilter({...tableFilters, my_technique: tech === tableFilters.my_technique ? '' : tech})} 
+              />
             </div>
             <div class="right-narrow">
-              <TopTechniques bouts={filteredBouts} type="opponent" onfilter={(tech) => handleFilter({...tableFilters, opponent_technique: tech})} />
+              <TopTechniques 
+                bouts={boutsForOpponentTechniques} 
+                type="opponent" 
+                selectedTechnique={tableFilters.opponent_technique}
+                onfilter={(tech) => handleFilter({...tableFilters, opponent_technique: tech === tableFilters.opponent_technique ? '' : tech})} 
+              />
             </div>
           </div>
 
