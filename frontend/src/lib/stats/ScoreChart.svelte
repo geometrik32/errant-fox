@@ -50,17 +50,22 @@
     };
   });
 
-  let isDestroyed = false;
   $effect(() => {
     if (!canvas) return;
-    isDestroyed = false;
+    let effectActive = true;
     const sessions = buildChartData(bouts);
+    
+    if (sessions.length === 0) {
+      if (chart) { chart.destroy(); chart = null; }
+      return;
+    }
+
     const labels = sessions.map(s => s.opponent_name || s.date.slice(5));
     const myData = sessions.map(s => s.my);
     const oppData = sessions.map(s => s.opp);
 
     import('chart.js').then(({ Chart, registerables }) => {
-      if (isDestroyed) return;
+      if (!effectActive) return;
       Chart.register(...registerables);
       if (chart) { chart.destroy(); chart = null; }
       if (!canvas) return;
@@ -73,7 +78,6 @@
           ctx.save();
           const meta = ch.getDatasetMeta(0);
           
-          // 1. Draw date brackets and text
           ctx.strokeStyle = 'rgba(255,255,255,0.2)';
           ctx.fillStyle = 'rgba(255,255,255,0.4)';
           ctx.font = 'bold 10px Inter';
@@ -81,8 +85,8 @@
           
           let dayStartIdx = 0;
           for (let i = 0; i <= sessions.length; i++) {
-            // If date changed or reached end
             if (i === sessions.length || (i > 0 && sessions[i].date !== sessions[i-1].date)) {
+              if (!meta.data[dayStartIdx] || !meta.data[i-1]) continue;
               const startX = meta.data[dayStartIdx].x;
               const endX = meta.data[i-1].x;
               const y = chartArea.bottom + 35;
@@ -90,7 +94,6 @@
               const ymd = dateStr.split('-');
               const shortDate = `${ymd[0].slice(2)}.${ymd[1]}.${ymd[2]}`;
 
-              // Draw bracket
               ctx.beginPath();
               ctx.moveTo(startX, y - 5);
               ctx.lineTo(startX, y);
@@ -98,13 +101,10 @@
               ctx.lineTo(endX, y - 5);
               ctx.stroke();
 
-              // Draw text
               ctx.fillText(shortDate, (startX + endX) / 2, y + 12);
-              
               dayStartIdx = i;
             }
           }
-          
           ctx.restore();
         }
       };
@@ -201,11 +201,8 @@
             if (elements.length > 0 && onfilter) {
               const index = elements[0].index;
               const vid = sessions[index].video_id;
-              if (vid === selectedVideoId) {
-                onfilter('');
-              } else {
-                onfilter(vid);
-              }
+              if (vid === selectedVideoId) onfilter('');
+              else onfilter(vid);
             }
           },
           plugins: {
@@ -230,7 +227,6 @@
               ticks: { display: true, color: '#6b7280', font: { size: 10 } },
               grid: { display: false },
               border: { display: false },
-              title: { display: false }
             },
           },
         },
@@ -238,7 +234,7 @@
     });
 
     return () => { 
-      isDestroyed = true;
+      effectActive = false;
       if (chart) { chart.destroy(); chart = null; }
     };
   });
@@ -248,11 +244,20 @@
 
 <div class="chart-card">
   <div class="card-header">
-    <h3 class="card-title">Динамика очков</h3>
+    <h3 class="chart-title">Динамика очков</h3>
   </div>
   <div class="chart-body">
+    {#if buildChartData(bouts).length === 0}
+      <div class="no-data">Нет данных для отображения</div>
+    {/if}
     <canvas bind:this={canvas}></canvas>
   </div>
+  {#if dates.first}
+    <div class="chart-footer">
+      <span>{dates.first}</span>
+      <span>{dates.last}</span>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -265,6 +270,7 @@
     height: 100%;
     display: flex;
     flex-direction: column;
+    position: relative;
   }
 
   .card-header {
@@ -285,6 +291,29 @@
     flex: 1;
     min-height: 0;
     position: relative;
+  }
+
+  .no-data {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(4px);
+    border-radius: var(--radius-lg);
+    z-index: 5;
+  }
+
+  .chart-footer {
+    display: flex;
+    justify-content: space-between;
+    padding-top: 8px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-family: 'Inter', sans-serif;
   }
 
   canvas {

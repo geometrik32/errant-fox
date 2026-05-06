@@ -6,10 +6,11 @@
     bouts: FighterBout[];
     rawVideos?: any[];
     selectedWeek?: string;
+    isDrillDown?: boolean;
     onfilter?: (week: string) => void;
   }
 
-  let { bouts, rawVideos = [], selectedWeek = '', onfilter }: Props = $props();
+  let { bouts, rawVideos = [], selectedWeek = '', isDrillDown = false, onfilter }: Props = $props();
 
   let canvas = $state<HTMLCanvasElement | undefined>(undefined);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -50,24 +51,32 @@
       taggedCountPerWeek.set(week, ids.size);
     }
     
-    // 2. Count TOTAL unique videos from rawVideos
+    // 2. Count TOTAL unique videos from rawVideos (only if NOT in drill-down mode)
     const totalVideoIdsPerWeek = new Map<string, Set<string>>();
-    for (const v of rawVideos) {
-      if (v.date) {
-        const week = getISOWeek(v.date);
-        if (!totalVideoIdsPerWeek.has(week)) totalVideoIdsPerWeek.set(week, new Set());
-        totalVideoIdsPerWeek.get(week)!.add(v.id || v.video_id);
+    if (!isDrillDown) {
+      for (const v of rawVideos) {
+        if (v.date) {
+          const week = getISOWeek(v.date);
+          if (!totalVideoIdsPerWeek.has(week)) totalVideoIdsPerWeek.set(week, new Set());
+          totalVideoIdsPerWeek.get(week)!.add(v.id || v.video_id);
+        }
       }
     }
 
     const untaggedCountPerWeek = new Map<string, number>();
-    const allVideoWeeks = new Set<string>([...taggedCountPerWeek.keys(), ...totalVideoIdsPerWeek.keys()]);
+    const allVideoWeeks = new Set<string>([...taggedCountPerWeek.keys()]);
+    if (!isDrillDown) {
+      for (const w of totalVideoIdsPerWeek.keys()) allVideoWeeks.add(w);
+    }
 
     for (const week of allVideoWeeks) {
-      const total = totalVideoIdsPerWeek.get(week)?.size ?? 0;
       const tagged = taggedCountPerWeek.get(week) ?? 0;
-      // We take max(0, total - tagged) just in case data is inconsistent
-      untaggedCountPerWeek.set(week, Math.max(0, total - tagged));
+      if (isDrillDown) {
+        untaggedCountPerWeek.set(week, 0);
+      } else {
+        const total = totalVideoIdsPerWeek.get(week)?.size ?? 0;
+        untaggedCountPerWeek.set(week, Math.max(0, total - tagged));
+      }
     }
 
     if (allVideoWeeks.size === 0) return { labels: [], taggedData: [], untaggedData: [], yearBoundaries: [] };
@@ -104,10 +113,9 @@
     return { labels, taggedData, untaggedData, yearBoundaries, allWeeks };
   }
 
-  let isDestroyed = false;
   $effect(() => {
     if (!canvas) return;
-    isDestroyed = false;
+    let effectActive = true;
     const { labels, taggedData, untaggedData, yearBoundaries, allWeeks = [] } = buildData(bouts, rawVideos);
 
     const monthBoundaryPlugin = {
@@ -133,6 +141,7 @@
 
         for (let i = 0; i <= allWeeks.length; i++) {
           if (i === allWeeks.length || (i > 0 && getMonth(allWeeks[i]) !== getMonth(allWeeks[i-1]))) {
+            if (!meta.data[monthStartIdx] || !meta.data[i-1]) continue;
             const startX = meta.data[monthStartIdx].x;
             const endX = meta.data[i-1].x;
             const y = chartArea.bottom + 35; // Matches ResultsChart
@@ -157,9 +166,10 @@
     };
 
     import('chart.js').then(({ Chart, registerables }) => {
-      if (isDestroyed) return;
+      if (!effectActive) return;
       Chart.register(...registerables);
       if (chart) { chart.destroy(); chart = null; }
+      if (labels.length === 0) return; // Don't init if no labels
       if (!canvas) return;
 
       chart = new Chart(canvas, {
@@ -264,7 +274,7 @@
     });
 
     return () => { 
-      isDestroyed = true;
+      effectActive = false;
       if (chart) { chart.destroy(); chart = null; }
     };
   });
@@ -275,6 +285,9 @@
 <div class="chart-card">
   <div class="chart-title">Частота боёв</div>
   <div class="chart-body">
+    {#if buildData(bouts, rawVideos).labels.length === 0}
+      <div class="no-data">Нет данных для отображения</div>
+    {/if}
     <canvas bind:this={canvas}></canvas>
   </div>
 </div>
@@ -289,6 +302,7 @@
     height: 100%;
     display: flex;
     flex-direction: column;
+    position: relative;
   }
 
   .chart-title {
@@ -302,6 +316,20 @@
     flex: 1;
     min-height: 0;
     position: relative;
+  }
+
+  .no-data {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(4px);
+    border-radius: var(--radius-lg);
+    z-index: 5;
   }
 
   canvas {
