@@ -37,6 +37,8 @@ async fn sync_once(
 ) -> anyhow::Result<()> {
     let folders = seafile.list_folders().await?;
 
+    let mut seen_paths: std::collections::HashSet<String> = std::collections::HashSet::new();
+
     for folder in folders {
         let date_str = match date_re.find(&folder.name) {
             Some(m) => m.as_str().to_string(),
@@ -61,6 +63,7 @@ async fn sync_once(
         for file in files {
             // seafile_path: "FolderName/filename.mp4" (no leading slash)
             let seafile_path = format!("{}/{}", folder.name, file.name);
+            seen_paths.insert(seafile_path.clone());
 
             let path_clone = seafile_path.clone();
             let db_clone = db.clone();
@@ -140,6 +143,33 @@ async fn sync_once(
             });
             tracing::info!("synced new video: {seafile_path}");
         }
+    }
+
+    // Delete videos whose seafile_path is no longer present in Seafile
+    let seen_vec: Vec<String> = seen_paths.into_iter().collect();
+    let db_clone = db.clone();
+    let removed: Vec<(String, String)> = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::videos;
+        let mut conn = db_clone.get()?;
+        // Find all videos not in the current seen set
+        let stale = videos::table
+            .select((videos::id, videos::seafile_path))
+            .filter(videos::seafile_path.ne_all(&seen_vec))
+            .load::<(String, String)>(&mut conn)
+            .map_err(anyhow::Error::from)?;
+        if !stale.is_empty() {
+            let stale_ids: Vec<&str> = stale.iter().map(|(id, _)| id.as_str()).collect();
+            diesel::delete(videos::table.filter(videos::id.eq_any(&stale_ids)))
+                .execute(&mut conn)
+                .map_err(anyhow::Error::from)?;
+        }
+        Ok::<_, anyhow::Error>(stale)
+    })
+    .await??;
+
+    for (id, path) in removed {
+        let _ = ws_tx.send(WsEvent::VideoRemoved { id: id.clone() });
+        tracing::info!("removed stale video: {path} (id={id})");
     }
 
     Ok(())

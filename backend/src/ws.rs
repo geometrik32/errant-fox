@@ -63,6 +63,9 @@ pub enum WsEvent {
         date: String,
         preview_url: String,
     },
+    VideoRemoved {
+        id: String,
+    },
 }
 
 impl WsEvent {
@@ -71,6 +74,7 @@ impl WsEvent {
             WsEvent::NewComment(c) => Some(&c.video_id),
             WsEvent::UpdateBout(b) => Some(&b.video_id),
             WsEvent::NewVideo { .. } => None,
+            WsEvent::VideoRemoved { .. } => None,
         }
     }
 }

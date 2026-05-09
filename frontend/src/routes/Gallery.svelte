@@ -98,6 +98,9 @@
           };
           allVideos = [newVideo, ...allVideos];
           applyFilter();
+        } else if (msg.type === 'video_removed') {
+          allVideos = allVideos.filter(v => v.id !== msg.id);
+          applyFilter();
         }
       } catch {
         // ignore malformed messages
