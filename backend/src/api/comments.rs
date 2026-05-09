@@ -12,7 +12,7 @@ use crate::{
     errors::AppError,
     middleware::auth::CurrentUser,
     state::AppState,
-    ws::{WsComment, WsCommentAuthor, WsEvent},
+    services::ws::{WsComment, WsCommentAuthor, WsEvent},
 };
 
 // ── Response DTO ──────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{db::DbPool, seafile::SeafileClient, ws::WsHub};
+use crate::{db::DbPool, services::{seafile::SeafileClient, ws::WsHub}};
 
 #[derive(Clone)]
 pub struct AppState {

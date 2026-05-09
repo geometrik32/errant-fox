@@ -561,7 +561,7 @@ pub async fn get_preview_frame(
         let vid_id = video_id.clone();
 
         tokio::spawn(async move {
-            if let Err(e) = crate::previews::generate_previews(
+            if let Err(e) = crate::services::previews::generate_previews(
                 &vid_id,
                 &seafile,
                 &seafile_path,

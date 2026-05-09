@@ -8,12 +8,8 @@ mod config;
 mod db;
 mod errors;
 mod middleware;
-mod moov;
-mod previews;
-mod seafile;
+mod services;
 mod state;
-mod sync;
-mod ws;
 
 #[tokio::main]
 async fn main() {
@@ -21,16 +17,16 @@ async fn main() {
 
     let config = config::Config::from_env();
 
-    let seafile_client = seafile::SeafileClient::new(
+    let seafile_client = services::seafile::SeafileClient::new(
         config.seafile_url.clone(),
         config.seafile_token.clone(),
     );
 
     let db_pool = db::init_pool(&config.database_url);
 
-    let (ws_tx, _ws_rx) = tokio::sync::broadcast::channel::<ws::WsEvent>(256);
+    let (ws_tx, _ws_rx) = tokio::sync::broadcast::channel::<services::ws::WsEvent>(256);
 
-    tokio::spawn(sync::run_sync(
+    tokio::spawn(services::sync::run_sync(
         seafile_client.clone(),
         db_pool.clone(),
         ws_tx.clone(),
