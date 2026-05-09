@@ -266,6 +266,7 @@
     style:transform-origin="0 0"
     style:cursor={panning ? 'grabbing' : zoom > 1.05 ? 'grab' : 'pointer'}
     preload="metadata"
+    playsinline
   ></video>
 
   {#if zoom > 1.05}
