@@ -11,7 +11,7 @@ use crate::{
     errors::AppError,
     middleware::auth::CurrentUser,
     state::AppState,
-    ws::{WsBout, WsEvent},
+    services::ws::{WsBout, WsEvent},
 };
 
 // ── Response DTO ──────────────────────────────────────────────────────────────

@@ -66,6 +66,6 @@ pub fn router(state: AppState) -> Router {
             post(comments::react_comment).delete(comments::delete_react),
         )
         // WebSocket
-        .route("/ws", get(crate::ws::ws_handler))
+        .route("/ws", get(crate::services::ws::ws_handler))
         .with_state(state)
 }

@@ -3,7 +3,8 @@ use std::process::Stdio;
 
 use tokio::process::Command;
 
-use crate::{db::DbPool, errors::AppError, seafile::SeafileClient};
+use crate::{db::DbPool, errors::AppError};
+use super::seafile::SeafileClient;
 
 const FAKE_USER_AGENT: &str = "Mozilla/5.0";
 const PREVIEW_FAILED: i32 = -1;

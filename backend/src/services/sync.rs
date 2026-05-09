@@ -7,11 +7,8 @@ use regex::Regex;
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
-use crate::{
-    db::{models::NewVideo, DbPool},
-    seafile::SeafileClient,
-    ws::WsEvent,
-};
+use crate::db::{models::NewVideo, DbPool};
+use super::{seafile::SeafileClient, ws::WsEvent};
 
 pub async fn run_sync(
     seafile: Arc<SeafileClient>,
@@ -100,7 +97,7 @@ async fn sync_once(
                 .await
             {
                 Ok(resp) => match resp.bytes().await {
-                    Ok(data) => match crate::moov::parse_fps(&data) {
+                    Ok(data) => match super::moov::parse_fps(&data) {
                         Ok(info) => {
                             tracing::info!(
                                 "extracted fps={:.2} for {seafile_path}",
