@@ -370,18 +370,16 @@ pub async fn search_comments(
     Query(params): Query<SearchQuery>,
 ) -> Result<Json<Vec<SearchResult>>, AppError> {
     let db = state.db.clone();
-    let q = format!("%{}%", params.q);
 
     let results = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{bouts, comments, users, videos};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
 
-        // Load matching comments with author (SQLite LIKE is case-insensitive for ASCII)
+        // Load all comments with author and video info to filter in memory (for unicode case-insensitivity)
         let rows = comments::table
             .inner_join(users::table.on(comments::author_id.eq(users::id)))
             .inner_join(videos::table.on(comments::video_id.eq(videos::id)))
-            .filter(comments::text.like(&q))
             .select((
                 comments::id,
                 comments::text,
@@ -394,37 +392,43 @@ pub async fn search_comments(
                 videos::fighter_a_id,
                 videos::fighter_b_id,
             ))
-            .limit(50)
             .load::<(i32, String, i32, String, Option<i32>, String, String, chrono::NaiveDate, Option<String>, Option<String>)>(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        let mut out = Vec::with_capacity(rows.len());
+        let query_lower = params.q.to_lowercase();
+        let mut out = Vec::new();
         for (cid, ctext, ts, vid, bout_id, uid, uname, vdate, fa_id, fb_id) in rows {
-            // Resolve fighter display names
-            let fa_name = if let Some(ref id) = fa_id {
-                users::table.filter(users::id.eq(id)).select(users::display_name).first::<String>(&mut conn).ok()
-            } else { None };
-            let fb_name = if let Some(ref id) = fb_id {
-                users::table.filter(users::id.eq(id)).select(users::display_name).first::<String>(&mut conn).ok()
-            } else { None };
+            if ctext.to_lowercase().contains(&query_lower) {
+                // Resolve fighter display names
+                let fa_name = if let Some(ref id) = fa_id {
+                    users::table.filter(users::id.eq(id)).select(users::display_name).first::<String>(&mut conn).ok()
+                } else { None };
+                let fb_name = if let Some(ref id) = fb_id {
+                    users::table.filter(users::id.eq(id)).select(users::display_name).first::<String>(&mut conn).ok()
+                } else { None };
 
-            let bout_order = if let Some(bid) = bout_id {
-                bouts::table.filter(bouts::id.eq(bid)).select(bouts::order_index).first::<i32>(&mut conn).ok()
-            } else { None };
+                let bout_order = if let Some(bid) = bout_id {
+                    bouts::table.filter(bouts::id.eq(bid)).select(bouts::order_index).first::<i32>(&mut conn).ok()
+                } else { None };
 
-            out.push(SearchResult {
-                comment_id: cid,
-                comment_text: ctext,
-                author_id: uid,
-                author_name: uname,
-                timestamp_ms: ts,
-                video_id: vid,
-                video_date: vdate.to_string(),
-                fighter_a_name: fa_name,
-                fighter_b_name: fb_name,
-                bout_id,
-                bout_order_index: bout_order,
-            });
+                out.push(SearchResult {
+                    comment_id: cid,
+                    comment_text: ctext,
+                    author_id: uid,
+                    author_name: uname,
+                    timestamp_ms: ts,
+                    video_id: vid,
+                    video_date: vdate.to_string(),
+                    fighter_a_name: fa_name,
+                    fighter_b_name: fb_name,
+                    bout_id,
+                    bout_order_index: bout_order,
+                });
+
+                if out.len() >= 50 {
+                    break;
+                }
+            }
         }
 
         Ok::<_, AppError>(out)
