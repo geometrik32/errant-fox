@@ -32,6 +32,12 @@
   let videoWeekSet = $derived.by(() => {
     const s = new Set<string>();
     for (const v of videos) {
+      if (selectedIds.size > 0) {
+        const match = [...selectedIds].every(
+          (id) => v.fighter_a?.id === id || v.fighter_b?.id === id
+        );
+        if (!match) continue;
+      }
       if (v.date) s.add(isoWeekStart(v.date.slice(0, 10)));
     }
     return s;
@@ -41,6 +47,12 @@
   let videoYears = $derived.by(() => {
     const s = new Set<number>();
     for (const v of videos) {
+      if (selectedIds.size > 0) {
+        const match = [...selectedIds].every(
+          (id) => v.fighter_a?.id === id || v.fighter_b?.id === id
+        );
+        if (!match) continue;
+      }
       const y = parseInt(v.date?.slice(0, 4) ?? '0');
       if (y > 0) s.add(y);
     }

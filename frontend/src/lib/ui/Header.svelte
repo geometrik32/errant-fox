@@ -24,9 +24,16 @@
   let showSearch = $state(false);
   let searchQuery = $state('');
 
+  $effect(() => {
+    showSearch = hash === '#/search';
+  });
+
   function toggleSearch() {
-    showSearch = !showSearch;
-    if (!showSearch) searchQuery = '';
+    if (hash === '#/search') {
+      window.location.hash = '#/gallery';
+    } else {
+      window.location.hash = '#/search';
+    }
   }
 
   function navigate(path: string) {
@@ -93,7 +100,7 @@
     </button>
     <button
       class="nav-btn"
-      class:active={showSearch}
+      class:active={activeNav === 'search'}
       onclick={toggleSearch}
     >
       Поиск
@@ -143,7 +150,7 @@
 </header>
 
 {#if showSearch}
-  <SearchPanel onclose={() => { showSearch = false; searchQuery = ''; }} />
+  <SearchPanel onclose={() => { if (window.location.hash === '#/search') window.location.hash = '#/gallery'; }} />
 {/if}
 
 {#if showProfile}
