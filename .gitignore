@@ -17,3 +17,11 @@ data/
 
 # Frontend build
 frontend/dist/
+
+# IDEs and Tools
+.claude/
+.codex/
+.vscode/
+.claude
+.codex
+.vscode
