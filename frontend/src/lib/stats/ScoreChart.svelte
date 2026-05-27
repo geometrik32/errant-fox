@@ -4,17 +4,31 @@
 
   interface Props {
     bouts: FighterBout[];
-    videoLabels?: Map<string, string>;
     selectedVideoId?: string;
-    selectedWeek?: string;
+    selectedWeeks?: string[];
+    xAxisMode?: 'overview' | 'detail';
+    scrollRatio?: number;
     onfilter?: (videoId: string) => void;
+    onmodechange?: (mode: 'overview' | 'detail') => void;
+    onscrollsync?: (ratio: number) => void;
   }
 
-  let { bouts, videoLabels = new Map(), selectedVideoId = '', selectedWeek = '', onfilter }: Props = $props();
+  let {
+    bouts,
+    selectedVideoId = '',
+    selectedWeeks = [],
+    xAxisMode = 'overview',
+    scrollRatio = 0,
+    onfilter,
+    onmodechange,
+    onscrollsync
+  }: Props = $props();
 
   let canvas = $state<HTMLCanvasElement | undefined>(undefined);
+  let scrollEl = $state<HTMLDivElement | undefined>(undefined);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let chart: any = null;
+  const AXIS_TOGGLE_THRESHOLD = 11;
 
   function getISOWeek(dateStr: string): string {
     const date = new Date(dateStr);
@@ -50,6 +64,64 @@
     };
   });
 
+  let canToggleAxisMode = $derived(buildChartData(bouts).length > AXIS_TOGGLE_THRESHOLD);
+  let effectiveXAxisMode = $derived(canToggleAxisMode ? xAxisMode : 'detail');
+
+  let chartWidth = $derived.by(() => {
+    const sessions = buildChartData(bouts);
+    if (!canToggleAxisMode || effectiveXAxisMode === 'overview') return '100%';
+    if (!sessions.length) return '100%';
+    const longestLabel = Math.max(...sessions.map(s => (s.opponent_name || s.date.slice(5)).length));
+    const pointWidth = Math.max(60, Math.min(120, longestLabel * 8 + 20));
+    return `${Math.max(720, sessions.length * pointWidth)}px`;
+  });
+
+  function formatShortDate(dateStr: string) {
+    const ymd = dateStr.split('-');
+    if (ymd.length !== 3) return dateStr;
+    return `${ymd[0].slice(2)}.${ymd[1]}.${ymd[2]}`;
+  }
+
+  function dateRangeGroups(items: { date: string }[]) {
+    const groupCount = Math.min(6, items.length);
+    const groupSize = Math.ceil(items.length / groupCount);
+    const groups: { start: number; end: number; label: string }[] = [];
+    for (let start = 0; start < items.length; start += groupSize) {
+      const end = Math.min(items.length - 1, start + groupSize - 1);
+      const startLabel = formatShortDate(items[start].date);
+      const endLabel = formatShortDate(items[end].date);
+      groups.push({ start, end, label: startLabel === endLabel ? startLabel : `${startLabel}-${endLabel}` });
+    }
+    return groups;
+  }
+
+  function isSessionActive(session: { video_id: string; week: string }): boolean {
+    if (selectedVideoId) return session.video_id === selectedVideoId;
+    if (selectedWeeks.length > 0) return selectedWeeks.includes(session.week);
+    return true;
+  }
+
+  function isSessionSelected(session: { video_id: string; week: string }): boolean {
+    if (selectedVideoId) return session.video_id === selectedVideoId;
+    if (selectedWeeks.length > 0) return selectedWeeks.includes(session.week);
+    return false;
+  }
+
+  function handleScroll() {
+    if (!scrollEl || !canToggleAxisMode || effectiveXAxisMode !== 'detail') return;
+    const maxScroll = scrollEl.scrollWidth - scrollEl.clientWidth;
+    if (maxScroll <= 0) return;
+    onscrollsync?.(scrollEl.scrollLeft / maxScroll);
+  }
+
+  $effect(() => {
+    if (!scrollEl || !canToggleAxisMode || effectiveXAxisMode !== 'detail') return;
+    const maxScroll = scrollEl.scrollWidth - scrollEl.clientWidth;
+    if (maxScroll <= 0) return;
+    const target = maxScroll * scrollRatio;
+    if (Math.abs(scrollEl.scrollLeft - target) > 1) scrollEl.scrollLeft = target;
+  });
+
   $effect(() => {
     if (!canvas) return;
     let effectActive = true;
@@ -60,7 +132,9 @@
       return;
     }
 
-    const labels = sessions.map(s => s.opponent_name || s.date.slice(5));
+    const labels = effectiveXAxisMode === 'detail'
+      ? sessions.map(s => s.opponent_name || s.date.slice(5))
+      : sessions.map(() => '');
     const myData = sessions.map(s => s.my);
     const oppData = sessions.map(s => s.opp);
 
@@ -109,11 +183,42 @@
         }
       };
 
-      const isFaint = selectedVideoId || selectedWeek;
+      const rangeBoundaryPlugin = {
+        id: 'rangeBoundaries',
+        beforeDraw(ch: any) {
+          const { ctx, chartArea } = ch;
+          if (!chartArea || sessions.length === 0) return;
+          const meta = ch.getDatasetMeta(0);
+          const groups = dateRangeGroups(sessions);
+          ctx.save();
+          ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+          ctx.fillStyle = 'rgba(255,255,255,0.42)';
+          ctx.font = 'bold 10px Inter';
+          ctx.textAlign = 'center';
+
+          for (const group of groups) {
+            if (!meta.data[group.start] || !meta.data[group.end]) continue;
+            const startX = meta.data[group.start].x;
+            const endX = meta.data[group.end].x;
+            const y = chartArea.bottom + 20;
+
+            ctx.beginPath();
+            ctx.moveTo(startX, y - 5);
+            ctx.lineTo(startX, y);
+            ctx.lineTo(endX, y);
+            ctx.lineTo(endX, y - 5);
+            ctx.stroke();
+            ctx.fillText(group.label, (startX + endX) / 2, y + 13);
+          }
+          ctx.restore();
+        }
+      };
+
+      const isFaint = selectedVideoId || selectedWeeks.length > 0;
 
       chart = new Chart(canvas!, {
         type: 'line',
-        plugins: [dayBoundaryPlugin],
+        plugins: effectiveXAxisMode === 'detail' ? [dayBoundaryPlugin] : [rangeBoundaryPlugin],
         data: {
           labels,
           datasets: [
@@ -133,21 +238,16 @@
               },
               pointBackgroundColor: (ctx: any) => {
                 const s = sessions[ctx.dataIndex];
-                const active = (!selectedVideoId && !selectedWeek) || 
-                               (selectedVideoId ? s.video_id === selectedVideoId : s.week === selectedWeek);
-                return active ? '#f59e0b' : 'rgba(245, 158, 11, 0.2)';
+                return isSessionActive(s) ? '#f59e0b' : 'rgba(245, 158, 11, 0.2)';
               },
               pointBorderColor: (ctx: any) => {
                 const s = sessions[ctx.dataIndex];
-                const active = (!selectedVideoId && !selectedWeek) || 
-                               (selectedVideoId ? s.video_id === selectedVideoId : s.week === selectedWeek);
-                return active ? '#f59e0b' : 'rgba(245, 158, 11, 0.2)';
+                return isSessionActive(s) ? '#f59e0b' : 'rgba(245, 158, 11, 0.2)';
               },
               pointBorderWidth: 2,
               pointRadius: (ctx: any) => {
                 const s = sessions[ctx.dataIndex];
-                const active = (selectedVideoId ? s.video_id === selectedVideoId : s.week === selectedWeek);
-                return active ? 6 : 4;
+                return isSessionSelected(s) ? 6 : 4;
               },
               tension: 0.4,
               cubicInterpolationMode: 'monotone',
@@ -169,21 +269,16 @@
               },
               pointBackgroundColor: (ctx: any) => {
                 const s = sessions[ctx.dataIndex];
-                const active = (!selectedVideoId && !selectedWeek) || 
-                               (selectedVideoId ? s.video_id === selectedVideoId : s.week === selectedWeek);
-                return active ? '#ef4444' : 'rgba(239, 68, 68, 0.2)';
+                return isSessionActive(s) ? '#ef4444' : 'rgba(239, 68, 68, 0.2)';
               },
               pointBorderColor: (ctx: any) => {
                 const s = sessions[ctx.dataIndex];
-                const active = (!selectedVideoId && !selectedWeek) || 
-                               (selectedVideoId ? s.video_id === selectedVideoId : s.week === selectedWeek);
-                return active ? '#ef4444' : 'rgba(239, 68, 68, 0.2)';
+                return isSessionActive(s) ? '#ef4444' : 'rgba(239, 68, 68, 0.2)';
               },
               pointBorderWidth: 2,
               pointRadius: (ctx: any) => {
                 const s = sessions[ctx.dataIndex];
-                const active = (selectedVideoId ? s.video_id === selectedVideoId : s.week === selectedWeek);
-                return active ? 6 : 4;
+                return isSessionSelected(s) ? 6 : 4;
               },
               tension: 0.4,
               cubicInterpolationMode: 'monotone',
@@ -195,7 +290,7 @@
           responsive: true,
           maintainAspectRatio: false,
           layout: {
-            padding: { left: 10, right: 10, top: 10, bottom: 45 }
+            padding: { left: 10, right: 10, top: 10, bottom: 48 }
           },
           onClick: (e, elements) => {
             if (elements.length > 0 && onfilter) {
@@ -217,7 +312,7 @@
           },
           scales: {
             x: {
-              ticks: { color: '#6b7280', font: { family: 'Inter', size: 11 }, maxRotation: 0 },
+              ticks: { display: effectiveXAxisMode === 'detail', autoSkip: false, color: '#6b7280', font: { family: 'Inter', size: 10 }, maxRotation: 0 },
               grid: { display: false },
               border: { display: false }
             },
@@ -245,12 +340,32 @@
 <div class="chart-card">
   <div class="card-header">
     <h3 class="chart-title">Динамика очков</h3>
+    {#if canToggleAxisMode}
+      <button
+        class="axis-switch"
+        type="button"
+        aria-pressed={xAxisMode === 'detail'}
+        aria-label={xAxisMode === 'detail' ? 'Показать обзор с диапазонами дат' : 'Показать подробную ось со скроллом'}
+        title={xAxisMode === 'detail' ? 'Показать обзор с диапазонами дат' : 'Показать подробную ось со скроллом'}
+        onclick={() => onmodechange?.(xAxisMode === 'detail' ? 'overview' : 'detail')}
+      >
+        <span class="switch-thumb"></span>
+      </button>
+    {/if}
   </div>
   <div class="chart-body">
     {#if buildChartData(bouts).length === 0}
       <div class="no-data">Нет данных для отображения</div>
     {/if}
-    <canvas bind:this={canvas}></canvas>
+    <div
+      bind:this={scrollEl}
+      class={`chart-scroll ${canToggleAxisMode && effectiveXAxisMode === 'detail' ? 'chart-scroll--detail' : ''}`}
+      onscroll={handleScroll}
+    >
+      <div class="chart-canvas" style={`width: ${chartWidth};`}>
+        <canvas bind:this={canvas}></canvas>
+      </div>
+    </div>
   </div>
   {#if dates.first}
     <div class="chart-footer">
@@ -271,6 +386,8 @@
     display: flex;
     flex-direction: column;
     position: relative;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .card-header {
@@ -280,16 +397,89 @@
     margin-bottom: 20px;
   }
 
-  .card-title {
+  .chart-title {
     font-size: 1rem;
     font-weight: 700;
     color: var(--text-primary);
     margin: 0;
   }
 
+  .axis-switch {
+    position: relative;
+    flex: 0 0 auto;
+    width: 46px;
+    height: 24px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.35);
+    padding: 0;
+    cursor: pointer;
+    overflow: hidden;
+    transition: background-color 180ms ease, border-color 180ms ease;
+  }
+
+  .switch-thumb {
+    position: absolute;
+    top: 50%;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.88);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+    transform: translateY(-50%);
+    transition: transform 180ms ease, background-color 180ms ease;
+  }
+
+  .axis-switch[aria-pressed="true"] {
+    background: rgba(245, 158, 11, 0.16);
+    border-color: rgba(245, 158, 11, 0.4);
+  }
+
+  .axis-switch[aria-pressed="true"] .switch-thumb {
+    transform: translate(22px, -50%);
+    background: #f59e0b;
+  }
+
   .chart-body {
     flex: 1;
     min-height: 0;
+    min-width: 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .chart-scroll {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+  }
+
+  .chart-scroll--detail {
+    overflow-x: auto;
+  }
+
+  .chart-scroll::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .chart-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .chart-scroll::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.35);
+    border-radius: 999px;
+  }
+
+  .chart-canvas {
+    min-width: 100%;
+    height: 100%;
     position: relative;
   }
 

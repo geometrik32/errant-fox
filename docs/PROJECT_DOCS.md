@@ -833,7 +833,6 @@ TypeScript-интерфейсы, зеркалирующие ответы API:
 
 Utility-функции:
 - **`resolveColor(id, color?): string`** — возвращает HEX-цвет из БД или генерирует HSL по хешу ID
-- **`buildVideoLabels(bouts, fighterName): Map<string, string>`** — строит человекочитаемые метки видео в формате `АБ_26.04.23_01`
 
 ---
 
