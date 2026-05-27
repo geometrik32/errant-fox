@@ -11,6 +11,7 @@ Thumbs.db
 
 # Secrets and local data
 .env
+.codex/
 *.sqlite
 data/
 

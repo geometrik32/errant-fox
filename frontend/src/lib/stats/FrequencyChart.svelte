@@ -5,12 +5,12 @@
   interface Props {
     bouts: FighterBout[];
     rawVideos?: any[];
-    selectedWeek?: string;
+    selectedWeeks?: string[];
     isDrillDown?: boolean;
-    onfilter?: (week: string) => void;
+    onfilter?: (week: string, additive: boolean) => void;
   }
 
-  let { bouts, rawVideos = [], selectedWeek = '', isDrillDown = false, onfilter }: Props = $props();
+  let { bouts, rawVideos = [], selectedWeeks = [], isDrillDown = false, onfilter }: Props = $props();
 
   let canvas = $state<HTMLCanvasElement | undefined>(undefined);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -35,6 +35,10 @@
     startOfWeek1.setUTCDate(jan4.getUTCDate() - (jan4.getUTCDay() || 7) + 1);
     const ms = startOfWeek1.getTime() + (week - 1 + n) * 7 * 86400000;
     return getISOWeek(new Date(ms).toISOString().slice(0, 10));
+  }
+
+  function isWeekActive(week: string): boolean {
+    return selectedWeeks.length === 0 || selectedWeeks.includes(week);
   }
 
   function buildData(bouts: FighterBout[], rawVideos: any[]) {
@@ -183,7 +187,7 @@
               data: taggedData,
               backgroundColor: (ctx: any) => {
                 const week = allWeeks[ctx.dataIndex];
-                if (!selectedWeek || week === selectedWeek) return '#f59e0b';
+                if (isWeekActive(week)) return '#f59e0b';
                 return 'rgba(245, 158, 11, 0.2)';
               },
               borderRadius: 2,
@@ -196,7 +200,7 @@
               data: untaggedData,
               backgroundColor: (ctx: any) => {
                 const week = allWeeks[ctx.dataIndex];
-                if (!selectedWeek || week === selectedWeek) return '#334155';
+                if (isWeekActive(week)) return '#334155';
                 return 'rgba(51, 65, 85, 0.2)';
               },
               borderRadius: 2,
@@ -209,14 +213,12 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          onClick: (_e, elements) => {
+          onClick: (event: any, elements) => {
             if (elements.length > 0 && onfilter) {
               const week = allWeeks[elements[0].index];
-              if (week === selectedWeek) {
-                onfilter('');
-              } else {
-                onfilter(week);
-              }
+              const nativeEvent = event?.native as MouseEvent | undefined;
+              const additive = !!(nativeEvent?.ctrlKey || nativeEvent?.metaKey);
+              onfilter(week, additive);
             }
           },
           plugins: {

@@ -12,6 +12,7 @@ services:
       DATABASE_URL: /data/db/errant_fox.db
       PREVIEWS_DIR: /data/previews
       AVATARS_DIR: /data/avatars
+      SQLITE_JOURNAL_MODE: DELETE
     networks:
       - default
       - proxy
@@ -21,8 +22,8 @@ services:
       context: ..
       dockerfile: infra/Dockerfile.frontend
     restart: unless-stopped
-#    ports:
-#      - "8081:80"
+    ports:
+      - "8081:80"
     depends_on:
       - backend
     networks:

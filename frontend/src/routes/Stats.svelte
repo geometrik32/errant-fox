@@ -15,25 +15,25 @@
   import RadarChart from '../lib/stats/RadarChart.svelte';
   import type { TableFilters } from '../lib/stats/HistoryTable.svelte';
   import type { Fighter, FighterBout } from '../lib/api/types';
-  import { buildVideoLabels } from '../lib/api/types';
 
   let selectedFighter = $state<Fighter | null>(null);
   let rawBouts = $state<FighterBout[]>([]);
-  let totalVideos = $state(0);
   let rawVideos = $state<any[]>([]);
   let loading = $state(false);
   let errorMsg = $state('');
 
   let defaultFilters: TableFilters = {
-    date: '', video_id: '', opponent_id: '', opponent_name: '',
+    date_start: '', date_end: '', video_id: '', opponent_id: '', opponent_name: '',
     my_technique: '', my_result: '', my_zone: '',
     opponent_technique: '', opponent_result: '', opponent_zone: '',
-    score: '', date_week: '', video: '',
+    score: '', date_week: '',
     sort_col: 'video_date', sort_dir: 'desc'
   };
 
   let tableFilters = $state<TableFilters>({ ...defaultFilters });
   let zoneFilter = $state('');
+  let chartXAxisMode = $state<'overview' | 'detail'>('overview');
+  let chartScrollRatio = $state(0);
 
   function getISOWeek(dateStr: string): string {
     if (!dateStr) return '';
@@ -46,6 +46,25 @@
     return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
   }
 
+  function parseWeeks(value: string): string[] {
+    return value.split(',').map(w => w.trim()).filter(Boolean);
+  }
+
+  function matchesWeek(dateStr: string, weekFilter: string): boolean {
+    const weeks = parseWeeks(weekFilter);
+    return weeks.length === 0 || weeks.includes(getISOWeek(dateStr));
+  }
+
+  function toggleWeekSelection(current: string, week: string, additive: boolean): string {
+    if (!week) return '';
+    if (!additive) return current === week ? '' : week;
+
+    const weeks = new Set(parseWeeks(current));
+    if (weeks.has(week)) weeks.delete(week);
+    else weeks.add(week);
+    return [...weeks].sort().join(',');
+  }
+
   let filteredBouts = $derived.by(() => {
     let result = [...rawBouts];
     if (zoneFilter) {
@@ -55,8 +74,10 @@
         return mz === zoneFilter || oz === zoneFilter;
       });
     }
-    if (tableFilters.date)
-      result = result.filter(b => b.video_date === tableFilters.date);
+    if (tableFilters.date_start)
+      result = result.filter(b => b.video_date >= tableFilters.date_start);
+    if (tableFilters.date_end)
+      result = result.filter(b => b.video_date <= tableFilters.date_end);
     if (tableFilters.video_id)
       result = result.filter(b => b.video_id === tableFilters.video_id);
     if (tableFilters.opponent_id)
@@ -76,11 +97,8 @@
     if (tableFilters.score)
       result = result.filter(b => `${b.my_score}:${b.opponent_score}`.includes(tableFilters.score));
     if (tableFilters.date_week)
-      result = result.filter(b => getISOWeek(b.video_date) === tableFilters.date_week);
-    if (tableFilters.video) {
-      const q = tableFilters.video.toLowerCase();
-      result = result.filter(b => (videoLabels.get(b.video_id) ?? b.video_id).toLowerCase().includes(q));
-    }
+      result = result.filter(b => matchesWeek(b.video_date, tableFilters.date_week));
+
     if (tableFilters.sort_col) {
       const col = tableFilters.sort_col as keyof FighterBout;
       const dir = tableFilters.sort_dir;
@@ -104,9 +122,7 @@
     return [...map.entries()].map(([id, name]) => ({ id, name }));
   });
 
-  let videoLabels = $derived(
-    selectedFighter ? buildVideoLabels(rawBouts, selectedFighter.display_name) : new Map<string, string>()
-  );
+
 
   let firstBoutDate = $derived(
     rawBouts.length > 0
@@ -150,13 +166,20 @@
     return result;
   });
 
-  let activeWeek = $derived.by(() => {
-    if (tableFilters.date_week) return tableFilters.date_week;
+  let boutsForTimelineCharts = $derived.by(() => {
+    let result = [...boutsForCharts];
+    if (tableFilters.date_week)
+      result = result.filter(b => matchesWeek(b.video_date, tableFilters.date_week));
+    return result;
+  });
+
+  let activeWeeks = $derived.by(() => {
+    if (tableFilters.date_week) return parseWeeks(tableFilters.date_week);
     if (tableFilters.video_id) {
       const bout = rawBouts.find(b => b.video_id === tableFilters.video_id);
-      if (bout) return getISOWeek(bout.video_date);
+      if (bout) return [getISOWeek(bout.video_date)];
     }
-    return '';
+    return [];
   });
 
   let filteredVideos = $derived.by(() => {
@@ -167,8 +190,39 @@
         v.fighter_b?.id === tableFilters.opponent_id
       );
     }
+    if (tableFilters.date_start) {
+      result = result.filter(v => v.date >= tableFilters.date_start);
+    }
+    if (tableFilters.date_end) {
+      result = result.filter(v => v.date <= tableFilters.date_end);
+    }
+    if (tableFilters.date_week) {
+      result = result.filter(v => matchesWeek(v.date, tableFilters.date_week));
+    }
+    if (tableFilters.video_id) {
+      result = result.filter(v => v.id === tableFilters.video_id);
+    }
     return result;
   });
+
+  let videosForFrequencyChart = $derived.by(() => {
+    let result = rawVideos;
+    if (tableFilters.opponent_id) {
+      result = result.filter(v =>
+        v.fighter_a?.id === tableFilters.opponent_id ||
+        v.fighter_b?.id === tableFilters.opponent_id
+      );
+    }
+    if (tableFilters.date_start) {
+      result = result.filter(v => v.date >= tableFilters.date_start);
+    }
+    if (tableFilters.date_end) {
+      result = result.filter(v => v.date <= tableFilters.date_end);
+    }
+    return result;
+  });
+
+  let totalVideos = $derived(filteredVideos.length);
 
   async function selectFighter(fighter: Fighter) {
     if (selectedFighter?.id === fighter.id) return;
@@ -184,7 +238,6 @@
         getVideos({ fighter_id: fighter.id }),
       ]);
       rawBouts = bouts;
-      totalVideos = vids.length;
       rawVideos = vids;
     } catch (e) {
       errorMsg = e instanceof Error ? e.message : 'Ошибка загрузки данных';
@@ -299,17 +352,40 @@
           <div class="chart-slot">
             <FrequencyChart 
               bouts={boutsForCharts} 
-              rawVideos={filteredVideos} 
-              selectedWeek={activeWeek} 
+              rawVideos={videosForFrequencyChart} 
+              selectedWeeks={activeWeeks} 
               isDrillDown={!!(tableFilters.my_technique || tableFilters.opponent_technique)}
-              onfilter={(week) => handleFilter({...tableFilters, date_week: week, video_id: ''})} 
+              onfilter={(week, additive) => {
+                const nextWeek = toggleWeekSelection(tableFilters.date_week, week, additive);
+                chartScrollRatio = 0;
+                if (nextWeek) chartXAxisMode = 'detail';
+                handleFilter({...tableFilters, date_week: nextWeek, video_id: ''});
+              }} 
             />
           </div>
           <div class="chart-slot">
-            <ResultsChart bouts={boutsForCharts} {videoLabels} selectedVideoId={tableFilters.video_id} selectedWeek={activeWeek} onfilter={(vid) => handleFilter({...tableFilters, video_id: vid, date_week: ''})} />
+            <ResultsChart
+              bouts={boutsForTimelineCharts}
+              selectedVideoId={tableFilters.video_id}
+              selectedWeeks={activeWeeks}
+              xAxisMode={chartXAxisMode}
+              scrollRatio={chartScrollRatio}
+              onmodechange={(mode) => { chartXAxisMode = mode; chartScrollRatio = 0; }}
+              onscrollsync={(ratio) => chartScrollRatio = ratio}
+              onfilter={(vid) => handleFilter({...tableFilters, video_id: vid, date_week: ''})}
+            />
           </div>
           <div class="chart-slot">
-            <ScoreChart bouts={boutsForCharts} {videoLabels} selectedVideoId={tableFilters.video_id} selectedWeek={activeWeek} onfilter={(vid) => handleFilter({...tableFilters, video_id: vid, date_week: ''})} />
+            <ScoreChart
+              bouts={boutsForTimelineCharts}
+              selectedVideoId={tableFilters.video_id}
+              selectedWeeks={activeWeeks}
+              xAxisMode={chartXAxisMode}
+              scrollRatio={chartScrollRatio}
+              onmodechange={(mode) => { chartXAxisMode = mode; chartScrollRatio = 0; }}
+              onscrollsync={(ratio) => chartScrollRatio = ratio}
+              onfilter={(vid) => handleFilter({...tableFilters, video_id: vid, date_week: ''})}
+            />
           </div>
         </div>
 
@@ -357,35 +433,40 @@
         </div>
       </div>
 
-      <!-- ===== HISTORY TABLE ===== -->
       <div class="table-slot">
         <HistoryTable
           bouts={filteredBouts}
           filters={tableFilters}
           {opponents}
-          {videoLabels}
+          fightDates={new Set(rawBouts.map(b => b.video_date.slice(0, 10)))}
           onfilter={handleFilter}
           onnavigate={handleNavigate}
         />
       </div>
-      <div class="bottom-spacer"></div>
     {/if}
   </div>
 </div>
 
 <style>
-  .stats-layout { display: flex; min-height: 0; }
+  .stats-layout {
+    display: flex;
+    min-height: 0;
+    min-width: 0;
+    overflow-x: hidden;
+  }
 
   .dashboard {
     flex: 1;
     display: flex;
     flex-direction: column;
     gap: 20px;
-    padding: 20px 20px 40px 20px;
+    padding: 20px;
     width: 100%;
     max-width: 1800px; /* Optional cap for extremely wide screens */
     margin: 0 auto;
     box-sizing: border-box;
+    min-width: 0;
+    overflow-x: hidden;
   }
 
   /* Empty / loading */
@@ -399,15 +480,18 @@
   /* ===== MAIN TWO COLUMNS ===== */
   .main-cols {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 20px;
     align-items: start;
+    min-width: 0;
   }
 
   .left-col, .right-col {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    min-width: 0;
+    max-width: 100%;
   }
 
   /* Top area: Hero + KPIs */
@@ -421,33 +505,55 @@
   .kpis-area { min-width: 0; height: 350px; }
 
   /* Chart slots (left col) */
-  .chart-slot { height: 450px; }
+  .chart-slot {
+    height: 450px;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
 
   /* Right column slots */
   .right-large { height: 575px; }
 
   .right-narrow-row {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 20px;
     height: 695px;
+    min-width: 0;
   }
 
   .right-narrow { height: 695px; min-width: 0; }
+
+  .right-large,
+  .right-wide {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
 
   .right-wide { height: 450px; }
 
   /* ===== BOTTOM SECTION ===== */
   .bottom-cols {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 20px;
+    min-width: 0;
   }
 
-  .bottom-card { height: 848px; }
+  .bottom-card {
+    height: 848px;
+    min-width: 0;
+    overflow: hidden;
+  }
 
   /* ===== HISTORY TABLE ===== */
-  .table-slot { height: 315px; }
+  .table-slot {
+    height: auto;
+    min-width: 0;
+    overflow: hidden;
+  }
 
   /* Fighter Hero */
   .fighter-hero {
@@ -538,9 +644,6 @@
     .right-narrow { height: 450px; }
   }
 
-  .bottom-spacer {
-    height: 20px;
-    flex-shrink: 0;
-  }
+
 
 </style>

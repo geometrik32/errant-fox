@@ -1,10 +1,14 @@
 <script lang="ts">
   import type { FighterBout } from '../api/types';
-  import { techniques } from '../../stores';
+  import { resolveColor } from '../api/types';
+  import { techniques, fighters } from '../../stores';
   import { HIT_ZONES } from '../player/HitZonePicker.svelte';
 
+  import DateRangePicker from '../ui/DateRangePicker.svelte';
+
   export interface TableFilters {
-    date: string;
+    date_start: string;
+    date_end: string;
     video_id: string;
     opponent_id: string;
     opponent_name: string;
@@ -16,7 +20,6 @@
     opponent_zone: string;
     score: string;
     date_week: string;
-    video: string;
     sort_col: string;
     sort_dir: 'asc' | 'desc';
   }
@@ -25,17 +28,17 @@
     bouts: FighterBout[];
     filters: TableFilters;
     opponents: Array<{ id: string; name: string }>;
-    videoLabels?: Map<string, string>;
+    fightDates?: Set<string>;
     onfilter: (f: TableFilters) => void;
     onnavigate: (videoId: string, timeStartMs?: number) => void;
   }
 
-  let { bouts, filters, opponents, videoLabels = new Map(), onfilter, onnavigate }: Props = $props();
+  let { bouts, filters, opponents, fightDates = new Set(), onfilter, onnavigate }: Props = $props();
 
   // Visible column config
-  type ColKey = 'video' | 'date' | 'opponent' | 'score' | 'my_tech' | 'my_result' | 'my_zone' | 'opp_tech' | 'opp_result' | 'opp_zone';
+  type ColKey = 'date' | 'opponent' | 'score' | 'my_tech' | 'my_result' | 'my_zone' | 'opp_tech' | 'opp_result' | 'opp_zone';
   const COL_LABELS: Record<ColKey, string> = {
-    video: 'Бой', date: 'Дата', opponent: 'Оппонент', score: 'Счёт',
+    date: 'Дата', opponent: 'Оппонент', score: 'Счёт',
     my_tech: 'Мой приём', my_result: 'Мой рез.', my_zone: 'Моя зона',
     opp_tech: 'Приём опп.', opp_result: 'Рез. опп.', opp_zone: 'Зона опп.',
   };
@@ -43,7 +46,62 @@
   let visibleCols = $state<Set<ColKey>>(new Set(
     (Object.keys(COL_LABELS) as ColKey[])
   ));
-  let showColPicker = $state(false);
+
+  let isGrouped = $state(true); // Grouped by default
+  let expandedFights = $state<Set<string>>(new Set());
+
+  function toggleFight(videoId: string) {
+    const next = new Set(expandedFights);
+    if (next.has(videoId)) {
+      next.delete(videoId);
+    } else {
+      next.add(videoId);
+    }
+    expandedFights = next;
+  }
+
+  function getOpponentInfo(opponentId: string) {
+    const f = $fighters.find(x => x.id === opponentId);
+    return {
+      avatar_url: f?.avatar_url || '',
+      color: f?.color || null
+    };
+  }
+
+  interface FightGroup {
+    video_id: string;
+    video_date: string;
+    opponent_id: string;
+    opponent_name: string;
+    my_score: number;
+    opponent_score: number;
+    bouts: FighterBout[];
+  }
+
+  let groups = $derived.by(() => {
+    const list: FightGroup[] = [];
+    const map = new Map<string, FightGroup>();
+    for (const b of bouts) {
+      let g = map.get(b.video_id);
+      if (!g) {
+        g = {
+          video_id: b.video_id,
+          video_date: b.video_date,
+          opponent_id: b.opponent_id,
+          opponent_name: b.opponent_name,
+          my_score: 0,
+          opponent_score: 0,
+          bouts: []
+        };
+        map.set(b.video_id, g);
+        list.push(g);
+      }
+      g.my_score += b.my_score;
+      g.opponent_score += b.opponent_score;
+      g.bouts.push(b);
+    }
+    return list;
+  });
 
   function toggleCol(col: ColKey) {
     const next = new Set(visibleCols);
@@ -94,20 +152,22 @@
   <table class="table">
     <thead>
       <tr class="header-row">
-        {#if visibleCols.has('video')}
-        <th class="th sortable" onclick={() => toggleSort('video_date')}>
-          <span>БОЙ <span class="sort-icon">{sortIcon('video_date')}</span></span>
-          <input class="filter-input" type="text" placeholder="Поиск…" value={filters.video ?? ''}
-            oninput={(e) => setFilter('video', (e.target as HTMLInputElement).value)}
-            onclick={(e) => e.stopPropagation()} />
-        </th>
-        {/if}
+
         {#if visibleCols.has('date')}
         <th class="th sortable" onclick={() => toggleSort('video_date')}>
           <span>ДАТА <span class="sort-icon">{sortIcon('video_date')}</span></span>
-          <input class="filter-input" type="date" value={filters.date}
-            oninput={(e) => setFilter('date', (e.target as HTMLInputElement).value)}
-            onclick={(e) => e.stopPropagation()} />
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div onclick={(e) => e.stopPropagation()}>
+            <DateRangePicker
+              bind:dateStart={filters.date_start}
+              bind:dateEnd={filters.date_end}
+              {fightDates}
+              onchange={(start, end) => {
+                onfilter({ ...filters, date_start: start, date_end: end });
+              }}
+            />
+          </div>
         </th>
         {/if}
         {#if visibleCols.has('opponent')}
@@ -218,76 +278,188 @@
         </th>
         {/if}
         <th class="th th--nav">
-          <div class="col-picker-wrap">
-            <button class="eye-btn" onclick={() => { showColPicker = !showColPicker; }} title="Выбрать столбцы" aria-expanded={showColPicker}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
+          <button class="toggle-mode-btn" onclick={() => { isGrouped = !isGrouped; }} title={isGrouped ? "Показать списком" : "Сгруппировать по боям"}>
+            {#if isGrouped}
+              <!-- Grouped mode icon -->
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 6h16M4 12h16M8 18h12"/>
+                <circle cx="2" cy="6" r="1" fill="currentColor"/>
+                <circle cx="2" cy="12" r="1" fill="currentColor"/>
+                <circle cx="6" cy="18" r="1" fill="currentColor"/>
               </svg>
-            </button>
-            {#if showColPicker}
-              <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-              <div class="col-picker" role="menu" tabindex="0" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.key === 'Escape' && (showColPicker = false)}>
-                {#each Object.entries(COL_LABELS) as [key, label]}
-                  <label class="col-option">
-                    <input type="checkbox" checked={visibleCols.has(key as ColKey)} onchange={() => toggleCol(key as ColKey)} />
-                    {label}
-                  </label>
-                {/each}
-              </div>
+            {:else}
+              <!-- Flat list icon -->
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <circle cx="4" cy="6" r="1.5"></circle>
+                <circle cx="4" cy="12" r="1.5"></circle>
+                <circle cx="4" cy="18" r="1.5"></circle>
+              </svg>
             {/if}
-          </div>
+          </button>
         </th>
       </tr>
     </thead>
     <tbody>
-      {#each bouts as bout (bout.id)}
-        <tr class="body-row">
-          {#if visibleCols.has('video')}<td class="td video-label">{videoLabels.get(bout.video_id) ?? bout.video_id.slice(0, 8)}</td>{/if}
-          {#if visibleCols.has('date')}<td class="td date-cell">{formatDate(bout.video_date)}</td>{/if}
-          {#if visibleCols.has('opponent')}<td class="td">{bout.opponent_name}</td>{/if}
-          {#if visibleCols.has('score')}
-          <td class="td score">
-            <span class:win={bout.my_score > bout.opponent_score} class:loss={bout.my_score < bout.opponent_score}>{bout.my_score}</span>
-            <span class="sep">:</span>
-            <span class:win={bout.my_score > bout.opponent_score} class:loss={bout.my_score < bout.opponent_score}>{bout.opponent_score}</span>
-          </td>
+      {#if isGrouped}
+        {#each groups as group (group.video_id)}
+          <!-- Group header row -->
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+          <tr class="body-row group-header-row" onclick={() => toggleFight(group.video_id)}>
+            {#if visibleCols.has('date')}
+              <td class="td date-cell group-video-cell">
+                <span class="chevron-icon" class:expanded={expandedFights.has(group.video_id)}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 18l6-6-6-6"/>
+                  </svg>
+                </span>
+                {formatDate(group.video_date)}
+              </td>
+            {/if}
+            {#if visibleCols.has('opponent')}
+              <td class="td">
+                <div class="opponent-cell-content">
+                  <div class="opp-avatar" style:background={resolveColor(group.opponent_id, getOpponentInfo(group.opponent_id).color)}>
+                    <svg class="opp-avatar-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="1.5" opacity="0.6"/>
+                      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+                    </svg>
+                    {#if getOpponentInfo(group.opponent_id).avatar_url}
+                      <img class="opp-avatar-img" src={getOpponentInfo(group.opponent_id).avatar_url} alt={group.opponent_name}
+                        onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    {/if}
+                  </div>
+                  <span class="opp-name">{group.opponent_name}</span>
+                </div>
+              </td>
+            {/if}
+            {#if visibleCols.has('score')}
+              <td class="td score">
+                <span class="group-score">
+                  <span class:win={group.my_score > group.opponent_score} class:loss={group.my_score < group.opponent_score}>{group.my_score}</span>
+                  <span class="sep">:</span>
+                  <span class:win={group.my_score > group.opponent_score} class:loss={group.my_score < group.opponent_score}>{group.opponent_score}</span>
+                </span>
+              </td>
+            {/if}
+            {#if visibleCols.has('my_tech')}<td class="td">—</td>{/if}
+            {#if visibleCols.has('my_result')}
+              <td class="td">
+                <span class="group-result-badge" class:win={group.my_score > group.opponent_score} class:loss={group.my_score < group.opponent_score} class:draw={group.my_score === group.opponent_score}>
+                  {group.my_score > group.opponent_score ? 'Победа' : group.my_score < group.opponent_score ? 'Поражение' : 'Ничья'}
+                </span>
+              </td>
+            {/if}
+            {#if visibleCols.has('my_zone')}<td class="td">—</td>{/if}
+            {#if visibleCols.has('opp_tech')}<td class="td">—</td>{/if}
+            {#if visibleCols.has('opp_result')}<td class="td">—</td>{/if}
+            {#if visibleCols.has('opp_zone')}<td class="td">—</td>{/if}
+            <td class="td td--nav">
+              <button class="nav-btn" onclick={(e) => { e.stopPropagation(); onnavigate(group.video_id); }} title="Открыть видео">→</button>
+            </td>
+          </tr>
+          {#if expandedFights.has(group.video_id)}
+            {#each group.bouts as bout (bout.id)}
+              <tr class="body-row bout-sub-row">
+
+                {#if visibleCols.has('date')}<td class="td date-cell sub-cell">{formatDate(bout.video_date)}</td>{/if}
+                {#if visibleCols.has('opponent')}<td class="td sub-cell">{bout.opponent_name}</td>{/if}
+                {#if visibleCols.has('score')}
+                  <td class="td score sub-cell">
+                    <span class:win={bout.my_score > bout.opponent_score} class:loss={bout.my_score < bout.opponent_score}>{bout.my_score}</span>
+                    <span class="sep">:</span>
+                    <span class:win={bout.my_score > bout.opponent_score} class:loss={bout.my_score < bout.opponent_score}>{bout.opponent_score}</span>
+                  </td>
+                {/if}
+                {#if visibleCols.has('my_tech')}<td class="td sub-cell">{bout.my_technique_name ?? '—'}</td>{/if}
+                {#if visibleCols.has('my_result')}
+                  <td class="td sub-cell">
+                    <span class="result-badge"
+                      class:hit={bout.my_result === 'hit'}
+                      class:miss={bout.my_result === 'miss'}
+                      class:blocked={bout.my_result === 'blocked'}
+                      class:late={bout.my_result === 'late'}
+                      class:no-strike={bout.my_result === 'no_strike'}
+                      class:disqualification={bout.my_result === 'disqualification'}
+                      class:afterblow={bout.my_result === 'afterblow'}
+                    >{resultLabel(bout.my_result)}</span>
+                  </td>
+                {/if}
+                {#if visibleCols.has('my_zone')}<td class="td zone-cell sub-cell">{(bout.my_hit_zone ?? '').split(':')[0] || '—'}</td>{/if}
+                {#if visibleCols.has('opp_tech')}<td class="td sub-cell">{bout.opponent_technique_name ?? '—'}</td>{/if}
+                {#if visibleCols.has('opp_result')}
+                  <td class="td sub-cell">
+                    <span class="result-badge"
+                      class:hit={bout.opponent_result === 'hit'}
+                      class:miss={bout.opponent_result === 'miss'}
+                      class:blocked={bout.opponent_result === 'blocked'}
+                      class:late={bout.opponent_result === 'late'}
+                      class:no-strike={bout.opponent_result === 'no_strike'}
+                      class:disqualification={bout.opponent_result === 'disqualification'}
+                      class:afterblow={bout.opponent_result === 'afterblow'}
+                    >{resultLabel(bout.opponent_result)}</span>
+                  </td>
+                {/if}
+                {#if visibleCols.has('opp_zone')}<td class="td zone-cell sub-cell">{(bout.opponent_hit_zone ?? '').split(':')[0] || '—'}</td>{/if}
+                <td class="td td--nav sub-cell">
+                  <button class="nav-btn" onclick={() => onnavigate(bout.video_id, bout.time_start_ms)} title="Открыть видео">→</button>
+                </td>
+              </tr>
+            {/each}
           {/if}
-          {#if visibleCols.has('my_tech')}<td class="td">{bout.my_technique_name ?? '—'}</td>{/if}
-          {#if visibleCols.has('my_result')}
-          <td class="td">
-            <span class="result-badge"
-              class:hit={bout.my_result === 'hit'}
-              class:miss={bout.my_result === 'miss'}
-              class:blocked={bout.my_result === 'blocked'}
-              class:late={bout.my_result === 'late'}
-              class:no-strike={bout.my_result === 'no_strike'}
-              class:disqualification={bout.my_result === 'disqualification'}
-              class:afterblow={bout.my_result === 'afterblow'}
-            >{resultLabel(bout.my_result)}</span>
-          </td>
-          {/if}
-          {#if visibleCols.has('my_zone')}<td class="td zone-cell">{(bout.my_hit_zone ?? '').split(':')[0] || '—'}</td>{/if}
-          {#if visibleCols.has('opp_tech')}<td class="td">{bout.opponent_technique_name ?? '—'}</td>{/if}
-          {#if visibleCols.has('opp_result')}
-          <td class="td">
-            <span class="result-badge"
-              class:hit={bout.opponent_result === 'hit'}
-              class:miss={bout.opponent_result === 'miss'}
-              class:blocked={bout.opponent_result === 'blocked'}
-              class:late={bout.opponent_result === 'late'}
-              class:no-strike={bout.opponent_result === 'no_strike'}
-              class:disqualification={bout.opponent_result === 'disqualification'}
-              class:afterblow={bout.opponent_result === 'afterblow'}
-            >{resultLabel(bout.opponent_result)}</span>
-          </td>
-          {/if}
-          {#if visibleCols.has('opp_zone')}<td class="td zone-cell">{(bout.opponent_hit_zone ?? '').split(':')[0] || '—'}</td>{/if}
-          <td class="td td--nav">
-            <button class="nav-btn" onclick={() => onnavigate(bout.video_id, bout.time_start_ms)} title="Открыть видео">→</button>
-          </td>
-        </tr>
-      {/each}
+        {/each}
+      {:else}
+        {#each bouts as bout (bout.id)}
+          <tr class="body-row">
+
+            {#if visibleCols.has('date')}<td class="td date-cell">{formatDate(bout.video_date)}</td>{/if}
+            {#if visibleCols.has('opponent')}<td class="td">{bout.opponent_name}</td>{/if}
+            {#if visibleCols.has('score')}
+              <td class="td score">
+                <span class:win={bout.my_score > bout.opponent_score} class:loss={bout.my_score < bout.opponent_score}>{bout.my_score}</span>
+                <span class="sep">:</span>
+                <span class:win={bout.my_score > bout.opponent_score} class:loss={bout.my_score < bout.opponent_score}>{bout.opponent_score}</span>
+              </td>
+            {/if}
+            {#if visibleCols.has('my_tech')}<td class="td">{bout.my_technique_name ?? '—'}</td>{/if}
+            {#if visibleCols.has('my_result')}
+              <td class="td">
+                <span class="result-badge"
+                  class:hit={bout.my_result === 'hit'}
+                  class:miss={bout.my_result === 'miss'}
+                  class:blocked={bout.my_result === 'blocked'}
+                  class:late={bout.my_result === 'late'}
+                  class:no-strike={bout.my_result === 'no_strike'}
+                  class:disqualification={bout.my_result === 'disqualification'}
+                  class:afterblow={bout.my_result === 'afterblow'}
+                >{resultLabel(bout.my_result)}</span>
+              </td>
+            {/if}
+            {#if visibleCols.has('my_zone')}<td class="td zone-cell">{(bout.my_hit_zone ?? '').split(':')[0] || '—'}</td>{/if}
+            {#if visibleCols.has('opp_tech')}<td class="td">{bout.opponent_technique_name ?? '—'}</td>{/if}
+            {#if visibleCols.has('opp_result')}
+              <td class="td">
+                <span class="result-badge"
+                  class:hit={bout.opponent_result === 'hit'}
+                  class:miss={bout.opponent_result === 'miss'}
+                  class:blocked={bout.opponent_result === 'blocked'}
+                  class:late={bout.opponent_result === 'late'}
+                  class:no-strike={bout.opponent_result === 'no_strike'}
+                  class:disqualification={bout.opponent_result === 'disqualification'}
+                  class:afterblow={bout.opponent_result === 'afterblow'}
+                >{resultLabel(bout.opponent_result)}</span>
+              </td>
+            {/if}
+            {#if visibleCols.has('opp_zone')}<td class="td zone-cell">{(bout.opponent_hit_zone ?? '').split(':')[0] || '—'}</td>{/if}
+            <td class="td td--nav">
+              <button class="nav-btn" onclick={() => onnavigate(bout.video_id, bout.time_start_ms)} title="Открыть видео">→</button>
+            </td>
+          </tr>
+        {/each}
+      {/if}
       {#if bouts.length === 0}
         <tr>
           <td colspan="10" class="td empty">Нет данных</td>
@@ -502,12 +674,24 @@
     border-color: var(--accent-yellow);
   }
 
-  /* Column picker */
-  .col-picker-wrap {
-    position: relative;
+
+
+  .zone-cell {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
   }
 
-  .eye-btn {
+
+
+  .date-cell {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Toggle mode button */
+  .toggle-mode-btn {
     background: none;
     border: none;
     border-radius: var(--radius-sm);
@@ -522,61 +706,107 @@
     margin: 0 auto;
   }
 
-  .eye-btn:hover {
+  .toggle-mode-btn:hover {
     color: var(--text-primary);
     background: var(--surface-hover);
   }
 
-  .col-picker {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 12px);
-    background: var(--surface-solid);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    padding: 12px 16px;
-    z-index: 50;
-    min-width: 150px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    box-shadow: none;
+  /* Chevron animation */
+  .chevron-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+    margin-right: 8px;
+    color: var(--text-secondary);
+    vertical-align: middle;
+  }
+  .chevron-icon.expanded {
+    transform: rotate(90deg);
+    color: var(--accent-yellow);
   }
 
-  .col-option {
+  /* Group header rows */
+  .group-header-row {
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.015);
+  }
+  .group-header-row:hover {
+    background: var(--surface-hover);
+  }
+
+  /* Bout sub-rows nested within groups */
+  .bout-sub-row {
+    background: rgba(0, 0, 0, 0.2);
+    border-left: 2px solid var(--accent-yellow);
+  }
+  .bout-sub-row:hover {
+    background: rgba(255, 255, 255, 0.03) !important;
+  }
+
+  .sub-cell {
+    opacity: 0.85;
+  }
+
+  /* Group Result badges */
+  .group-result-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    text-align: center;
+    min-width: 80px;
+  }
+  .group-result-badge.win {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+  }
+  .group-result-badge.loss {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+  }
+  .group-result-badge.draw {
+    background: rgba(156, 163, 175, 0.15);
+    color: #9ca3af;
+  }
+
+  /* Opponent cell style */
+  .opponent-cell-content {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 0.85rem;
-    color: var(--text-primary);
-    cursor: pointer;
-    user-select: none;
-    white-space: nowrap;
   }
 
-  .col-option input[type="checkbox"] {
-    accent-color: var(--accent-yellow);
-    cursor: pointer;
-  }
-
-  .zone-cell {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-  }
-
-  .video-label {
-    font-size: 0.8rem;
-    color: var(--text-primary);
-    white-space: nowrap;
-    max-width: 160px;
+  .opp-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     overflow: hidden;
-    text-overflow: ellipsis;
+    flex-shrink: 0;
   }
 
-  .date-cell {
-    font-size: 0.78rem;
-    color: var(--text-secondary);
-    white-space: nowrap;
-    font-variant-numeric: tabular-nums;
+  .opp-avatar-icon {
+    position: absolute;
+    pointer-events: none;
+  }
+
+  .opp-avatar-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .opp-name {
+    font-weight: 500;
   }
 </style>
