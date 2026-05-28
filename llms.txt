@@ -1,0 +1,45 @@
+# llms.txt for Errant Fox
+
+## Project
+Errant Fox — open-source web platform for HEMA (Historical European Martial Arts, longsword focus) sparring video analysis and fencing statistics tracking.
+
+## Problem it solves
+HEMA clubs and fighters need a self-hosted tool to:
+- Review sparring footage frame-by-frame.
+- Create temporal annotations (bouts/exchanges) with exact start and end timestamps.
+- Record structured match events: scores, techniques, hit zones, and bout outcomes.
+- Automatically generate fighter dashboards with radar charts, weapon contact heatmaps, and win/loss dynamics.
+- Discuss bouts via a timeline-linked commenting chat.
+
+## Key features
+- 🎬 **Seafile Integration**: Auto-indexes new video folders by date from Seafile storage and streams directly without transiting through the backend.
+- ⏱ **Precision Playback**: Video playback with frame-by-frame controls (Z/X keys) and mouse-wheel digital zoom.
+- 🏷 **Bout Annotation**: Detailed bout marking (scores, techniques, outcomes, and an interactive 16-zone SVG hit zone selector).
+- 💬 **Timestamped Comments**: Chat comments mapped to video timeline and linked automatically to bouts.
+- 📊 **Fighter Analytics**: Personal dashboard showing radar charts of outcomes, match frequency, chronologic performance, and SVG silhouette heatmaps for damage dealt and received (filtered dynamically by a searchable match history table).
+
+## Tech stack
+- **Backend**: Rust (Axum, Diesel ORM, SQLite)
+- **Frontend**: Svelte 5, TypeScript, Vite
+- **Video Decoding**: HTML5 + WebCodecs (HybridVideoDecoder via Mediabunny)
+- **Deployment**: Docker Compose (optimized for TrueNAS SCALE home servers)
+
+## Quick start
+```bash
+git clone https://github.com/geometrik32/errant-fox.git
+cd errant-fox
+cp backend/.env.example .env  # Configure SEAFILE_URL, JWT_SECRET, etc.
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.local.yml up -d --build
+# Open: http://localhost:8081
+```
+
+## Documentation Map
+- **Requirements Specification**: [docs/requirements.md](docs/requirements.md)
+- **System Architecture**: [docs/architecture.md](docs/architecture.md)
+- **Database Schema**: [docs/database.md](docs/database.md)
+- **REST & WebSocket API**: [docs/api.md](docs/api.md)
+- **Deployment Guide**: [docs/deploy.md](docs/deploy.md)
+- **Video Demo Scenario**: [docs/video_scenario.md](docs/video_scenario.md)
+
+## License
+MIT License. Free for personal club use, modification, and commercial application.
