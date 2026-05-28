@@ -28,17 +28,9 @@
 
 ## 📺 Демонстрация работы
 
-Для ознакомления с возможностями и интерфейсом платформы посмотрите видеоролик на YouTube:
+Для ознакомления с возможностями и интерфейсом платформы посмотрите видеоролик:
 
 🎬 **[Смотреть видеодемонстрацию работы Errant Fox на YouTube](https://youtu.be/WkvtfAgdPMU)**
-
-*(Вы можете кликнуть по ссылке выше или по картинке ниже для перехода к просмотру)*
-
-<p align="center">
-  <a href="https://youtu.be/WkvtfAgdPMU" target="_blank">
-    <img src="https://img.youtube.com/vi/WkvtfAgdPMU/maxresdefault.jpg" alt="Смотреть демо-видео на YouTube" width="100%" style="border-radius: 8px;" />
-  </a>
-</p>
 
 ---
 
