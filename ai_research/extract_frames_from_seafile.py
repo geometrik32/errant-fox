@@ -57,41 +57,44 @@ def get_download_url(file_path):
     return data
 
 def get_video_duration_ffmpeg(download_url):
-    """Получает длительность видео в секундах с помощью ffprobe."""
+    """Получает длительность видео в секундах с помощью ffprobe с обходом 403."""
     cmd = [
         "ffprobe", "-v", "error",
+        "-user_agent", "Mozilla/5.0",
         "-show_entries", "format=duration",
         "-of", "default=noprint_wrappers=1:nokey=1",
         download_url
     ]
     try:
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=15)
         if result.returncode == 0:
             return float(result.stdout.strip())
+        else:
+            print(f"  ffprobe failed with exit code {result.returncode}: {result.stderr}")
     except Exception as e:
-        print(f"  ffprobe error: {e}")
+        print(f"  ffprobe run error: {e}")
     return 0.0
 
 def extract_frame_ffmpeg(download_url, time_seconds, output_path):
-    """Надежно извлекает один кадр на указанной секунде с помощью ffmpeg."""
+    """Надежно извлекает один кадр с медленным поиском для обхода 403."""
     cmd = [
         "ffmpeg", "-y",
-        "-ss", f"{time_seconds:.3f}",  # Быстрый поиск (до -i)
+        "-user_agent", "Mozilla/5.0",
         "-i", download_url,
+        "-ss", f"{time_seconds:.3f}",  # Медленный поиск (после -i) исключает ошибку 403 Forbidden
         "-vframes", "1",
-        "-q:v", "2",  # Высокое качество JPG
+        "-q:v", "2",
         output_path
     ]
     try:
-        # Запускаем ffmpeg без вывода мусора в консоль
-        result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
+        result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
         return result.returncode == 0
     except Exception as e:
         print(f"  ffmpeg run error: {e}")
         return False
 
 def extract_balanced_frames(target_total_frames=500):
-    print("=== Errant Fox 2.0: Multi-Video Seafile Frame Extractor (FFmpeg mode) ===")
+    print("=== Errant Fox 2.0: Multi-Video Seafile Frame Extractor (FFmpeg mode v2) ===")
     
     # 1. Получаем список всех видео
     videos = get_all_videos()
@@ -110,7 +113,6 @@ def extract_balanced_frames(target_total_frames=500):
     actual_total_target = frames_per_video * num_videos
     print(f"We will extract {frames_per_video} frames from EACH video (Total target: {actual_total_target} frames).")
     
-    # Сохраняем датасет в подпапку ai_research/dataset_to_label
     ai_dir = os.path.dirname(os.path.abspath(__file__))
     output_dir = os.path.join(ai_dir, "dataset_to_label")
     os.makedirs(output_dir, exist_ok=True)
@@ -139,7 +141,7 @@ def extract_balanced_frames(target_total_frames=500):
             # Рассчитываем временные интервалы
             if end_time - start_time <= frames_per_video:
                 step = 1.0
-                frames_actual = int(max(1, end_frame - start_frame))
+                frames_actual = int(max(1, end_time - start_time))
             else:
                 step = (end_time - start_time) / frames_per_video
                 frames_actual = frames_per_video
@@ -153,7 +155,6 @@ def extract_balanced_frames(target_total_frames=500):
                 frame_name = f"{safe_video_name}_time_{target_time:.2f}.jpg"
                 output_path = os.path.join(output_dir, frame_name)
                 
-                # Используем ffmpeg для быстрого извлечения одного кадра
                 if extract_frame_ffmpeg(download_url, target_time, output_path):
                     success_count += 1
                 else:
