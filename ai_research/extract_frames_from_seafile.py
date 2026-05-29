@@ -2,7 +2,7 @@ import os
 import json
 import urllib.request
 import urllib.parse
-import cv2
+import subprocess
 
 # Конфигурация подключения к Seafile
 SEAFILE_URL = "https://seafile.aat-terra.ru"
@@ -21,7 +21,7 @@ def api_request(endpoint, params=None):
         return json.loads(response.read().decode())
 
 def get_all_videos():
-    """Рекурсивно ищет все файлы .mp4 во всех папках библиотеки."""
+    """Рекурсивно ищет все файлы .mp4/.MP4 во всех папках библиотеки."""
     print("Listing directories in Seafile root...")
     try:
         root_data = api_request("/api/v2.1/via-repo-token/dir/", {"path": "/"})
@@ -40,9 +40,11 @@ def get_all_videos():
             try:
                 dir_data = api_request("/api/v2.1/via-repo-token/dir/", {"path": f"/{dir_name}"})
                 for file_item in dir_data.get("dirent_list", []):
-                    if file_item.get("type") == "file" and file_item.get("name").lower().endswith(".mp4"):
-                        # Относительный путь: "2026.02.01/video1.mp4"
-                        video_paths.append(f"{dir_name}/{file_item.get('name')}")
+                    if file_item.get("type") == "file":
+                        name = file_item.get("name")
+                        if name.lower().endswith(".mp4"):
+                            # Относительный путь: "2026.02.01/video1.mp4"
+                            video_paths.append(f"{dir_name}/{name}")
             except Exception as e:
                 print(f"  Failed to scan folder '{dir_name}': {e}")
                 
@@ -50,13 +52,46 @@ def get_all_videos():
 
 def get_download_url(file_path):
     """Получает временную прямую ссылку на скачивание файла из Seafile."""
-    # Путь в API должен начинаться со слэша
     api_path = f"/{file_path}"
     data = api_request("/api/v2.1/via-repo-token/download-link/", {"path": api_path})
-    return data # API возвращает строку с URL
+    return data
+
+def get_video_duration_ffmpeg(download_url):
+    """Получает длительность видео в секундах с помощью ffprobe."""
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        download_url
+    ]
+    try:
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
+        if result.returncode == 0:
+            return float(result.stdout.strip())
+    except Exception as e:
+        print(f"  ffprobe error: {e}")
+    return 0.0
+
+def extract_frame_ffmpeg(download_url, time_seconds, output_path):
+    """Надежно извлекает один кадр на указанной секунде с помощью ffmpeg."""
+    cmd = [
+        "ffmpeg", "-y",
+        "-ss", f"{time_seconds:.3f}",  # Быстрый поиск (до -i)
+        "-i", download_url,
+        "-vframes", "1",
+        "-q:v", "2",  # Высокое качество JPG
+        output_path
+    ]
+    try:
+        # Запускаем ffmpeg без вывода мусора в консоль
+        result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
+        return result.returncode == 0
+    except Exception as e:
+        print(f"  ffmpeg run error: {e}")
+        return False
 
 def extract_balanced_frames(target_total_frames=500):
-    print("=== Errant Fox 2.0: Multi-Video Seafile Frame Extractor ===")
+    print("=== Errant Fox 2.0: Multi-Video Seafile Frame Extractor (FFmpeg mode) ===")
     
     # 1. Получаем список всех видео
     videos = get_all_videos()
@@ -75,8 +110,9 @@ def extract_balanced_frames(target_total_frames=500):
     actual_total_target = frames_per_video * num_videos
     print(f"We will extract {frames_per_video} frames from EACH video (Total target: {actual_total_target} frames).")
     
-    scratch_dir = os.path.dirname(os.path.abspath(__file__))
-    output_dir = os.path.join(scratch_dir, "dataset_to_label")
+    # Сохраняем датасет в подпапку ai_research/dataset_to_label
+    ai_dir = os.path.dirname(os.path.abspath(__file__))
+    output_dir = os.path.join(ai_dir, "dataset_to_label")
     os.makedirs(output_dir, exist_ok=True)
     
     success_count = 0
@@ -86,53 +122,44 @@ def extract_balanced_frames(target_total_frames=500):
         print(f"\n[{idx+1}/{num_videos}] Processing: {video_path}")
         
         try:
-            # Получаем ссылку на поток
             download_url = get_download_url(video_path)
             
-            # Открываем поток через OpenCV
-            cap = cv2.VideoCapture(download_url)
-            if not cap.isOpened():
-                print(f"  Error: OpenCV could not open stream for {video_path}")
+            # Получаем длительность видео
+            duration = get_video_duration_ffmpeg(download_url)
+            if duration <= 0:
+                print(f"  Warning: Could not read duration for {video_path}. Skipping.")
                 continue
                 
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            if total_frames <= 0:
-                print(f"  Warning: Invalid frame count ({total_frames}) for {video_path}. Skipping.")
-                cap.release()
-                continue
-                
+            print(f"  Duration: {duration:.2f} seconds.")
+            
             # Пропускаем первые 10% и последние 10% видео
-            start_frame = int(total_frames * 0.10)
-            end_frame = int(total_frames * 0.90)
+            start_time = duration * 0.10
+            end_time = duration * 0.90
             
-            # Вычисляем равномерные шаги для извлечения нужного количества кадров
-            if end_frame - start_frame <= frames_per_video:
-                step = 1
-                frames_per_video_actual = max(1, end_frame - start_frame)
+            # Рассчитываем временные интервалы
+            if end_time - start_time <= frames_per_video:
+                step = 1.0
+                frames_actual = int(max(1, end_frame - start_frame))
             else:
-                step = (end_frame - start_frame) // frames_per_video
-                frames_per_video_actual = frames_per_video
+                step = (end_time - start_time) / frames_per_video
+                frames_actual = frames_per_video
                 
-            print(f"  Extracting {frames_per_video_actual} frames (total frames: {total_frames}, step: {step})...")
+            print(f"  Extracting {frames_actual} frames (step: {step:.2f}s)...")
             
-            for i in range(frames_per_video_actual):
-                target_frame = start_frame + (i * step)
-                cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                    
-                # Имя файла включает дату и название видео, чтобы не было конфликтов
-                # Пример: "2026.02.01_fight1.mp4_frame_00520.jpg"
+            for i in range(frames_actual):
+                target_time = start_time + (i * step)
+                
                 safe_video_name = video_path.replace("/", "_")
-                frame_name = f"{safe_video_name}_frame_{target_frame:05d}.jpg"
+                frame_name = f"{safe_video_name}_time_{target_time:.2f}.jpg"
                 output_path = os.path.join(output_dir, frame_name)
                 
-                cv2.imwrite(output_path, frame)
-                success_count += 1
-                
-            cap.release()
-            print(f"  Successfully extracted frames from {video_path}")
+                # Используем ffmpeg для быстрого извлечения одного кадра
+                if extract_frame_ffmpeg(download_url, target_time, output_path):
+                    success_count += 1
+                else:
+                    print(f"    Failed to extract frame at {target_time:.2f}s")
+            
+            print(f"  Successfully processed {video_path}")
             
         except Exception as e:
             print(f"  Error during processing {video_path}: {e}")

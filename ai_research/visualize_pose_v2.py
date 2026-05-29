@@ -5,11 +5,10 @@ import cv2
 import torch
 from ultralytics import YOLO
 
-# Элементарное сглаживание для устранения дрожания суставов
 class KeypointSmoother:
     def __init__(self, alpha=0.35):
         self.alpha = alpha
-        self.history = {} # track_id -> (prev_xy, prev_conf)
+        self.history = {}
 
     def smooth(self, track_id, keypoints_xy, keypoints_conf):
         if track_id not in self.history:
@@ -24,7 +23,6 @@ class KeypointSmoother:
 
 def draw_skeleton(frame, track_id, box_xyxy, conf, smoothed_xy, smoothed_conf, colors, skeleton_connections):
     color = colors[track_id % len(colors)]
-    
     cv2.rectangle(frame, (box_xyxy[0], box_xyxy[1]), (box_xyxy[2], box_xyxy[3]), color, 2)
     cv2.putText(frame, f"ID:{track_id} (Conf: {conf:.2f})", 
                 (box_xyxy[0], box_xyxy[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
@@ -48,45 +46,45 @@ def visualize_video_v2(input_video_path, output_video_path, model_name="yolov8m-
         print(f"Error: Input video not found at '{input_video_path}'")
         return
 
-    # 1. Проверяем доступность CUDA
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Detection PyTorch Backend Device: {device.upper()}")
 
-    # 2. Загружаем и конвертируем в OpenVINO
-    scratch_dir = os.path.dirname(os.path.abspath(__file__))
-    pt_model_path = os.path.join(scratch_dir, model_name)
+    ai_dir = os.path.dirname(os.path.abspath(__file__))
+    pt_model_path = os.path.join(ai_dir, model_name)
     
     base_name = os.path.splitext(model_name)[0]
-    ov_model_dir = os.path.join(scratch_dir, f"{base_name}_openvino_model")
+    ov_model_dir = os.path.join(ai_dir, f"{base_name}_openvino_model")
     
-    # Сначала проверяем/загружаем .pt файл
     if not os.path.exists(pt_model_path):
         print(f"Downloading {model_name}...")
         model = YOLO(model_name)
-    else:
-        model = YOLO(pt_model_path)
+        # Переносим скачанный файл в папку ai_research
+        if os.path.exists(model_name):
+            os.rename(model_name, pt_model_path)
+    
+    model = YOLO(pt_model_path)
 
-    # Экспортируем в OpenVINO, если еще не сделано
     if device == "cpu" and not os.path.exists(ov_model_dir):
         print(f"Exporting {model_name} to OpenVINO for acceleration...")
         try:
             model.export(format="openvino", half=True)
             print("Export to OpenVINO completed successfully.")
+            # Переносим экспортированную папку, если она создалась в корне
+            default_ov_dir = os.path.join(os.getcwd(), f"{base_name}_openvino_model")
+            if os.path.exists(default_ov_dir) and default_ov_dir != ov_model_dir:
+                os.rename(default_ov_dir, ov_model_dir)
         except Exception as e:
             print("OpenVINO export failed, using PyTorch CPU fallback:", e)
 
-    # Выбор устройства OpenVINO (CPU или GPU)
     if device == "cpu" and os.path.exists(ov_model_dir):
         import openvino as ov
         core = ov.Core()
         available_devs = core.available_devices
         print("Available OpenVINO Devices:", available_devs)
         
-        # Если доступна видеокарта, форсируем 'intel:gpu' (это байпасит CUDA проверки PyTorch)
         if "GPU" in available_devs:
             print(">>> Force-enabling OpenVINO GPU ('intel:gpu') <<<")
             device = "intel:gpu"
-            # Важно: для GPU OpenVINO иногда требуется FP16 модель (она у нас уже FP16 после экспорта half=True)
         else:
             print("Using OpenVINO CPU mode...")
             device = "cpu"
@@ -97,7 +95,6 @@ def visualize_video_v2(input_video_path, output_video_path, model_name="yolov8m-
         print(f"Loading standard PyTorch model on device: {device.upper()}...")
         model = YOLO(pt_model_path)
 
-    # 3. Открываем видеофайл
     cap = cv2.VideoCapture(input_video_path)
     if not cap.isOpened():
         print(f"Error: Could not open video file: {input_video_path}")
@@ -113,16 +110,14 @@ def visualize_video_v2(input_video_path, output_video_path, model_name="yolov8m-
 
     print(f"Video resolution: {width}x{height} @ {fps:.2f} FPS. Total frames: {frame_count}")
 
-    # 4. Настройка пропуска кадров (Frame Skipping)
     skip_interval = 1
     if fps >= 90:
-        skip_interval = 4  # Анализируем 1 из 4 кадров (~25 FPS)
+        skip_interval = 4
         print("Detected High-FPS video (>= 90 FPS). Frame skipping enabled (process every 4th frame).")
     elif fps >= 50:
-        skip_interval = 2  # Анализируем 1 из 2 кадров (~25-30 FPS)
+        skip_interval = 2
         print("Detected Mid-FPS video (>= 50 FPS). Frame skipping enabled (process every 2nd frame).")
 
-    # 5. Запись видео
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
     
@@ -139,7 +134,6 @@ def visualize_video_v2(input_video_path, output_video_path, model_name="yolov8m-
         (13, 15), (12, 14), (14, 16)
     ]
 
-    # Исключаем стеллаж с экипировкой (правые 15% кадра)
     roi_max_x = int(width * 0.85)
     print(f"ROI Boundary: Detections with center X > {roi_max_x} will be ignored.")
 
@@ -154,7 +148,6 @@ def visualize_video_v2(input_video_path, output_video_path, model_name="yolov8m-
             if not ret:
                 break
 
-            # Запускаем ИИ только на каждом N-м кадре
             if processed % skip_interval == 0:
                 results = model.track(
                     frame, 
@@ -162,7 +155,7 @@ def visualize_video_v2(input_video_path, output_video_path, model_name="yolov8m-
                     conf=conf_threshold, 
                     iou=0.5, 
                     verbose=False, 
-                    device=device,  # Тут передается 'intel:gpu' или 'cpu'
+                    device=device,
                     tracker="bytetrack.yaml"
                 )
                 
@@ -179,12 +172,11 @@ def visualize_video_v2(input_video_path, output_video_path, model_name="yolov8m-
                         
                         box_center_x = (box_xyxy[0] + box_xyxy[2]) // 2
                         if box_center_x > roi_max_x:
-                            continue # Фильтр стеллажа
+                            continue
                             
                         kps_xy = keypoints.xy[i].cpu().numpy()
                         kps_conf = keypoints.conf[i].cpu().numpy()
                         
-                        # Сглаживаем
                         smoothed_xy, smoothed_conf = smoother.smooth(track_id, kps_xy, kps_conf)
                         
                         last_skeletons.append({
@@ -195,10 +187,8 @@ def visualize_video_v2(input_video_path, output_video_path, model_name="yolov8m-
                             "kps_conf": smoothed_conf
                         })
 
-            # Рисуем скелеты (из кэша) на текущем кадре
             annotated_frame = frame.copy()
             
-            # Отрисовка границы ристалища (ROI)
             cv2.line(annotated_frame, (roi_max_x, 0), (roi_max_x, height), (0, 0, 255), 2)
             cv2.putText(annotated_frame, "RING BOUNDARY (ROI)", (roi_max_x - 220, 25), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
@@ -235,9 +225,9 @@ def visualize_video_v2(input_video_path, output_video_path, model_name="yolov8m-
     print(f"Output saved to: {output_video_path}")
 
 if __name__ == "__main__":
-    scratch_dir = os.path.dirname(os.path.abspath(__file__))
-    input_path = os.path.join(scratch_dir, "input.mp4")
-    output_path = os.path.join(scratch_dir, "output.mp4")
+    ai_dir = os.path.dirname(os.path.abspath(__file__))
+    input_path = os.path.join(ai_dir, "input.mp4")
+    output_path = os.path.join(ai_dir, "output.mp4")
     model_name = "yolov8m-pose.pt"
     
     if len(sys.argv) > 1:
