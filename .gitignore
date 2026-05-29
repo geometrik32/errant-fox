@@ -43,3 +43,13 @@ venv/
 # YOLO & OpenVINO weights/models
 *.pt
 *_openvino_model/
+
+# Media formats
+*.mp4
+*.MP4
+*.jpg
+*.jpeg
+*.png
+dataset_to_label/
+hema_dataset/
+training_runs/
