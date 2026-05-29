@@ -1,0 +1,23 @@
+# Build outputs
+target/
+
+# Environments and Secrets
+.env
+.env.*
+!.env.example
+
+# Local SQLite databases
+*.db
+*.sqlite
+errant_fox.db
+errant_fox.sqlite
+
+# Log files
+*.log
+
+# Docker/IDE temporary directories
+.vscode/
+.idea/
+.git/
+.gitignore
+Dockerfile

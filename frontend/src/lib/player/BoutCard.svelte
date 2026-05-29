@@ -232,7 +232,8 @@
 
   // ── Portal action (escape backdrop-filter containing block) ─────────────────
   function portal(node: HTMLElement): { destroy: () => void } {
-    document.body.appendChild(node);
+    const target = document.fullscreenElement || document.body;
+    target.appendChild(node);
     return { destroy() { if (node.parentNode) node.parentNode.removeChild(node); } };
   }
 

@@ -11,9 +11,12 @@ Thumbs.db
 
 # Secrets and local data
 .env
+.env.*
 .codex/
 *.sqlite
 data/
+backend/avatars/
+backend/previews/
 
 # Frontend build
 frontend/dist/
@@ -25,3 +28,14 @@ frontend/dist/
 .claude
 .codex
 .vscode
+
+# my docs
+напоминалка.md
+
+# SQLite temp files
+*.sqlite-shm
+*.sqlite-wal
+
+# Python Virtual Environments
+venv/
+.venv/

@@ -124,22 +124,22 @@ flowchart LR
 
 ## 🚢 Руководство по развертыванию
 
-### Требования
-* Сервер TrueNAS SCALE (24.04+) с установленным Docker и SSH-доступом.
-* Работающий инстанс Seafile (потребуются URL-адрес и API токен администратора).
+Проект разворачивается с использованием готовых Docker-образов, опубликованных в GitHub Container Registry (GHCR). Компиляция исходного кода на сервере не требуется.
 
-### 1. Подготовка папок на сервере
-Подключитесь к TrueNAS по SSH и перейдите в папку ваших приложений на пуле:
+### Требования
+* Любой Linux-сервер или TrueNAS SCALE с установленным Docker (Docker Compose).
+* Работающий инстанс Seafile (потребуются URL-адрес и API-токен администратора).
+
+### 1. Подготовка файлов
+Для запуска приложения вам понадобятся только два файла: `docker-compose.yml` и `.env`. Создайте папку для проекта на сервере и скачайте конфигурационный файл:
 ```bash
-cd /mnt/your-pool/apps        # замените your-pool на имя вашего пула
-git clone https://github.com/geometrik32/errant-fox.git errant-fox
-cd errant-fox
+mkdir errant-fox && cd errant-fox
+curl -L https://raw.githubusercontent.com/geometrik32/errant-fox/main/docker-compose.yml -o docker-compose.yml
 ```
 
 ### 2. Настройка переменных окружения
-Создайте файл `.env` из примера:
+Создайте файл `.env`:
 ```bash
-cp backend/.env.example .env
 nano .env
 ```
 Заполните переменные окружения:
@@ -151,33 +151,34 @@ nano .env
 
 ### 3. Запуск контейнеров
 
-#### Для продакшн-окружения (с использованием Traefik для HTTPS):
+#### Ручное обновление (по умолчанию):
+Для запуска или обновления до последней версии выполните:
 ```bash
-docker compose -f infra/docker-compose.yml up -d --build
+docker compose pull && docker compose up -d
 ```
-*Для работы этой конфигурации в вашей системе должна быть настроена внешняя Docker-сеть `proxy`.*
+*(Для работы этой конфигурации в вашей системе должна быть настроена внешняя Docker-сеть `proxy` для Traefik).*
 
-#### Для локальной разработки / тестирования (без HTTPS, порты наружу):
-Отредактируйте `.env`, установив `FRONTEND_ORIGIN=http://localhost:8081`, и запустите:
+#### Автоматическое обновление (для себя):
+Вы можете включить автоматическое обновление контейнеров с помощью утилиты **Watchtower**. Для этого откройте `docker-compose.yml`, раскомментируйте сервис `watchtower` в конце файла и перезапустите проект:
 ```bash
-docker compose -f infra/docker-compose.yml -f infra/docker-compose.local.yml up -d --build
+docker compose up -d
 ```
-В этом режиме интерфейс будет доступен по адресу `http://<IP-сервера-TrueNAS>:8081`.
+Watchtower будет раз в сутки проверять наличие обновленных образов в GHCR и автоматически перезапускать проект.
 
 ### 4. Создание первого администратора
-Поскольку публичная регистрация в целях безопасности отключена, первого пользователя нужно завести в базу данных вручную.
+Поскольку публичная регистрация отключена, первого пользователя нужно добавить вручную.
 
 1. **Сгенерируйте bcrypt-хеш пароля** (cost factor 12) на любой машине с Python:
    ```bash
    python3 -c "import bcrypt; print(bcrypt.hashpw(b'ваш_секретный_пароль', bcrypt.gensalt(12)).decode())"
    ```
-2. **Войдите в контейнер бэкенда и откройте базу данных SQLite**:
+2. **Войдите в контейнер бэкенда и откройте SQLite**:
    ```bash
-   docker compose -f infra/docker-compose.yml exec backend sh
+   docker compose exec backend sh
    # Внутри контейнера:
    sqlite3 /data/db/errant_fox.db
    ```
-3. **Выполните SQL-запрос для добавления пользователя**:
+3. **Добавьте администратора**:
    ```sql
    INSERT INTO users (id, username, display_name, password_hash, is_admin)
    VALUES (
@@ -190,7 +191,36 @@ docker compose -f infra/docker-compose.yml -f infra/docker-compose.local.yml up 
    .quit
    ```
 
-Теперь вы можете авторизоваться под учетной записью `admin`. Новых пользователей (бойцов) администратор создает непосредственно через веб-интерфейс в модальном окне настроек.
+---
+
+## 🛠 Руководство для разработчиков
+
+Для разработки и тестирования изменений используйте следующий пайплайн:
+
+### 1. Локальный запуск (быстрая разработка с HMR)
+Вся разработка ведется на хост-машине без запуска Docker (это ускоряет компиляцию и позволяет использовать автоперезагрузку страниц).
+
+* **Бэкенд (Rust):**
+  Установите [cargo-watch](https://github.com/watchexec/cargo-watch) и запустите бэкенд в папке `backend/`:
+  ```bash
+  cargo watch -x run
+  ```
+  База данных SQLite создастся автоматически в локальном файле. Бэкенд запустится на порту `8080`.
+
+* **Фронтенд (Svelte 5):**
+  Перейдите в папку `frontend/`, установите зависимости и запустите dev-сервер:
+  ```bash
+  npm install
+  npm run dev
+  ```
+  Интерфейс откроется на порту `5173`. Сервер разработки Vite автоматически проксирует все запросы к API и WebSocket на локальный бэкенд (`localhost:8080`). Любые изменения в файлах фронтенда мгновенно отображаются в браузере.
+
+### 2. Тестирование полной сборки в Docker
+Если вам необходимо проверить, как приложение собирается и работает внутри Docker локально, выполните:
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
+Это соберет образы из локального кода и запустит фронтенд на порту `8081` (без Traefik).
 
 ---
 
@@ -198,7 +228,6 @@ docker compose -f infra/docker-compose.yml -f infra/docker-compose.local.yml up 
 
 * [backend/](file:///e:/00_Curent%20project/Errant%20Fox/backend) — Серверное приложение на Rust (Axum, Diesel ORM, SQLite).
 * [frontend/](file:///e:/00_Curent%20project/Errant%20Fox/frontend) — Клиентский интерфейс на Svelte 5 + TypeScript + Vite.
-* [infra/](file:///e:/00_Curent%20project/Errant%20Fox/infra) — Docker-конфигурации, Nginx proxy, настройки деплоя.
 * [docs/](file:///e:/00_Curent%20project/Errant%20Fox/docs) — Техническая документация:
   * 📋 [Техническое задание и требования](./docs/requirements.md)
   * 📐 [Архитектурная спецификация](./docs/architecture.md)

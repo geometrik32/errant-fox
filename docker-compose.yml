@@ -1,0 +1,53 @@
+services:
+  backend:
+    image: ghcr.io/geometrik32/errant-fox-backend:latest
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: /data/db/errant_fox.db
+      PREVIEWS_DIR: /data/previews
+      AVATARS_DIR: /data/avatars
+      SQLITE_JOURNAL_MODE: DELETE
+    networks:
+      - default
+      - proxy
+
+  frontend:
+    image: ghcr.io/geometrik32/errant-fox-frontend:latest
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    depends_on:
+      - backend
+    networks:
+      - default
+      - proxy
+    labels:
+      - traefik.docker.network=proxy
+      - traefik.enable=true
+      - traefik.http.routers.errantfox.entrypoints=websecure
+      - traefik.http.routers.errantfox.rule=Host(`errantfox.aat-terra.ru`)
+      - traefik.http.routers.errantfox.tls.certresolver=le-resolver
+      - traefik.http.services.errantfox.loadbalancer.server.port=80
+
+  # Опционально: Автоматическое обновление контейнеров при публикации новых версий на GitHub.
+  # Чтобы включить его у себя, просто раскомментируйте блок ниже и запустите: docker compose up -d
+  # watchtower:
+  #   image: containrrr/watchtower
+  #   restart: unless-stopped
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   environment:
+  #     - WATCHTOWER_CLEANUP=true
+  #     - WATCHTOWER_POLL_INTERVAL=86400 # Интервал проверки в секундах (86400 = 24 часа)
+  #     # Проверяет и перезапускает только сервисы этого docker-compose
+  #     - WATCHTOWER_SCOPE=errantfox
+  #   labels:
+  #     - "com.centurylinklabs.watchtower.scope=errantfox"
+
+networks:
+  proxy:
+    external: true

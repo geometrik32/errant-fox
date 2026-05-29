@@ -24,6 +24,10 @@
     onvolumechange?: (volume: number) => void;
     onlooptoggle?: () => void;
     fps?: number | null;
+    startTime?: number | null;
+    finishing?: boolean;
+    onstartclick?: () => void;
+    onfinishclick?: () => void;
   }
 
   let {
@@ -38,6 +42,8 @@
     speed = 1,
     volume = 1,
     fps = 25,
+    startTime = null,
+    finishing = false,
     onseek,
     onloop,
     onboutclick,
@@ -48,6 +54,8 @@
     onspeedchange,
     onvolumechange,
     onlooptoggle,
+    onstartclick,
+    onfinishclick,
   }: Props = $props();
 
   const SPEEDS = [0.15, 0.2, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5];
@@ -77,6 +85,15 @@
     const m = Math.floor(sec / 60);
     const s = Math.floor(sec % 60);
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  function fmtSec(sec: number): string {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = Math.floor(sec % 60);
+    return h > 0
+      ? `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+      : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   }
 
   /// Format current time with 1-based frame number: MM:SS:FFF
@@ -133,6 +150,13 @@
   }
 
   let pct = $derived(duration > 0 ? (currentTime / duration) * 100 : 0);
+
+  const isInsideBout = $derived(
+    bouts.some(b => {
+      const currentMs = currentTime * 1000;
+      return currentMs >= b.time_start_ms && currentMs <= b.time_end_ms;
+    })
+  );
 
   const commentPos = (c: Comment) =>
     duration > 0 ? (c.timestamp_ms / 1000 / duration) * 100 : 0;
@@ -222,8 +246,10 @@
         class="ctrl-btn loop-btn"
         class:on={looping}
         onclick={onlooptoggle}
+        disabled={!looping}
         aria-pressed={looping}
-        aria-label="Повтор"
+        aria-label="Повтор (D)"
+        title={looping ? "Отключить повтор (D)" : "Повтор (D)"}
       >LOOP</button>
 
       <select
@@ -237,6 +263,33 @@
         {/each}
       </select>
 
+    </div>
+
+    <div class="ctrl-group ctrl-group--center">
+      <button
+        class="ctrl-btn start-btn"
+        class:start-btn--active={startTime !== null}
+        onclick={onstartclick}
+        disabled={isInsideBout}
+        aria-label="Зафиксировать начало схода"
+        style="background: {startTime !== null ? '#0f4020' : '#1a6b35'}; border-color: {startTime !== null ? '#1a8040' : '#27ae60'}; color: {startTime !== null ? '#3bc266' : '#52d47a'};"
+      >
+        {#if startTime !== null}
+          {fmtSec(startTime)}
+        {:else}
+          START
+        {/if}
+      </button>
+
+      <button
+        class="ctrl-btn finish-btn"
+        disabled={startTime === null || finishing}
+        onclick={onfinishclick}
+        aria-label="Зафиксировать конец схода"
+        style="color: #e05252; border-color: #ae2727; background: rgba(174, 39, 39, 0.1);"
+      >
+        {finishing ? '…' : 'FINISH'}
+      </button>
     </div>
 
     <div class="ctrl-group ctrl-group--right">
@@ -431,6 +484,61 @@
     color: var(--accent-yellow);
     border-color: rgba(219, 132, 31, 0.5);
     background: rgba(219, 132, 31, 0.1);
+  }
+
+  .loop-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: transparent;
+    color: var(--text-secondary);
+    border-color: var(--border-color);
+    pointer-events: auto;
+  }
+
+  .ctrl-group--center {
+    gap: 8px;
+  }
+
+  .start-btn,
+  .finish-btn {
+    width: 90px;
+    padding: 0;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    border: 1px solid transparent;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .start-btn {
+    gap: 6px;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+
+  .start-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    background: rgba(26, 107, 53, 0.04) !important;
+    border-color: rgba(26, 107, 53, 0.2) !important;
+    color: rgba(82, 212, 122, 0.5) !important;
+  }
+
+
+
+  .finish-btn {
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+
+  .finish-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    background: rgba(174, 39, 39, 0.04) !important;
+    border-color: rgba(174, 39, 39, 0.2) !important;
+    color: rgba(224, 82, 82, 0.5) !important;
   }
 
   .speed-sel {

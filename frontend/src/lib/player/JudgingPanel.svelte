@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, untrack } from 'svelte';
+  import { onMount, onDestroy, tick, untrack } from 'svelte';
   import { fighters } from '../../stores';
   import type { VideoFull, Bout, VideoFighter } from '../api/types';
   import { resolveColor } from '../api/types';
@@ -13,9 +13,27 @@
     playing?: boolean;
     onboutschange?: (bouts: Bout[]) => void;
     onseekrequest?: (ms: number, endMs: number) => void;
+    onpauserequest?: () => void;
+    onmarkingchange?: (active: boolean) => void;
+    onmarkingfinish?: () => void;
+    onboutdelete?: () => void;
+    startTime?: number | null;
+    finishing?: boolean;
   }
 
-  let { video, currentTime, playing = false, onboutschange, onseekrequest }: Props = $props();
+  let {
+    video,
+    currentTime,
+    playing = false,
+    onboutschange,
+    onseekrequest,
+    onpauserequest,
+    onmarkingchange,
+    onmarkingfinish,
+    onboutdelete,
+    startTime = $bindable(null),
+    finishing = $bindable(false),
+  }: Props = $props();
 
   // ── Local bouts state ────────────────────────────────────────────────────
 
@@ -32,6 +50,16 @@
   let activeFighterB = $derived<VideoFighter | null>(
     $fighters.find(f => f.id === fighterBId) as VideoFighter | null ?? null
   );
+  let footerFighterA = $derived(activeFighterA ?? video.fighter_a);
+  let footerFighterB = $derived(activeFighterB ?? video.fighter_b);
+  let footerFighterAColor = $derived(
+    footerFighterA ? resolveColor(footerFighterA.id, footerFighterA.color) : '#6fa0e0'
+  );
+  let footerFighterBColor = $derived(
+    footerFighterB ? resolveColor(footerFighterB.id, footerFighterB.color) : '#e08080'
+  );
+  let footerFighterALabel = $derived(footerFighterA?.display_name ?? 'Боец A');
+  let footerFighterBLabel = $derived(footerFighterB?.display_name ?? 'Боец B');
 
   // ── Fighter save ─────────────────────────────────────────────────────────
 
@@ -48,21 +76,30 @@
 
   // ── START / FINISH ───────────────────────────────────────────────────────
 
-  let startTime = $state<number | null>(null);
-  let finishing = $state(false);
   let finishError = $state<string | null>(null);
 
-  export function triggerMark(): void {
-    if (startTime === null) {
+  export function handleStart() {
+    if (startTime !== null) {
+      startTime = null;
+      onmarkingchange?.(false);
+    } else {
       startTime = currentTime;
       finishError = null;
-    } else {
-      handleFinish();
+      onmarkingchange?.(true);
     }
   }
 
-  async function handleFinish() {
+  export function triggerMark(): void {
+    if (startTime === null) {
+      handleStart();
+    } else {
+      void handleFinish();
+    }
+  }
+
+  export async function handleFinish() {
     if (startTime === null) return;
+    onpauserequest?.();
     finishing = true;
     finishError = null;
     try {
@@ -71,13 +108,21 @@
         time_start_ms: Math.round(startTime * 1000),
         time_end_ms: Math.round(currentTime * 1000),
       });
-      bouts = [...bouts, created];
-      onboutschange?.(bouts);
+      const exists = bouts.some(b => b.id === created.id);
+      if (!exists) {
+        bouts = [...bouts, created];
+        onboutschange?.(bouts);
+      }
       startTime = null;
+      onmarkingchange?.(false);
+      onmarkingfinish?.();
       expandedBoutId = created.id;
-      requestAnimationFrame(() => {
-        if (boutsListEl) boutsListEl.scrollTop = boutsListEl.scrollHeight;
-      });
+      await tick();
+      requestAnimationFrame(() => scrollBoutToTop(created.id, 'smooth'));
+
+      setTimeout(() => {
+        onseekrequest?.(created.time_start_ms, created.time_end_ms);
+      }, 300);
     } catch (e) {
       finishError = e instanceof Error ? e.message : 'Ошибка создания схода';
     } finally {
@@ -90,19 +135,21 @@
   let expandedBoutId = $state<number | null>(null);
   let dirtyBoutIds = $state(new Set<number>());
 
-  function handleExpand(id: number) {
+  async function handleExpand(id: number) {
     if (expandedBoutId !== null && expandedBoutId !== id && dirtyBoutIds.has(expandedBoutId)) {
       if (!confirm('Есть несохранённые изменения. Свернуть текущую карточку?')) return;
     }
     expandedBoutId = id;
     const b = bouts.find(b => b.id === id);
     if (b) onseekrequest?.(b.time_start_ms, b.time_end_ms);
+    await tick();
+    requestAnimationFrame(() => scrollBoutToTop(id, 'smooth'));
   }
 
-  export function expandBout(id: number) {
+  export async function expandBout(id: number) {
     expandedBoutId = id;
-    const el = boutsListEl?.querySelector(`[data-bout-id="${id}"]`);
-    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    await tick();
+    requestAnimationFrame(() => scrollBoutToTop(id, 'smooth'));
   }
 
   function handleCollapse() {
@@ -124,9 +171,29 @@
     bouts = bouts.filter(b => b.id !== id);
     if (expandedBoutId === id) expandedBoutId = null;
     onboutschange?.(bouts);
+    onboutdelete?.();
   }
 
   let boutsListEl: HTMLDivElement | null = $state(null);
+
+  function scrollBoutToTop(id: number, behavior: ScrollBehavior = 'smooth') {
+    const list = boutsListEl;
+    if (!list) return;
+
+    const el = list.querySelector<HTMLElement>(`[data-bout-id="${id}"]`);
+    if (!el) return;
+
+    const listRect = list.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const elementTop = list.scrollTop + elRect.top - listRect.top;
+
+    const nextScrollTop = elementTop - 8;
+    const maxScrollTop = Math.max(0, list.scrollHeight - list.clientHeight);
+    list.scrollTo({
+      top: Math.min(maxScrollTop, Math.max(0, nextScrollTop)),
+      behavior,
+    });
+  }
 
   // ── Derived lists & scores ───────────────────────────────────────────────
 
@@ -158,6 +225,7 @@
           if (fields.deleted) {
             bouts = bouts.filter(b => b.id !== id);
             if (expandedBoutId === id) expandedBoutId = null;
+            onboutdelete?.();
           } else {
             const incoming = fields as unknown as Bout;
             const idx = bouts.findIndex(b => b.id === id);
@@ -204,7 +272,7 @@
 
   function handleDropdownClickOutside(e: MouseEvent) {
     const target = e.target as HTMLElement;
-    if (!target.closest('.fighter-slot')) openDropdown = null;
+    if (!target.closest('.footer-fighter-select')) openDropdown = null;
   }
 
   $effect(() => {
@@ -231,76 +299,6 @@
 </script>
 
 <div class="panel">
-
-  <!-- ── Fighter selects ──────────────────────────────────────────────────── -->
-  <div class="fighters-section">
-    <div class="fighters-row">
-      {#each (['a', 'b'] as const) as slot}
-        {@const activeF = slot === 'a' ? activeFighterA : activeFighterB}
-        {@const defaultColor = slot === 'a' ? '#6fa0e0' : '#e08080'}
-        {@const dotColor = activeF ? resolveColor(activeF.id, activeF.color) : defaultColor}
-        {@const label = slot === 'a' ? '— Боец A —' : '— Боец B —'}
-        <div class="fighter-slot">
-          <button
-            class="fighter-btn"
-            onclick={(e) => { e.stopPropagation(); toggleDropdown(slot); }}
-            aria-label={label}
-          >
-            <span class="fighter-dot" style:background={dotColor}></span>
-            <span class="fighter-btn-name">{activeF?.display_name ?? label}</span>
-            <svg class="fighter-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none">
-              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-          </button>
-          {#if openDropdown === slot}
-            <div class="fighter-dropdown">
-              <button class="fighter-opt" onclick={() => selectFighter(slot, '')}>
-                <span class="fighter-opt-dot" style:background="transparent; border: 1px solid #3a5470"></span>
-                <span>— Не выбран —</span>
-              </button>
-              {#each $fighters as f (f.id)}
-                <button
-                  class="fighter-opt"
-                  class:selected={slot === 'a' ? fighterAId === f.id : fighterBId === f.id}
-                  onclick={() => selectFighter(slot, f.id)}
-                >
-                  <span class="fighter-opt-dot" style:background={resolveColor(f.id, f.color)}></span>
-                  <span>{f.display_name}</span>
-                </button>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      {/each}
-    </div>
-  </div>
-
-  <!-- ── Controls ─────────────────────────────────────────────────────────── -->
-  <div class="controls">
-    <button
-      class="btn btn-primary btn-control"
-      class:btn-primary--active={startTime !== null}
-      onclick={() => { startTime = currentTime; finishError = null; }}
-      aria-label="Зафиксировать начало схода"
-      style="background: {startTime !== null ? '#0f4020' : '#1a6b35'}; border-color: {startTime !== null ? '#1a8040' : '#27ae60'}; color: {startTime !== null ? '#3bc266' : '#52d47a'};"
-    >
-      START
-      {#if startTime !== null}
-        <span class="start-hint">@{fmtSec(startTime)}</span>
-      {/if}
-    </button>
-
-    <button
-      class="btn btn-outline btn-control"
-      disabled={startTime === null || finishing}
-      onclick={handleFinish}
-      aria-label="Зафиксировать конец схода"
-      style="color: #e05252; border-color: #ae2727; background: rgba(174, 39, 39, 0.1);"
-    >
-      {finishing ? '…' : 'FINISH'}
-    </button>
-  </div>
-
   {#if finishError}
     <div class="finish-error">{finishError}</div>
   {/if}
@@ -329,8 +327,106 @@
 
   <!-- ── Footer ───────────────────────────────────────────────────────────── -->
   <div class="footer">
-    <span class="footer-label">TOTAL SCORE</span>
-    <span class="footer-score">{totalScoreA} : {totalScoreB}</span>
+    <div class="footer-fighter-select">
+      <button
+        class="footer-avatar"
+        style:background={footerFighterAColor}
+        style:border-color={footerFighterAColor}
+        title={footerFighterALabel}
+        aria-label={`Выбрать ${footerFighterALabel}`}
+        aria-expanded={openDropdown === 'a'}
+        onclick={(e) => { e.stopPropagation(); toggleDropdown('a'); }}
+      >
+        <svg class="footer-avatar-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5" />
+          <path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+        </svg>
+        {#if footerFighterA?.avatar_url}
+          <img src={footerFighterA.avatar_url} alt="" onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+        {/if}
+      </button>
+
+      {#if openDropdown === 'a'}
+        <div class="fighter-dropdown">
+          <button class="fighter-opt" onclick={() => selectFighter('a', '')}>
+            <span class="fighter-opt-avatar unselected"></span>
+            <span class="fighter-opt-name">Не выбран</span>
+          </button>
+          {#each $fighters as f (f.id)}
+            {@const optColor = resolveColor(f.id, f.color)}
+            <button
+              class="fighter-opt"
+              class:selected={fighterAId === f.id}
+              onclick={() => selectFighter('a', f.id)}
+            >
+              <span class="fighter-opt-avatar" style:background={optColor} style:border-color={optColor}>
+                <svg class="fighter-opt-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5" />
+                  <path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                </svg>
+                {#if f.avatar_url}
+                  <img src={f.avatar_url} alt="" onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                {/if}
+              </span>
+              <span class="fighter-opt-name">{f.display_name}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
+
+    <div class="footer-score-wrap" aria-label="Total score">
+      <span class="footer-label">TOTAL SCORE</span>
+      <span class="footer-score">{totalScoreA} : {totalScoreB}</span>
+    </div>
+
+    <div class="footer-fighter-select align-right">
+      <button
+        class="footer-avatar"
+        style:background={footerFighterBColor}
+        style:border-color={footerFighterBColor}
+        title={footerFighterBLabel}
+        aria-label={`Выбрать ${footerFighterBLabel}`}
+        aria-expanded={openDropdown === 'b'}
+        onclick={(e) => { e.stopPropagation(); toggleDropdown('b'); }}
+      >
+        <svg class="footer-avatar-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5" />
+          <path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+        </svg>
+        {#if footerFighterB?.avatar_url}
+          <img src={footerFighterB.avatar_url} alt="" onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+        {/if}
+      </button>
+
+      {#if openDropdown === 'b'}
+        <div class="fighter-dropdown align-right">
+          <button class="fighter-opt" onclick={() => selectFighter('b', '')}>
+            <span class="fighter-opt-avatar unselected"></span>
+            <span class="fighter-opt-name">Не выбран</span>
+          </button>
+          {#each $fighters as f (f.id)}
+            {@const optColor = resolveColor(f.id, f.color)}
+            <button
+              class="fighter-opt"
+              class:selected={fighterBId === f.id}
+              onclick={() => selectFighter('b', f.id)}
+            >
+              <span class="fighter-opt-avatar" style:background={optColor} style:border-color={optColor}>
+                <svg class="fighter-opt-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5" />
+                  <path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                </svg>
+                {#if f.avatar_url}
+                  <img src={f.avatar_url} alt="" onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                {/if}
+              </span>
+              <span class="fighter-opt-name">{f.display_name}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
   </div>
 
 </div>
@@ -342,124 +438,6 @@
     height: 100%;
     background: transparent;
     overflow: hidden;
-  }
-
-  /* ── Fighter selects ────────────────────────────────────────────────────── */
-  .fighters-section {
-    padding: 12px;
-    border-bottom: 1px solid var(--border-color);
-  }
-
-  .fighters-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-  }
-
-  .fighter-slot {
-    position: relative;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .fighter-dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .fighter-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    background: var(--surface-hover);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
-    font-size: 0.85rem;
-    padding: 6px 10px;
-    cursor: pointer;
-    transition: var(--transition);
-    text-align: left;
-  }
-
-  .fighter-btn:hover { border-color: var(--text-secondary); color: #fff; }
-
-  .fighter-btn-name {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .fighter-chevron {
-    flex-shrink: 0;
-    color: #3a5470;
-  }
-
-  .fighter-dropdown {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
-    right: 0;
-    background: var(--surface-solid);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    z-index: 50;
-    overflow: hidden;
-    box-shadow: var(--shadow-md);
-  }
-
-  .fighter-opt {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    padding: 8px 10px;
-    background: none;
-    border: none;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    cursor: pointer;
-    text-align: left;
-    transition: var(--transition);
-  }
-
-  .fighter-opt:hover { background: var(--surface-hover); color: var(--text-primary); }
-  .fighter-opt.selected { background: rgba(219, 132, 31, 0.12); color: var(--accent-yellow); }
-
-  .fighter-opt-dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  /* ── Controls ───────────────────────────────────────────────────────────── */
-  .controls {
-    display: flex;
-    gap: 8px;
-    padding: 12px;
-    border-bottom: 1px solid var(--border-color);
-  }
-
-  .btn-control {
-    flex: 1;
-    height: 24px;
-    font-size: 0.75rem;
-    font-weight: 700;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .start-hint {
-    font-size: 0.7rem;
-    font-weight: 400;
-    color: inherit;
-    letter-spacing: 0;
   }
 
   .finish-error {
@@ -491,13 +469,142 @@
 
   /* ── Footer ─────────────────────────────────────────────────────────────── */
   .footer {
-    display: flex;
+    display: grid;
+    grid-template-columns: 38px 1fr 38px;
     align-items: center;
-    justify-content: space-between;
-    padding: 12px 16px;
+    gap: 12px;
+    padding: 10px 16px;
     border-top: 1px solid var(--border-color);
     background: transparent;
     flex-shrink: 0;
+  }
+
+  .footer-fighter-select {
+    position: relative;
+    width: 38px;
+    height: 38px;
+  }
+
+  .footer-fighter-select.align-right {
+    justify-self: end;
+  }
+
+  .footer-avatar {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    overflow: hidden;
+    padding: 0;
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+    transition: transform 0.15s ease, filter 0.15s ease;
+  }
+
+  .footer-avatar:hover { filter: brightness(1.12); transform: translateY(-1px); }
+
+  .footer-avatar-icon {
+    position: absolute;
+    opacity: 0.7;
+    pointer-events: none;
+  }
+
+  .footer-avatar img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .fighter-dropdown {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    width: 220px;
+    max-height: 280px;
+    overflow-y: auto;
+    padding: 4px;
+    background: var(--surface-solid);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    z-index: 50;
+    box-shadow: var(--shadow-md);
+  }
+
+  .fighter-dropdown.align-right {
+    left: auto;
+    right: 0;
+  }
+
+  .fighter-opt {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+    padding: 7px 8px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-size: 0.84rem;
+    cursor: pointer;
+    text-align: left;
+    transition: var(--transition);
+  }
+
+  .fighter-opt:hover { background: var(--surface-hover); color: var(--text-primary); }
+  .fighter-opt.selected { background: rgba(219, 132, 31, 0.12); color: var(--accent-yellow); }
+
+  .fighter-opt-avatar {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    color: rgba(255, 255, 255, 0.68);
+  }
+
+  .fighter-opt-avatar.unselected {
+    background: transparent;
+    border-color: #3a5470;
+  }
+
+  .fighter-opt-icon {
+    position: absolute;
+    opacity: 0.7;
+    pointer-events: none;
+  }
+
+  .fighter-opt-avatar img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .fighter-opt-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .footer-score-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
   }
 
   .footer-label {
@@ -513,5 +620,6 @@
     font-weight: 700;
     color: var(--accent-yellow);
     font-variant-numeric: tabular-nums;
+    line-height: 1.2;
   }
 </style>

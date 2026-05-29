@@ -5,12 +5,12 @@ RUN apk add --no-cache musl-dev
 
 WORKDIR /app
 
-COPY backend/Cargo.toml backend/Cargo.lock ./
+COPY Cargo.toml Cargo.lock ./
 # Cache dependencies layer
 RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release && rm -rf src
 
-COPY backend/src ./src
-COPY backend/migrations ./migrations
+COPY src ./src
+COPY migrations ./migrations
 RUN touch src/main.rs && cargo build --release
 
 # Stage 2: Runtime
@@ -24,4 +24,4 @@ COPY --from=builder /app/target/release/errant_fox ./errant_fox
 
 EXPOSE 8080
 
-CMD mkdir -p /data/db /data/previews /data/avatars && ./errant_fox
+CMD ["sh", "-c", "mkdir -p /data/db /data/previews /data/avatars && ./errant_fox"]
