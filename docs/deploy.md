@@ -68,18 +68,23 @@ openssl rand -hex 32
 
 ## 4. Собрать и запустить
 
+Сборка из исходников на сервере больше не требуется. Приложение скачивает предсобранные образы из GitHub Container Registry (GHCR).
+
 ### Продакшн (с Traefik):
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d --build
+docker compose pull
+docker compose up -d
 ```
 
-Первый запуск занимает 5–10 минут (сборка Rust и Node).
+Запуск занимает всего пару секунд, так как скачиваются уже скомпилированные легкие образы.
 
-### Локальная разработка (без Traefik, порты наружу):
+### Локальное тестирование контейнеров (из исходников):
+
+Если вам нужно собрать образы локально на машине разработчика:
 
 ```bash
-docker compose -f infra/docker-compose.yml -f infra/docker-compose.local.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
 
 При локальном запуске задайте `FRONTEND_ORIGIN=http://localhost:8081` в `.env`.
@@ -87,9 +92,9 @@ docker compose -f infra/docker-compose.yml -f infra/docker-compose.local.yml up 
 ### Проверить статус:
 
 ```bash
-docker compose -f infra/docker-compose.yml ps
-docker compose -f infra/docker-compose.yml logs backend
-docker compose -f infra/docker-compose.yml logs frontend
+docker compose ps
+docker compose logs backend
+docker compose logs frontend
 ```
 
 База данных создаётся и мигрирует **автоматически** при первом старте бэкенда.
@@ -113,7 +118,7 @@ python3 -c "import bcrypt; print(bcrypt.hashpw(b'your_password', bcrypt.gensalt(
 ### Шаг 2 — Вставить пользователя в базу
 
 ```bash
-docker compose -f infra/docker-compose.yml exec backend sh
+docker compose exec backend sh
 # Внутри контейнера:
 sqlite3 /data/db/errant_fox.db
 ```
@@ -138,9 +143,15 @@ VALUES (
 
 ## 6. Обновление
 
+Поскольку теперь образы собираются автоматически на GitHub:
+
 ```bash
-git pull
-docker compose -f infra/docker-compose.yml up -d --build
+# Обновить файл docker-compose.yml (если он менялся)
+curl -L https://raw.githubusercontent.com/geometrik32/errant-fox/main/docker-compose.yml -o docker-compose.yml
+
+# Скачать новые версии контейнеров и перезапустить
+docker compose pull
+docker compose up -d
 ```
 
 Миграции применяются автоматически при каждом старте.
@@ -165,21 +176,26 @@ docker compose -f infra/docker-compose.yml up -d --build
 ## Архитектура Docker
 
 ```
-infra/
-├── docker-compose.yml        ← Продакшн: backend + frontend + Traefik labels
-├── docker-compose.local.yml  ← Локальное переопределение: порты наружу, без Traefik
-├── Dockerfile.backend        ← Multi-stage: rust:1.80-alpine → alpine:3.20
-├── Dockerfile.frontend       ← Multi-stage: node:20-alpine → nginx:alpine
-└── nginx.conf                ← Проксирование /api и /ws → backend:8080
+Errant Fox/
+├── docker-compose.yml        ← Продакшн: backend + frontend (образы GHCR) + Traefik
+├── docker-compose.dev.yml    ← Локальный Dev: сборка из исходников, порты наружу
+├── backend/
+│   ├── Dockerfile            ← Сборка бэкенда (rust:alpine)
+│   └── .dockerignore         ← Игнорируемые файлы бэкенда
+└── frontend/
+    ├── Dockerfile            ← Сборка фронтенда (node:alpine -> nginx:alpine)
+    ├── nginx.conf            ← Проксирование /api и /ws внутри контейнера
+    └── .dockerignore         ← Игнорируемые файлы фронтенда
 ```
 
 - **backend**: порт 8080 (внутренний), volume `./data:/data`
 - **frontend**: порт 80 (внутренний), nginx раздаёт статику + проксирует `/api` и `/ws`
 - **Traefik**: HTTPS через Let's Encrypt, домен `errantfox.aat-terra.ru`
 
-При локальной разработке (`docker-compose.local.yml`):
+При локальной разработке в Docker (`docker-compose.dev.yml`):
 - Убирается зависимость от сети `proxy` (Traefik)
 - Порт фронтенда пробрасывается наружу: `8081:80`
+- Образы пересобираются локально из папок `backend/` и `frontend/`
 - `SEAFILE_URL` и `FRONTEND_ORIGIN` переопределяются для локального окружения
 
 ---

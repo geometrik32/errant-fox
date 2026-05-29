@@ -56,7 +56,9 @@ Errant Fox/
 │   │   ├── 0004_technique_description/
 │   │   └── 0005_video_fps/
 │   ├── Cargo.toml
-│   └── .env.example
+│   ├── .env.example
+│   ├── Dockerfile              ← Dockerfile для сборки бэкенда
+│   └── .dockerignore           ← Список игнорирования бэкенда
 ├── frontend/                   ← Svelte 5 + Vite
 │   ├── src/
 │   │   ├── main.ts
@@ -105,14 +107,14 @@ Errant Fox/
 │   │   │       └── SearchPanel.svelte
 │   │   └── routes/             ← Страницы (Auth, Gallery, Stats, Player)
 │   ├── package.json
-│   └── vite.config.ts
-├── infra/                      ← Docker-конфигурация
-│   ├── docker-compose.yml
-│   ├── docker-compose.local.yml
-│   ├── Dockerfile.backend
-│   └── Dockerfile.frontend
+│   ├── vite.config.ts
+│   ├── Dockerfile              ← Dockerfile для сборки фронтенда
+│   ├── nginx.conf              ← Конфигурация Nginx для фронтенда
+│   └── .dockerignore           ← Список игнорирования фронтенда
+├── docker-compose.yml          ← Production Docker Compose (GHCR образы)
+├── docker-compose.dev.yml      ← Dev Docker Compose (локальная сборка)
 ├── docs/                       ← Документация
-└── deploy.md                   ← Инструкция по деплою
+└── README.md                   ← Главное описание проекта
 ```
 
 ---

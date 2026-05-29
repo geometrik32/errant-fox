@@ -1,0 +1,31 @@
+# Локальная сборка и запуск контейнеров из исходного кода.
+# Используется для тестирования Docker-окружения на компьютере разработчика.
+# Запуск: docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# Отключает зависимость от внешней сети Traefik и собирает контейнеры локально.
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      SEAFILE_URL: https://seafile.aat-terra.ru
+      FRONTEND_ORIGIN: http://localhost:8081
+    networks:
+      - default
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8081:80"
+    labels: []
+    networks:
+      - default
+
+networks:
+  proxy:
+    external: false
+    name: errantfox_proxy_local

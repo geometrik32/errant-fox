@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import { extractFpsFromUrl } from './moov';
 
   interface Props {
@@ -7,11 +7,17 @@
     fps?: number | null;
     speed?: number;
     volume?: number;
+    judgingOpen?: boolean;
+    chatOpen?: boolean;
+    markingActive?: boolean;
+    markingFinishAnimationKey?: number;
     ontimeupdate?: (t: number) => void;
     ondurationchange?: (d: number) => void;
     onplayingchange?: (p: boolean) => void;
     onloopingchange?: (l: boolean) => void;
     ondetectedfps?: (fps: number) => void;
+    ontogglejudging?: () => void;
+    ontogglechat?: () => void;
   }
 
   let {
@@ -19,11 +25,17 @@
     fps = null,
     speed = 1,
     volume = 1,
+    judgingOpen = true,
+    chatOpen = true,
+    markingActive = false,
+    markingFinishAnimationKey = 0,
     ontimeupdate,
     ondurationchange,
     onplayingchange,
     onloopingchange,
     ondetectedfps,
+    ontogglejudging,
+    ontogglechat,
   }: Props = $props();
 
   let videoEl: HTMLVideoElement;
@@ -36,8 +48,11 @@
     if (fps != null && fps > 0) effectiveFps = Math.round(fps);
   });
 
-  let loopRange: { start: number; end: number } | null = null;
-  let looping = false;
+  let loopRange = $state<{ start: number; end: number } | null>(null);
+  let looping = $state(false);
+  let finishOutlineActive = $state(false);
+  let finishOutlineTimer: number | null = null;
+  let lastFinishAnimationKey = untrack(() => markingFinishAnimationKey);
   let zoom = $state(1);
   let panX = $state(0);
   let panY = $state(0);
@@ -56,6 +71,40 @@
 
   $effect(() => { if (videoEl) videoEl.playbackRate = speed; });
   $effect(() => { if (videoEl) videoEl.volume = volume; });
+
+  let outlineMode = $derived<'marking' | 'finish' | 'loop' | null>(
+    markingActive
+      ? 'marking'
+      : finishOutlineActive
+        ? 'finish'
+        : looping
+          ? 'loop'
+          : null
+  );
+
+  function clearFinishOutlineTimer(): void {
+    if (finishOutlineTimer === null) return;
+    window.clearTimeout(finishOutlineTimer);
+    finishOutlineTimer = null;
+  }
+
+  $effect(() => {
+    const key = markingFinishAnimationKey;
+    if (key === lastFinishAnimationKey) return;
+    lastFinishAnimationKey = key;
+    if (key <= 0) return;
+
+    clearFinishOutlineTimer();
+    finishOutlineActive = true;
+    finishOutlineTimer = window.setTimeout(() => {
+      finishOutlineActive = false;
+      finishOutlineTimer = null;
+    }, 720);
+  });
+
+  onDestroy(() => {
+    clearFinishOutlineTimer();
+  });
 
   // ── Moov-based FPS detection (fallback when API provides none) ──────────
 
@@ -89,6 +138,13 @@
 
   export function seekTo(ms: number): void {
     stepFrameTarget = null;
+    if (looping && loopRange) {
+      if (ms < loopRange.start || ms > loopRange.end) {
+        looping = false;
+        loopRange = null;
+        onloopingchange?.(false);
+      }
+    }
     if (videoEl) videoEl.currentTime = ms / 1000;
   }
 
@@ -156,20 +212,24 @@
   export function setVolume(v: number): void { if (videoEl) videoEl.volume = v; }
 
   export function toggleLoop(): void {
-    looping = !looping;
-    if (!looping) loopRange = null;
-    onloopingchange?.(looping);
+    if (looping) {
+      looping = false;
+      loopRange = null;
+      onloopingchange?.(false);
+    }
   }
 
   // ── Event handlers ───────────────────────────────────────────────────────
 
   function handleTimeUpdate() {
     if (!videoEl) return;
-    if (stepFrameTarget === null) ontimeupdate?.(videoEl.currentTime);
     if (looping && loopRange && videoEl.currentTime * 1000 >= loopRange.end) {
       videoEl.currentTime = loopRange.start / 1000;
       stepFrameTarget = null;
+      ontimeupdate?.(videoEl.currentTime);
+      return;
     }
+    if (stepFrameTarget === null) ontimeupdate?.(videoEl.currentTime);
   }
 
   function handleDurationChange() {
@@ -256,6 +316,7 @@
     {src}
     ontimeupdate={handleTimeUpdate}
     ondurationchange={handleDurationChange}
+    onloadedmetadata={handleDurationChange}
     onplay={handlePlay}
     onpause={handlePause}
     onclick={handleClick}
@@ -269,6 +330,36 @@
     playsinline
   ></video>
 
+  {#if outlineMode}
+    <div
+      class="video-outline"
+      class:video-outline--loop={outlineMode === 'loop'}
+      class:video-outline--marking={outlineMode === 'marking'}
+      class:video-outline--finish={outlineMode === 'finish'}
+      aria-hidden="true"
+    ></div>
+  {/if}
+
+  <button
+    class="panel-dot panel-dot-left"
+    class:active={judgingOpen}
+    type="button"
+    aria-label={judgingOpen ? 'Скрыть панель действий' : 'Показать панель действий'}
+    aria-pressed={judgingOpen}
+    title={judgingOpen ? 'Скрыть панель действий' : 'Показать панель действий'}
+    onclick={(e) => { e.stopPropagation(); ontogglejudging?.(); }}
+  ></button>
+
+  <button
+    class="panel-dot panel-dot-right"
+    class:active={chatOpen}
+    type="button"
+    aria-label={chatOpen ? 'Скрыть чат' : 'Показать чат'}
+    aria-pressed={chatOpen}
+    title={chatOpen ? 'Скрыть чат' : 'Показать чат'}
+    onclick={(e) => { e.stopPropagation(); ontogglechat?.(); }}
+  ></button>
+
   {#if zoom > 1.05}
     <button class="zoom-badge" onclick={resetZoom}>{zoom.toFixed(1)}×</button>
   {/if}
@@ -280,6 +371,7 @@
     width: 100%;
     height: 100%;
     background: #000;
+    border-radius: inherit;
     overflow: hidden;
     display: flex;
     align-items: center;
@@ -294,9 +386,81 @@
     will-change: transform;
   }
 
-  .zoom-badge {
+  .video-outline {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border: 1px solid currentColor;
+    border-radius: inherit;
+    z-index: 4;
+  }
+
+  .video-outline--loop {
+    color: var(--accent-yellow);
+    box-shadow:
+      0 0 6px rgba(245, 158, 11, 0.45),
+      inset 0 0 5px rgba(245, 158, 11, 0.18);
+  }
+
+  .video-outline--marking {
+    color: var(--accent-green);
+    box-shadow:
+      0 0 6px rgba(16, 185, 129, 0.45),
+      inset 0 0 5px rgba(16, 185, 129, 0.18);
+  }
+
+  .video-outline--finish {
+    color: var(--accent-red);
+    box-shadow:
+      0 0 8px rgba(224, 82, 82, 0.5),
+      inset 0 0 5px rgba(224, 82, 82, 0.18);
+    animation: finish-outline-fade 0.72s ease-out forwards;
+  }
+
+  @keyframes finish-outline-fade {
+    to {
+      opacity: 0;
+    }
+  }
+
+  .panel-dot {
     position: absolute;
     top: 10px;
+    width: 10px;
+    height: 10px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: #6b7280;
+    cursor: pointer;
+    z-index: 6;
+    transition: background-color 0.18s ease, opacity 0.18s ease;
+  }
+
+  .panel-dot:hover {
+    opacity: 0.86;
+  }
+
+  .panel-dot:focus-visible {
+    outline: 2px solid var(--text-primary);
+    outline-offset: 2px;
+  }
+
+  .panel-dot.active {
+    background: var(--accent-yellow);
+  }
+
+  .panel-dot-left {
+    left: 10px;
+  }
+
+  .panel-dot-right {
+    right: 10px;
+  }
+
+  .zoom-badge {
+    position: absolute;
+    top: 34px;
     right: 10px;
     background: rgba(0, 0, 0, 0.6);
     color: var(--accent-yellow);
@@ -308,6 +472,7 @@
     cursor: pointer;
     font-variant-numeric: tabular-nums;
     transition: var(--transition);
+    z-index: 6;
   }
 
   .zoom-badge:hover {

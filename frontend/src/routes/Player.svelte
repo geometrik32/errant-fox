@@ -26,6 +26,10 @@
   let volume = $state(1);
   let fps = $state<number | null>(null);
 
+  // Judging state
+  let startTime = $state<number | null>(null);
+  let finishing = $state(false);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let player: any = $state(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -48,6 +52,10 @@
   // Panel visibility
   let showJudging = $state(true);
   let showChat = $state(true);
+
+  // Marking state for video outline feedback
+  let markingActive = $state(false);
+  let markingFinishAnimationKey = $state(0);
 
   // Comment highlight driven by timeline marker click
   let highlightedCommentId = $state<number | null>(null);
@@ -103,6 +111,9 @@
       e.preventDefault();
       showJudging = !showJudging;
       showChat = !showChat;
+    } else if (e.code === 'KeyD') {
+      e.preventDefault();
+      player?.toggleLoop();
     }
   }
 </script>
@@ -118,47 +129,26 @@
 
     <div class="cols">
 
-      <!-- Toggle pills -->
-      <div class="panel-toggles">
-        <button
-          class="panel-toggle"
-          class:active={showJudging}
-          onclick={() => { showJudging = !showJudging; }}
-          title="Панель судейства"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-            <rect x="3" y="3" width="7" height="18" rx="1"/>
-            <rect x="14" y="3" width="7" height="8" rx="1"/>
-            <rect x="14" y="15" width="7" height="6" rx="1"/>
-          </svg>
-          Судейство
-        </button>
-        <button
-          class="panel-toggle"
-          class:active={showChat}
-          onclick={() => { showChat = !showChat; }}
-          title="Чат"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-          </svg>
-          Чат
-        </button>
-      </div>
-
       <!-- Left: Judging panel -->
-      {#if showJudging}
-        <div class="col col-left">
-          <JudgingPanel
-            bind:this={judgingPanel}
-            {video}
-            {currentTime}
-            {playing}
-            onboutschange={(b) => { liveBouts = b; }}
-            onseekrequest={(ms, endMs) => { player?.setLoop(ms, endMs, playing); }}
-          />
-        </div>
-      {/if}
+      <div class="col col-left" class:hidden={!showJudging}>
+        <JudgingPanel
+          bind:this={judgingPanel}
+          {video}
+          {currentTime}
+          {playing}
+          bind:startTime={startTime}
+          bind:finishing={finishing}
+          onboutschange={(b) => { liveBouts = b; }}
+          onseekrequest={(ms, endMs) => { player?.setLoop(ms, endMs, playing); }}
+          onpauserequest={() => { player?.pause(); }}
+          onmarkingchange={(active) => { markingActive = active; }}
+          onmarkingfinish={() => {
+            markingActive = false;
+            markingFinishAnimationKey += 1;
+          }}
+          onboutdelete={() => { player?.toggleLoop(); }}
+        />
+      </div>
 
       <!-- Center: Video player -->
       <div class="col col-center">
@@ -168,11 +158,17 @@
           {speed}
           {volume}
           fps={video.fps ?? null}
+          judgingOpen={showJudging}
+          chatOpen={showChat}
+          {markingActive}
+          {markingFinishAnimationKey}
           ontimeupdate={(t) => { currentTime = t; }}
           ondurationchange={(d) => { duration = d; }}
           onplayingchange={(p) => { playing = p; }}
           onloopingchange={(l) => { looping = l; }}
           ondetectedfps={(f) => { if (fps == null) fps = f; }}
+          ontogglejudging={() => { showJudging = !showJudging; }}
+          ontogglechat={() => { showChat = !showChat; }}
         />
       </div>
 
@@ -206,6 +202,8 @@
         {speed}
         {volume}
         {fps}
+        {startTime}
+        {finishing}
         onseek={(ms) => player?.seekTo(ms)}
         onloop={({ start, end }) => { player?.seekTo(start); player?.setLoop(start, end); }}
         onboutclick={(id) => { judgingPanel?.expandBout(id); }}
@@ -216,6 +214,8 @@
         onspeedchange={(s) => { speed = s; player?.setSpeed(s); }}
         onvolumechange={(v) => { volume = v; player?.setVolume(v); }}
         onlooptoggle={() => player?.toggleLoop()}
+        onstartclick={() => judgingPanel?.handleStart()}
+        onfinishclick={() => judgingPanel?.handleFinish()}
       />
     </div>
 
@@ -242,45 +242,6 @@
     gap: 16px;
   }
 
-  /* Toggle pills — float over top-left of video area */
-  .panel-toggles {
-    position: absolute;
-    top: 8px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 8px;
-    z-index: 10;
-  }
-
-  .panel-toggle {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    padding: 6px 12px;
-    border-radius: var(--radius-pill);
-    border: 1px solid var(--border-color);
-    background: var(--surface);
-    color: var(--text-secondary);
-    font-size: 0.8rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: var(--transition);
-    backdrop-filter: var(--glass-blur);
-    box-shadow: var(--shadow-sm);
-  }
-
-  .panel-toggle:hover {
-    color: var(--text-primary);
-    background: var(--surface-hover);
-  }
-
-  .panel-toggle.active {
-    color: #000;
-    border-color: var(--accent-yellow);
-    background: var(--accent-yellow);
-  }
-
   .col {
     display: flex;
     flex-direction: column;
@@ -297,6 +258,10 @@
     width: 300px;
     flex-shrink: 0;
     overflow-y: hidden;
+  }
+
+  .hidden {
+    display: none !important;
   }
 
   .col-center {
