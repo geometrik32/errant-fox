@@ -39,3 +39,7 @@ frontend/dist/
 # Python Virtual Environments
 venv/
 .venv/
+
+# YOLO & OpenVINO weights/models
+*.pt
+*_openvino_model/
