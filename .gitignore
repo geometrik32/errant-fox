@@ -12,6 +12,7 @@ Thumbs.db
 # Secrets and local data
 .env
 .env.*
+!.env.example
 .codex/
 *.sqlite
 data/
