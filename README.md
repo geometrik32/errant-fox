@@ -131,23 +131,27 @@ flowchart LR
 * Работающий инстанс Seafile (потребуются URL-адрес и API-токен администратора).
 
 ### 1. Подготовка файлов
-Для запуска приложения вам понадобятся только два файла: `docker-compose.yml` и `.env`. Создайте папку для проекта на сервере и скачайте конфигурационный файл:
+Для запуска приложения вам понадобятся только два файла: `docker-compose.yml` и `.env`. Создайте папку для проекта на сервере, скачайте конфигурационный файл Docker Compose и шаблон переменных окружения:
 ```bash
 mkdir errant-fox && cd errant-fox
-curl -L https://raw.githubusercontent.com/geometrik32/errant-fox/main/docker-compose.yml -o docker-compose.yml
+curl -L https://raw.githubusercontent.com/geometrik32/errant-fox/master/docker-compose.yml -o docker-compose.yml
+curl -L https://raw.githubusercontent.com/geometrik32/errant-fox/master/.env.example -o .env
 ```
 
 ### 2. Настройка переменных окружения
-Создайте файл `.env`:
+Откройте созданный файл `.env` для редактирования:
 ```bash
 nano .env
 ```
 Заполните переменные окружения:
-* `DATABASE_URL=/data/db/errant_fox.db` (оставьте без изменений)
-* `JWT_SECRET` — сгенерируйте секретный ключ командой `openssl rand -hex 32`
-* `SEAFILE_URL` — URL вашего сервера Seafile (например, `https://seafile.myclub.ru`)
-* `SEAFILE_TOKEN` — API-токен Seafile (полученный в панели администратора Seafile)
-* `FRONTEND_ORIGIN` — Внешний URL-адрес приложения Errant Fox (например, `https://errantfox.myclub.ru`)
+* `DATABASE_URL=/data/db/errant_fox.db` — путь к базе данных внутри контейнера (оставьте без изменений)
+* `JWT_SECRET` — сгенерируйте секретный ключ командой `openssl rand -hex 32` и вставьте его
+* `SEAFILE_URL` — URL вашего сервера Seafile (например, `http://seafile` или `https://seafile.myclub.ru`)
+* `SEAFILE_TOKEN` — API-токен Seafile (полученный в панели настроек библиотеки Seafile)
+* `PREVIEWS_DIR=/data/previews` — директория для хранения превью (оставьте без изменений)
+* `AVATARS_DIR=/data/avatars` — директория для аватаров пользователей (оставьте без изменений)
+* `SERVER_PORT=8080` — порт бэкенд-сервера внутри контейнера (оставьте без изменений)
+* `FRONTEND_ORIGIN` — внешний URL-адрес приложения Errant Fox (например, `http://192.168.3.27:8081` или `https://errantfox.myclub.ru`)
 
 ### 3. Запуск контейнеров
 
