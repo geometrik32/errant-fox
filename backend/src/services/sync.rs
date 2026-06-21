@@ -14,14 +14,29 @@ pub async fn run_sync(
     seafile: Arc<SeafileClient>,
     db: DbPool,
     ws_tx: broadcast::Sender<WsEvent>,
+    previews_dir: String,
 ) {
     let date_re = Regex::new(r"(\d{4}[.\-]\d{2}[.\-]\d{2})").unwrap();
     let mut interval = tokio::time::interval(Duration::from_secs(60));
 
     loop {
         interval.tick().await;
-        if let Err(e) = sync_once(&seafile, &db, &ws_tx, &date_re).await {
-            tracing::error!("seafile sync error: {e:#}");
+        match sync_once(&seafile, &db, &ws_tx, &date_re).await {
+            Ok(removed) => {
+                for (id, _) in removed {
+                    let dir = std::path::Path::new(&previews_dir).join(&id);
+                    if dir.exists() {
+                        if let Err(e) = tokio::fs::remove_dir_all(&dir).await {
+                            tracing::error!("failed to delete preview dir for {id}: {e}");
+                        } else {
+                            tracing::info!("deleted preview dir for {id}");
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("seafile sync error: {e:#}");
+            }
         }
     }
 }
@@ -31,7 +46,7 @@ async fn sync_once(
     db: &DbPool,
     ws_tx: &broadcast::Sender<WsEvent>,
     date_re: &Regex,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Vec<(String, String)>> {
     let folders = seafile.list_folders().await?;
 
     let mut seen_paths: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -146,7 +161,7 @@ async fn sync_once(
     let seen_vec: Vec<String> = seen_paths.into_iter().collect();
     let db_clone = db.clone();
     let removed: Vec<(String, String)> = tokio::task::spawn_blocking(move || {
-        use crate::db::schema::videos;
+        use crate::db::schema::{bouts, comment_reactions, comments, videos};
         let mut conn = db_clone.get()?;
         // Find all videos not in the current seen set
         let stale = videos::table
@@ -156,18 +171,41 @@ async fn sync_once(
             .map_err(anyhow::Error::from)?;
         if !stale.is_empty() {
             let stale_ids: Vec<&str> = stale.iter().map(|(id, _)| id.as_str()).collect();
-            diesel::delete(videos::table.filter(videos::id.eq_any(&stale_ids)))
-                .execute(&mut conn)
-                .map_err(anyhow::Error::from)?;
+            conn.transaction::<_, anyhow::Error, _>(|conn| {
+                // Delete comment reactions for comments of these videos
+                let comment_ids = comments::table
+                    .select(comments::id)
+                    .filter(comments::video_id.eq_any(&stale_ids))
+                    .load::<i32>(conn)?;
+                if !comment_ids.is_empty() {
+                    diesel::delete(comment_reactions::table.filter(comment_reactions::comment_id.eq_any(&comment_ids)))
+                        .execute(conn)?;
+                }
+
+                // Delete comments
+                diesel::delete(comments::table.filter(comments::video_id.eq_any(&stale_ids)))
+                    .execute(conn)?;
+
+                // Delete bouts
+                diesel::delete(bouts::table.filter(bouts::video_id.eq_any(&stale_ids)))
+                    .execute(conn)?;
+
+                // Delete videos
+                diesel::delete(videos::table.filter(videos::id.eq_any(&stale_ids)))
+                    .execute(conn)?;
+
+                Ok(())
+            })?;
         }
         Ok::<_, anyhow::Error>(stale)
     })
     .await??;
 
+    let removed_clone = removed.clone();
     for (id, path) in removed {
         let _ = ws_tx.send(WsEvent::VideoRemoved { id: id.clone() });
         tracing::info!("removed stale video: {path} (id={id})");
     }
 
-    Ok(())
+    Ok(removed_clone)
 }

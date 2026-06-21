@@ -30,6 +30,7 @@ async fn main() {
         seafile_client.clone(),
         db_pool.clone(),
         ws_tx.clone(),
+        config.previews_dir.clone(),
     ));
 
     let app_state = state::AppState {

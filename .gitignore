@@ -40,3 +40,13 @@ frontend/dist/
 # Python Virtual Environments
 venv/
 .venv/
+
+# AI / Neural model experiments
+ai_research/
+venv_cuda/
+yolo26n.pt
+yolov8m.pt
+yolov8n.pt
+yolov8x.pt
+directives/
+scratch/
