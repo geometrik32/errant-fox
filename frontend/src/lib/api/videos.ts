@@ -35,3 +35,9 @@ export async function patchVideo(id: string, data: PatchVideoData): Promise<Vide
 export async function getStreamUrl(id: string): Promise<{ stream_url: string }> {
   return apiFetch<{ stream_url: string }>(`/videos/${id}/stream`);
 }
+
+export async function regeneratePreview(id: string): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/videos/${id}/previews/regenerate`, {
+    method: 'POST',
+  });
+}

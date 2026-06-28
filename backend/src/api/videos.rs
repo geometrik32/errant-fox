@@ -559,6 +559,7 @@ pub async fn get_preview_frame(
         let previews_dir = state.previews_dir.clone();
         let db = state.db.clone();
         let vid_id = video_id.clone();
+        let server_port = state.server_port;
 
         tokio::spawn(async move {
             if let Err(e) = crate::services::previews::generate_previews(
@@ -567,6 +568,7 @@ pub async fn get_preview_frame(
                 &seafile_path,
                 std::path::Path::new(&previews_dir),
                 &db,
+                server_port,
             )
             .await
             {
@@ -642,4 +644,154 @@ pub async fn stream_video(
     builder
         .body(body)
         .map_err(|e| AppError::Internal(e.to_string()))
+}
+
+pub async fn download_video(
+    State(state): State<AppState>,
+    _user: CurrentUser,
+    Path(video_id): Path<String>,
+) -> Result<axum::response::Response, AppError> {
+    let db = state.db.clone();
+    let vid_clone = video_id.clone();
+
+    let (video, fighter_a, fighter_b, index) = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::{videos, users};
+        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let video = videos::table
+            .filter(videos::id.eq(&vid_clone))
+            .first::<Video>(&mut conn)
+            .optional()
+            .map_err(|e| AppError::Internal(e.to_string()))?
+            .ok_or(AppError::NotFound)?;
+
+        let fighter_a = if let Some(ref fid) = video.fighter_a_id {
+            users::table
+                .filter(users::id.eq(fid))
+                .first::<User>(&mut conn)
+                .optional()
+                .map_err(|e| AppError::Internal(e.to_string()))?
+        } else {
+            None
+        };
+
+        let fighter_b = if let Some(ref fid) = video.fighter_b_id {
+            users::table
+                .filter(users::id.eq(fid))
+                .first::<User>(&mut conn)
+                .optional()
+                .map_err(|e| AppError::Internal(e.to_string()))?
+        } else {
+            None
+        };
+
+        // Determine serial number of this video for that day and those fighters
+        let same_day_videos = videos::table
+            .filter(videos::date.eq(video.date))
+            .filter(
+                (videos::fighter_a_id.eq(&video.fighter_a_id).and(videos::fighter_b_id.eq(&video.fighter_b_id)))
+                .or(videos::fighter_a_id.eq(&video.fighter_b_id).and(videos::fighter_b_id.eq(&video.fighter_a_id)))
+            )
+            .order(videos::id.asc())
+            .load::<Video>(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let index = same_day_videos.iter().position(|v| v.id == video.id).unwrap_or(0) + 1;
+
+        Ok::<_, AppError>((video, fighter_a, fighter_b, index))
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    let filename = {
+        let name_a = fighter_a.map(|u| u.display_name).unwrap_or_else(|| "FighterA".to_string());
+        let name_b = fighter_b.map(|u| u.display_name).unwrap_or_else(|| "FighterB".to_string());
+        let clean_a = crate::api::bouts::transliterate(&name_a);
+        let clean_b = crate::api::bouts::transliterate(&name_b);
+        let clean_a = if clean_a.is_empty() { "FighterA".to_string() } else { clean_a };
+        let clean_b = if clean_b.is_empty() { "FighterB".to_string() } else { clean_b };
+
+        let date_str = video.date.format("%Y-%m-%d").to_string();
+        format!("{}_vs_{}_{}_{}.mp4", clean_a, clean_b, date_str, index)
+    };
+
+    let seafile_resp = state
+        .seafile
+        .fetch_range(&video.seafile_path, None)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let status = seafile_resp.status();
+    let mut builder = axum::response::Response::builder().status(status);
+
+    for key in &["content-type", "content-length"] {
+        if let Some(val) = seafile_resp.headers().get(*key) {
+            builder = builder.header(*key, val);
+        }
+    }
+    
+    builder = builder.header(
+        header::CONTENT_DISPOSITION,
+        format!("attachment; filename=\"{}\"", filename),
+    );
+
+    let body = axum::body::Body::from_stream(seafile_resp.bytes_stream());
+    builder
+        .body(body)
+        .map_err(|e| AppError::Internal(e.to_string()))
+}
+
+pub async fn regenerate_preview(
+    State(state): State<AppState>,
+    _user: CurrentUser,
+    Path(video_id): Path<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    if !_user.0.is_admin {
+        return Err(AppError::Forbidden);
+    }
+    let db = state.db.clone();
+    let vid_clone = video_id.clone();
+
+    let seafile_path = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::videos;
+        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+        
+        let video = videos::table
+            .filter(videos::id.eq(&vid_clone))
+            .first::<Video>(&mut conn)
+            .optional()
+            .map_err(|e| AppError::Internal(e.to_string()))?
+            .ok_or(AppError::NotFound)?;
+            
+        diesel::update(videos::table.filter(videos::id.eq(&vid_clone)))
+            .set(videos::preview_count.eq(0))
+            .execute(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+            
+        Ok::<String, AppError>(video.seafile_path)
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    let seafile = state.seafile.clone();
+    let previews_dir = state.previews_dir.clone();
+    let db = state.db.clone();
+    let server_port = state.server_port;
+
+    tokio::spawn(async move {
+        if let Err(e) = crate::services::previews::generate_previews(
+            &video_id,
+            &seafile,
+            &seafile_path,
+            std::path::Path::new(&previews_dir),
+            &db,
+            server_port,
+        )
+        .await
+        {
+            tracing::error!("generate_previews failed for {video_id}: {e:?}");
+        }
+    });
+
+    Ok(Json(serde_json::json!({ "status": "regenerating" })))
 }

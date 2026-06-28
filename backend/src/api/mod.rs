@@ -44,9 +44,14 @@ pub fn router(state: AppState) -> Router {
             get(videos::get_video).patch(videos::patch_video),
         )
         .route("/api/videos/{id}/stream", get(videos::stream_video))
+        .route("/api/videos/{id}/download", get(videos::download_video))
         .route(
             "/api/videos/{id}/previews/{frame}",
             get(videos::get_preview_frame),
+        )
+        .route(
+            "/api/videos/{id}/previews/regenerate",
+            post(videos::regenerate_preview),
         )
         // Bouts
         .route("/api/bouts", post(bouts::post_bout))
@@ -54,6 +59,7 @@ pub fn router(state: AppState) -> Router {
             "/api/bouts/{id}",
             patch(bouts::patch_bout).delete(bouts::delete_bout),
         )
+        .route("/api/bouts/{id}/download", get(bouts::download_bout))
         // Comments
         .route("/api/comments", post(comments::post_comment))
         .route("/api/comments/search", get(comments::search_comments))

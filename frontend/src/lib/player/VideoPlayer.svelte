@@ -11,6 +11,7 @@
     chatOpen?: boolean;
     markingActive?: boolean;
     markingFinishAnimationKey?: number;
+    activeViewers?: any[];
     ontimeupdate?: (t: number) => void;
     ondurationchange?: (d: number) => void;
     onplayingchange?: (p: boolean) => void;
@@ -29,6 +30,7 @@
     chatOpen = true,
     markingActive = false,
     markingFinishAnimationKey = 0,
+    activeViewers = [],
     ontimeupdate,
     ondurationchange,
     onplayingchange,
@@ -310,6 +312,22 @@
 </script>
 
 <div class="vp-wrap" bind:this={wrapEl}>
+  {#if activeViewers.length > 0}
+    <div class="viewers-bar">
+      {#each activeViewers as viewer (viewer.id)}
+        <div class="viewer-avatar" style="--user-color: {viewer.color}" title={viewer.display_name}>
+          <svg class="avatar-icon" width="10" height="10" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          {#if viewer.avatar_url}
+            <img src={viewer.avatar_url} alt="" onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          {/if}
+        </div>
+      {/each}
+    </div>
+  {/if}
+
   <!-- svelte-ignore a11y_media_has_caption -->
   <video
     bind:this={videoEl}
@@ -477,5 +495,55 @@
 
   .zoom-badge:hover {
     background: rgba(0, 0, 0, 0.85);
+  }
+
+  .viewers-bar {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 6px;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 5px;
+    border-radius: 20px;
+    z-index: 10;
+  }
+
+  .viewer-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--user-color, #4a6280);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    flex-shrink: 0;
+    position: relative;
+    transition: transform 0.15s ease;
+    cursor: pointer;
+  }
+
+  .viewer-avatar:hover {
+    transform: scale(1.12);
+    z-index: 15;
+  }
+
+  .viewer-avatar .avatar-icon {
+    position: absolute;
+  }
+
+  .viewer-avatar img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 </style>

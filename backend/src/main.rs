@@ -1,5 +1,6 @@
 use axum::http::{header, Method};
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
@@ -40,6 +41,8 @@ async fn main() {
         previews_dir: config.previews_dir.clone(),
         seafile: seafile_client,
         ws_hub: ws_tx,
+        presence: std::sync::Arc::new(tokio::sync::RwLock::new(services::ws::PresenceRegistry::default())),
+        server_port: config.server_port,
     };
 
     let origin = config

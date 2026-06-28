@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{db::models::User, errors::AppError, middleware::auth::CurrentUser, state::AppState};
 
-fn generate_color(user_id: &str) -> String {
+pub fn generate_color(user_id: &str) -> String {
     const PALETTE: &[&str] = &[
         "#e05252", "#DB841F", "#d4c017", "#6aaa5e",
         "#4a9e8a", "#4a8eaa", "#5272e0", "#8052e0",

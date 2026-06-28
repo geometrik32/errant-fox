@@ -10,4 +10,6 @@ pub struct AppState {
     pub previews_dir: String,
     pub seafile: Arc<SeafileClient>,
     pub ws_hub: WsHub,
+    pub presence: Arc<tokio::sync::RwLock<crate::services::ws::PresenceRegistry>>,
+    pub server_port: u16,
 }

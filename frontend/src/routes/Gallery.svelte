@@ -9,6 +9,22 @@
   let filteredVideos = $state<Video[]>([]);
   let loading = $state(true);
   let errorMsg = $state('');
+  let onlineUsers = $state<any[]>([]);
+  let videoWatchers = $derived.by(() => {
+    const obj: Record<string, any[]> = {};
+    for (const u of onlineUsers) {
+      if (u.watching) {
+        if (!obj[u.watching]) {
+          obj[u.watching] = [];
+        }
+        const list = obj[u.watching];
+        if (!list.some(existing => existing.id === u.id)) {
+          list.push(u);
+        }
+      }
+    }
+    return obj;
+  });
 
   const FILTER_KEY = 'ef_gallery_filter';
   const SCROLL_KEY = 'ef_gallery_scroll';
@@ -76,7 +92,8 @@
   let ws: WebSocket | null = null;
 
   function connectWS() {
-    ws = new WebSocket('ws://localhost:8080/ws');
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
 
     ws.onopen = () => {
       const token = localStorage.getItem('ef_token');
@@ -101,6 +118,9 @@
         } else if (msg.type === 'video_removed') {
           allVideos = allVideos.filter(v => v.id !== msg.id);
           applyFilter();
+        } else if (msg.type === 'presence_update') {
+          console.log('Gallery presence update:', msg.users);
+          onlineUsers = msg.users;
         }
       } catch {
         // ignore malformed messages
@@ -139,7 +159,7 @@
       <Sidebar videos={allVideos} onfilter={handleFilter} initialFilter={activeFilter} />
     </div>
     <div class="content">
-      <VideoGrid videos={filteredVideos} onopen={handleOpen} />
+      <VideoGrid videos={filteredVideos} {videoWatchers} onopen={handleOpen} />
     </div>
   </div>
 {/if}
