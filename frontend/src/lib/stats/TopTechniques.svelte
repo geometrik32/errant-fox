@@ -11,7 +11,9 @@
 
   let { bouts, type = 'my', selectedTechnique = '', onfilter }: Props = $props();
 
-  function getTopTechniques(bouts: FighterBout[]) {
+  let sortBy = $state<'successRate' | 'count' | 'success'>('successRate');
+
+  function getTopTechniques(bouts: FighterBout[], currentSort: 'successRate' | 'count' | 'success') {
     const counts = new Map<string, { count: number, success: number }>();
     
     // Initialize with all techniques from store
@@ -31,21 +33,36 @@
       }
     }
 
-    return [...counts.entries()]
+    let items = [...counts.entries()]
       .map(([name, stats]) => ({
         name,
         count: stats.count,
+        success: stats.success,
         successRate: stats.count > 0 ? Math.round((stats.success / stats.count) * 100) : 0
-      }))
-      .sort((a, b) => b.successRate - a.successRate || b.count - a.count);
+      }));
+
+    if (currentSort === 'successRate') {
+      items.sort((a, b) => b.successRate - a.successRate || b.count - a.count);
+    } else if (currentSort === 'count') {
+      items.sort((a, b) => b.count - a.count || b.successRate - a.successRate);
+    } else if (currentSort === 'success') {
+      items.sort((a, b) => b.success - a.success || b.count - a.count);
+    }
+
+    return items;
   }
 
-  let topTechniques = $derived(getTopTechniques(bouts));
+  let topTechniques = $derived(getTopTechniques(bouts, sortBy));
 </script>
 
 <div class="top-techniques glass-card">
   <div class="card-header">
     <h3 class="card-title">{type === 'my' ? 'Топ моих техник' : 'Топ техник оппонента'}</h3>
+    <select class="sort-select" bind:value={sortBy}>
+      <option value="successRate">% успеха</option>
+      <option value="count">Частота</option>
+      <option value="success">Попадания</option>
+    </select>
   </div>
   <div class="tech-list">
     {#each topTechniques as t}
@@ -166,5 +183,38 @@
     color: var(--text-secondary);
     text-align: center;
     padding: 20px 0;
+  }
+
+  .sort-select {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 4px 24px 4px 8px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    outline: none;
+    cursor: pointer;
+    transition: var(--transition);
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg fill='gray' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 4px center;
+    background-size: 16px;
+  }
+
+  .sort-select:hover {
+    border-color: var(--border-strong);
+    color: var(--text-primary);
+  }
+
+  .sort-select:focus {
+    border-color: var(--accent-yellow);
+    color: var(--text-primary);
+  }
+
+  .sort-select option {
+    background: var(--surface-solid);
+    color: var(--text-primary);
   }
 </style>
