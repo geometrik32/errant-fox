@@ -20,13 +20,23 @@ where
         let auth_header = parts
             .headers
             .get(header::AUTHORIZATION)
-            .and_then(|v| v.to_str().ok())
-            .ok_or_else(|| AppError::Unauthorized("Unauthorized".to_string()))?;
+            .and_then(|v| v.to_str().ok());
 
-        let token = auth_header
-            .strip_prefix("Bearer ")
-            .ok_or_else(|| AppError::Unauthorized("Unauthorized".to_string()))?
-            .to_string();
+        let token = if let Some(header_val) = auth_header {
+            header_val
+                .strip_prefix("Bearer ")
+                .ok_or_else(|| AppError::Unauthorized("Unauthorized".to_string()))?
+                .to_string()
+        } else {
+            let query = parts.uri.query().unwrap_or("");
+            query
+                .split('&')
+                .find(|p| p.starts_with("token="))
+                .map(|p| p.strip_prefix("token=").unwrap_or(""))
+                .filter(|t| !t.is_empty())
+                .map(|t| t.to_string())
+                .ok_or_else(|| AppError::Unauthorized("Unauthorized".to_string()))?
+        };
 
         let claims = crate::api::auth::verify_token(&token, &app_state.jwt_secret)?;
         let user_id = claims.sub;

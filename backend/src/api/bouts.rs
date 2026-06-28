@@ -1,13 +1,14 @@
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
+    http::{header, StatusCode},
+    response::IntoResponse,
     Json,
 };
 use diesel::prelude::*;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{
-    db::models::{Bout, NewBout},
+    db::models::{Bout, NewBout, Video, User},
     errors::AppError,
     middleware::auth::CurrentUser,
     state::AppState,
@@ -256,4 +257,150 @@ pub async fn delete_bout(
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn download_bout(
+    State(state): State<AppState>,
+    _user: CurrentUser,
+    Path(id): Path<i32>,
+) -> Result<axum::response::Response, AppError> {
+    let db = state.db.clone();
+
+    let (bout, video, fighter_a, fighter_b) = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::{bouts, videos, users};
+
+        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let bout = bouts::table
+            .filter(bouts::id.eq(id))
+            .first::<Bout>(&mut conn)
+            .optional()
+            .map_err(|e| AppError::Internal(e.to_string()))?
+            .ok_or(AppError::NotFound)?;
+
+        let video = videos::table
+            .filter(videos::id.eq(&bout.video_id))
+            .first::<Video>(&mut conn)
+            .optional()
+            .map_err(|e| AppError::Internal(e.to_string()))?
+            .ok_or(AppError::NotFound)?;
+
+        let fighter_a = if let Some(ref fid) = video.fighter_a_id {
+            users::table
+                .filter(users::id.eq(fid))
+                .first::<User>(&mut conn)
+                .optional()
+                .map_err(|e| AppError::Internal(e.to_string()))?
+        } else {
+            None
+        };
+
+        let fighter_b = if let Some(ref fid) = video.fighter_b_id {
+            users::table
+                .filter(users::id.eq(fid))
+                .first::<User>(&mut conn)
+                .optional()
+                .map_err(|e| AppError::Internal(e.to_string()))?
+        } else {
+            None
+        };
+
+        Ok::<_, AppError>((bout, video, fighter_a, fighter_b))
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    let filename = {
+        let name_a = fighter_a.map(|u| u.display_name).unwrap_or_else(|| "FighterA".to_string());
+        let name_b = fighter_b.map(|u| u.display_name).unwrap_or_else(|| "FighterB".to_string());
+        let clean_a = transliterate(&name_a);
+        let clean_b = transliterate(&name_b);
+        let clean_a = if clean_a.is_empty() { "FighterA".to_string() } else { clean_a };
+        let clean_b = if clean_b.is_empty() { "FighterB".to_string() } else { clean_b };
+
+        let date_str = video.date.format("%Y-%m-%d").to_string();
+        let video_number = std::path::Path::new(&video.seafile_path)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("video");
+        let clean_video_number = transliterate(video_number);
+        let clean_video_number = if clean_video_number.is_empty() { "video".to_string() } else { clean_video_number };
+
+        format!("{}_vs_{}_{}_{}_shod_{}.mp4", clean_a, clean_b, date_str, clean_video_number, bout.order_index)
+    };
+
+    let local_stream_url = format!("http://127.0.0.1:{}/api/videos/{}/stream", state.server_port, video.id);
+
+    let temp_file = std::env::temp_dir().join(format!("bout_cut_{}.mp4", uuid::Uuid::new_v4()));
+    let start_sec = (bout.time_start_ms as f64) / 1000.0;
+    let duration_sec = ((bout.time_end_ms - bout.time_start_ms) as f64) / 1000.0;
+
+    tracing::info!("Slicing bout {id} from {start_sec}s for {duration_sec}s into {:?}", temp_file);
+
+    const FAKE_USER_AGENT: &str = "Mozilla/5.0";
+    let ffmpeg_res = tokio::process::Command::new("ffmpeg")
+        .arg("-y")
+        .arg("-ss").arg(start_sec.to_string())
+        .arg("-user_agent").arg(FAKE_USER_AGENT)
+        .arg("-i").arg(&local_stream_url)
+        .arg("-t").arg(duration_sec.to_string())
+        .arg("-c:v").arg("libx265")
+        .arg("-preset").arg("ultrafast")
+        .arg("-crf").arg("28")
+        .arg("-c:a").arg("aac")
+        .arg(&temp_file)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .await
+        .map_err(|e| AppError::Internal(format!("ffmpeg spawn: {e}")))?;
+
+    if !ffmpeg_res.status.success() {
+        let stderr = String::from_utf8_lossy(&ffmpeg_res.stderr);
+        let code = ffmpeg_res.status.code().unwrap_or(-1);
+        tracing::error!("ffmpeg slice bout FAILED (exit={code}):\n{stderr:.500}");
+        return Err(AppError::Internal(format!("ffmpeg exit={code}")));
+    }
+
+    let bytes = tokio::fs::read(&temp_file)
+        .await
+        .map_err(|e| AppError::Internal(format!("read temp file: {e}")))?;
+    
+    let _ = tokio::fs::remove_file(&temp_file).await;
+
+    let headers = [
+        (header::CONTENT_TYPE, "video/mp4".to_string()),
+        (header::CONTENT_DISPOSITION, format!("attachment; filename=\"{}\"", filename)),
+    ];
+
+    Ok((headers, bytes).into_response())
+}
+
+pub fn transliterate(s: &str) -> String {
+    let mut res = String::new();
+    for c in s.chars() {
+        let mapped = match c {
+            'а' => "a", 'б' => "b", 'в' => "v", 'г' => "g", 'д' => "d", 'е' => "e", 'ё' => "yo",
+            'ж' => "zh", 'з' => "z", 'и' => "i", 'й' => "y", 'к' => "k", 'л' => "l", 'м' => "m",
+            'н' => "n", 'о' => "o", 'п' => "p", 'р' => "r", 'с' => "s", 'т' => "t", 'у' => "u",
+            'ф' => "f", 'х' => "kh", 'ц' => "ts", 'ч' => "ch", 'ш' => "sh", 'щ' => "shch",
+            'ъ' => "", 'ы' => "y", 'ь' => "", 'э' => "e", 'ю' => "yu", 'я' => "ya",
+            'А' => "A", 'Б' => "B", 'В' => "V", 'Г' => "G", 'Д' => "D", 'Е' => "E", 'Ё' => "Yo",
+            'Ж' => "Zh", 'З' => "Z", 'И' => "I", 'Й' => "Y", 'К' => "K", 'Л' => "L", 'М' => "M",
+            'Н' => "N", 'О' => "O", 'П' => "P", 'Р' => "R", 'С' => "S", 'Т' => "T", 'У' => "U",
+            'Ф' => "F", 'Х' => "Kh", 'Ц' => "Ts", 'Ч' => "Ch", 'Ш' => "Sh", 'Щ' => "Shch",
+            'Ъ' => "", 'Ы' => "Y", 'Ь' => "", 'Э' => "E", 'Ю' => "Yu", 'Я' => "Ya",
+            _ if c.is_ascii_alphanumeric() => {
+                res.push(c);
+                continue;
+            }
+            ' ' | '_' | '-' => "_",
+            _ => "",
+        };
+        res.push_str(mapped);
+    }
+    while res.contains("__") {
+        res = res.replace("__", "_");
+    }
+    res.trim_matches('_').to_string()
 }

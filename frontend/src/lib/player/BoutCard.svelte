@@ -161,6 +161,48 @@
     }
   }
 
+  let downloading = $state(false);
+
+  async function handleDownload() {
+    if (downloading) return;
+    downloading = true;
+    try {
+      const token = localStorage.getItem('ef_token');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const response = await fetch(`/api/bouts/${bout.id}/download`, { headers });
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(text || `Ошибка сервера: ${response.status}`);
+      }
+      const blob = await response.blob();
+      
+      let filename = `shod_${boutIndex}.mp4`;
+      const cd = response.headers.get('content-disposition');
+      if (cd) {
+        const matches = /filename\*=UTF-8''(.+)/.exec(cd) || /filename="?([^"]+)"?/.exec(cd);
+        if (matches && matches[1]) {
+          filename = decodeURIComponent(matches[1]);
+        }
+      }
+      
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Ошибка скачивания');
+    } finally {
+      downloading = false;
+    }
+  }
+
   // ── Technique tooltip ────────────────────────────────────────────────────────
 
   let tooltipTimer: ReturnType<typeof setTimeout> | null = null;
@@ -426,6 +468,23 @@
         {saving ? 'Сохранение…' : 'Сохранить'}
       </button>
       <button class="btn btn-outline btn-sm" onclick={handleCollapse}>Свернуть</button>
+      <button
+        class="btn-download"
+        onclick={handleDownload}
+        disabled={downloading}
+        aria-label="Скачать сход"
+        title="Скачать фрагмент видео"
+      >
+        {#if downloading}
+          <span class="spinner-sm"></span>
+        {:else}
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        {/if}
+      </button>
       <button class="btn-delete" onclick={handleDelete} disabled={deleting} aria-label="Удалить сход">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
           <polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14H6L5,6"/><path d="M10,11v6"/><path d="M14,11v6"/><path d="M9,6V4h6v2"/>
@@ -809,7 +868,6 @@
     width: 24px;
     height: 24px;
     padding: 0;
-    margin-left: auto;
     border-radius: var(--radius-sm);
     background: rgba(239, 68, 68, 0.08);
     border: 1px solid rgba(239, 68, 68, 0.2);
@@ -830,5 +888,46 @@
   .btn-delete:disabled {
     opacity: 0.4;
     cursor: default;
+  }
+
+  .btn-download {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    margin-left: auto;
+    border-radius: var(--radius-sm);
+    background: rgba(31, 165, 216, 0.08);
+    border: 1px solid rgba(31, 165, 216, 0.2);
+    color: var(--accent-blue);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+  }
+
+  .btn-download:hover:not(:disabled) {
+    background: rgba(31, 165, 216, 0.2);
+    border-color: rgba(31, 165, 216, 0.4);
+    color: #38bdf8;
+  }
+
+  .btn-download:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .spinner-sm {
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 </style>

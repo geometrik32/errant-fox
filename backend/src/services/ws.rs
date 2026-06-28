@@ -6,7 +6,9 @@ use axum::{
     response::IntoResponse,
 };
 use serde::Serialize;
-use tokio::sync::broadcast;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::{broadcast, RwLock};
 
 use crate::state::AppState;
 
@@ -51,6 +53,22 @@ pub struct WsBout {
     pub result_b: Option<String>,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct OnlineUser {
+    pub id: String,
+    pub username: String,
+    pub display_name: String,
+    pub avatar_url: String,
+    pub color: String,
+    pub watching: Option<String>,
+}
+
+#[derive(Default)]
+pub struct PresenceRegistry {
+    pub connections: HashMap<u64, OnlineUser>,
+    pub next_id: u64,
+}
+
 // ── WsEvent ───────────────────────────────────────────────────────────────────
 
 #[derive(Clone, Debug, Serialize)]
@@ -66,6 +84,9 @@ pub enum WsEvent {
     VideoRemoved {
         id: String,
     },
+    PresenceUpdate {
+        users: Vec<OnlineUser>,
+    },
 }
 
 impl WsEvent {
@@ -75,11 +96,23 @@ impl WsEvent {
             WsEvent::UpdateBout(b) => Some(&b.video_id),
             WsEvent::NewVideo { .. } => None,
             WsEvent::VideoRemoved { .. } => None,
+            WsEvent::PresenceUpdate { .. } => None,
         }
     }
 }
 
 pub type WsHub = broadcast::Sender<WsEvent>;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+async fn broadcast_presence(registry: &RwLock<PresenceRegistry>, ws_hub: &WsHub) {
+    let users: Vec<OnlineUser> = {
+        let reg = registry.read().await;
+        reg.connections.values().cloned().collect()
+    };
+    let event = WsEvent::PresenceUpdate { users };
+    let _ = ws_hub.send(event);
+}
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 
@@ -92,8 +125,9 @@ pub async fn ws_handler(
 
 async fn handle_socket(mut socket: WebSocket, state: AppState) {
     // First message must be {"token": "..."}
-    let _user_id = match socket.recv().await {
+    let user_id = match socket.recv().await {
         Some(Ok(Message::Text(text))) => {
+            println!("WS [init] received text: {}", text);
             let val: serde_json::Value = match serde_json::from_str(&text) {
                 Ok(v) => v,
                 Err(_) => return,
@@ -110,7 +144,51 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
         _ => return,
     };
 
+    // Fetch user from DB to populate OnlineUser details
+    let db = state.db.clone();
+    let uid_clone = user_id.clone();
+    let db_user = match tokio::task::spawn_blocking(move || {
+        use crate::db::schema::users::dsl::{id, users};
+        use diesel::prelude::*;
+        let mut conn = db.get().map_err(|e| e.to_string())?;
+        users
+            .filter(id.eq(&uid_clone))
+            .first::<crate::db::models::User>(&mut conn)
+            .map_err(|e| e.to_string())
+    })
+    .await {
+        Ok(Ok(u)) => u,
+        _ => return,
+    };
+
+    let avatar_url = format!("/api/users/{}/avatar", db_user.id);
+    let color = db_user.color.clone().unwrap_or_else(|| crate::api::auth::generate_color(&db_user.id));
+
+    let online_user = OnlineUser {
+        id: db_user.id,
+        username: db_user.username,
+        display_name: db_user.display_name,
+        avatar_url,
+        color,
+        watching: None,
+    };
+
+    println!("WS user connected: {} (conn_id: {})", online_user.display_name, state.presence.read().await.next_id);
+
+    // Register connection
+    let conn_id = {
+        let mut reg = state.presence.write().await;
+        let id = reg.next_id;
+        reg.next_id += 1;
+        reg.connections.insert(id, online_user);
+        id
+    };
+
     let mut rx = state.ws_hub.subscribe();
+
+    // Broadcast updated presence list
+    broadcast_presence(&state.presence, &state.ws_hub).await;
+
     let mut watching: Option<String> = None;
 
     loop {
@@ -118,13 +196,28 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
             msg = socket.recv() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
+                        println!("WS conn_id {} received text: {}", conn_id, text);
                         if let Ok(val) = serde_json::from_str::<serde_json::Value>(&text) {
-                            if let Some(vid) = val.get("watching").and_then(|v| v.as_str()) {
-                                watching = Some(vid.to_string());
+                            if let Some(watching_val) = val.get("watching") {
+                                let next_watching = watching_val.as_str().map(|s| s.to_string());
+                                println!("WS conn_id {} updated watching to: {:?}", conn_id, next_watching);
+                                watching = next_watching.clone();
+
+                                // Update registry
+                                {
+                                    let mut reg = state.presence.write().await;
+                                    if let Some(user) = reg.connections.get_mut(&conn_id) {
+                                        user.watching = next_watching;
+                                    }
+                                }
+                                broadcast_presence(&state.presence, &state.ws_hub).await;
                             }
                         }
                     }
-                    Some(Ok(Message::Close(_))) | None => break,
+                    Some(Ok(Message::Close(_))) | None => {
+                        println!("WS conn_id {} closed", conn_id);
+                        break;
+                    }
                     _ => {}
                 }
             }
@@ -149,4 +242,12 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
             }
         }
     }
+
+    println!("WS conn_id {} cleaning up from registry", conn_id);
+    // Clean up registry on disconnect
+    {
+        let mut reg = state.presence.write().await;
+        reg.connections.remove(&conn_id);
+    }
+    broadcast_presence(&state.presence, &state.ws_hub).await;
 }

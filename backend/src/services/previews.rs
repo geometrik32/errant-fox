@@ -71,6 +71,7 @@ pub async fn generate_previews(
     seafile_path: &str,
     previews_dir: &Path,
     db: &DbPool,
+    server_port: u16,
 ) -> Result<(), AppError> {
     tracing::info!("[{video_id}] generate_previews  path={seafile_path}");
 
@@ -81,12 +82,9 @@ pub async fn generate_previews(
 
     let output_pattern = output_dir.join("%d.jpg").to_string_lossy().into_owned();
 
-    let download_url = seafile
-        .get_download_url(seafile_path)
-        .await
-        .map_err(|e| AppError::Internal(format!("seafile url: {e}")))?;
+    let local_stream_url = format!("http://127.0.0.1:{}/api/videos/{}/stream", server_port, video_id);
 
-    match extract_frame(video_id, &download_url, &output_pattern).await {
+    match extract_frame(video_id, &local_stream_url, &output_pattern).await {
         Ok(()) => {
             set_preview_count(db, video_id, 1).await?;
             tracing::info!("[{video_id}] DONE");

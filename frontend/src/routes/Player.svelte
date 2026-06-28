@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { currentUser } from '../stores';
   import { getVideo } from '../lib/api/videos';
   import type { VideoFull, Bout, Comment } from '../lib/api/types';
   import VideoPlayer from '../lib/player/VideoPlayer.svelte';
@@ -48,6 +49,17 @@
   // Live data that Timeline reads (updated by JudgingPanel + Chat via WS)
   let liveBouts = $state<Bout[]>([]);
   let liveComments = $state<Comment[]>([]);
+  let onlineUsers = $state<any[]>([]);
+  let activeViewers = $derived.by(() => {
+    const currentViewers = onlineUsers.filter(u => u.watching === videoId);
+    const seen = new Set<string>();
+    return currentViewers.filter(u => {
+      if (u.id === $currentUser?.id) return false;
+      if (seen.has(u.id)) return false;
+      seen.add(u.id);
+      return true;
+    });
+  });
 
   // Panel visibility
   let showJudging = $state(true);
@@ -147,6 +159,7 @@
             markingFinishAnimationKey += 1;
           }}
           onboutdelete={() => { player?.toggleLoop(); }}
+          onpresenceupdate={(users) => { onlineUsers = users; }}
         />
       </div>
 
@@ -162,6 +175,7 @@
           chatOpen={showChat}
           {markingActive}
           {markingFinishAnimationKey}
+          activeViewers={activeViewers}
           ontimeupdate={(t) => { currentTime = t; }}
           ondurationchange={(d) => { duration = d; }}
           onplayingchange={(p) => { playing = p; }}

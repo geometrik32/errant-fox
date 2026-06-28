@@ -17,6 +17,7 @@
     onmarkingchange?: (active: boolean) => void;
     onmarkingfinish?: () => void;
     onboutdelete?: () => void;
+    onpresenceupdate?: (users: any[]) => void;
     startTime?: number | null;
     finishing?: boolean;
   }
@@ -31,6 +32,7 @@
     onmarkingchange,
     onmarkingfinish,
     onboutdelete,
+    onpresenceupdate,
     startTime = $bindable(null),
     finishing = $bindable(false),
   }: Props = $props();
@@ -206,7 +208,8 @@
   let ws: WebSocket | null = null;
 
   function connectWS() {
-    ws = new WebSocket('ws://localhost:8080/ws');
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
 
     ws.onopen = () => {
       const token = localStorage.getItem('ef_token');
@@ -234,6 +237,8 @@
               : [...bouts, incoming];
           }
           onboutschange?.(bouts);
+        } else if (msg.type === 'presence_update') {
+          onpresenceupdate?.(msg.users as any[]);
         }
       } catch { /* ignore malformed */ }
     };

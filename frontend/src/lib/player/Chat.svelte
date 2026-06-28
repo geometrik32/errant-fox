@@ -144,7 +144,8 @@
   let ws: WebSocket | null = null;
 
   function connectWS() {
-    ws = new WebSocket('ws://localhost:8080/ws');
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
     ws.onopen = () => {
       const token = localStorage.getItem('ef_token');
       if (!token) return;
