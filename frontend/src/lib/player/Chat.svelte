@@ -63,7 +63,12 @@
         text: t,
         reply_to_id: replyTo?.id ?? null,
       });
-      comments = [...comments, created];
+      const idx = comments.findIndex(c => c.id === created.id);
+      if (idx >= 0) {
+        comments = comments.map((c, i) => i === idx ? created : c);
+      } else {
+        comments = [...comments, created];
+      }
       oncommentschange?.(comments);
       text = '';
       replyTo = null;
@@ -157,11 +162,17 @@
         const msg = JSON.parse(e.data as string) as Record<string, unknown>;
         if (msg.type === 'new_comment' && msg.video_id === videoId) {
           const { type: _t, video_id: _v, ...fields } = msg;
-          comments = [...comments, fields as unknown as Comment];
+          const incoming = fields as unknown as Comment;
+          const idx = comments.findIndex(c => c.id === incoming.id);
+          if (idx >= 0) {
+            comments = comments.map((c, i) => i === idx ? incoming : c);
+          } else {
+            comments = [...comments, incoming];
+            requestAnimationFrame(() => {
+              if (listEl) listEl.scrollTop = listEl.scrollHeight;
+            });
+          }
           oncommentschange?.(comments);
-          requestAnimationFrame(() => {
-            if (listEl) listEl.scrollTop = listEl.scrollHeight;
-          });
         }
       } catch { /* ignore malformed */ }
     };

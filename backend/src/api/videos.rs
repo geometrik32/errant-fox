@@ -466,7 +466,7 @@ pub async fn patch_video(
 ) -> Result<Json<VideoFullDto>, AppError> {
     let db = state.db.clone();
     let user_id = user.id.clone();
-    let frontend_origin = state.frontend_origin.clone();
+    let frontend_origin = state.frontend_url.clone();
 
     let (dto, notifications) = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{bouts, comment_reactions, comments, videos, users};

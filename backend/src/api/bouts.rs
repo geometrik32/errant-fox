@@ -231,7 +231,7 @@ pub async fn post_bout(
 
     // Spawn VK notification tasks if not throttled
     let vk_notifier = state.vk_notifier.clone();
-    let frontend_origin = state.frontend_origin.clone();
+    let frontend_origin = state.frontend_url.clone();
     let video_id = bout.video_id.clone();
     for (part_id, vk_id, video_title) in notifications {
         if vk_notifier.check_outcome_throttle(&part_id, &video_id) {

@@ -43,7 +43,7 @@ async fn main() {
         ws_hub: ws_tx,
         presence: std::sync::Arc::new(tokio::sync::RwLock::new(services::ws::PresenceRegistry::default())),
         server_port: config.server_port,
-        frontend_origin: config.frontend_origin.clone(),
+        frontend_url: config.frontend_url.clone(),
         vk_notifier: std::sync::Arc::new(services::vk::VkNotificationService::new(config.vk_group_token.clone())),
     };
 

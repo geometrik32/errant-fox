@@ -128,7 +128,7 @@ pub async fn post_comment(
 ) -> Result<(StatusCode, Json<CommentResponse>), AppError> {
     let db = state.db.clone();
     let user_id = user.id.clone();
-    let frontend_origin = state.frontend_origin.clone();
+    let frontend_origin = state.frontend_url.clone();
     let commenter_name = user.display_name.clone();
 
     let (comment, notifications) = tokio::task::spawn_blocking(move || {

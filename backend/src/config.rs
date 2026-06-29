@@ -9,12 +9,15 @@ pub struct Config {
     pub avatars_dir: String,
     pub server_port: u16,
     pub frontend_origin: String,
+    pub frontend_url: String,
     pub vk_group_token: Option<String>,
 }
 
 impl Config {
     pub fn from_env() -> Self {
         dotenvy::dotenv().ok();
+        let origin = required("FRONTEND_ORIGIN");
+        let url = env::var("FRONTEND_URL").unwrap_or_else(|_| origin.clone());
         Config {
             database_url: required("DATABASE_URL"),
             jwt_secret: required("JWT_SECRET"),
@@ -25,7 +28,8 @@ impl Config {
             server_port: required("SERVER_PORT")
                 .parse()
                 .expect("SERVER_PORT must be a valid port number"),
-            frontend_origin: required("FRONTEND_ORIGIN"),
+            frontend_origin: origin,
+            frontend_url: url,
             vk_group_token: env::var("VK_GROUP_TOKEN").ok(),
         }
     }
