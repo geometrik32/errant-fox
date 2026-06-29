@@ -10,6 +10,7 @@ diesel::table! {
         avatar_path   -> Nullable<Text>,
         color         -> Nullable<Text>,
         created_at    -> Timestamp,
+        vk_id         -> Nullable<Text>,
     }
 }
 

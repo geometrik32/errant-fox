@@ -13,6 +13,7 @@
   let username = $state($currentUser?.username ?? '');
   let displayName = $state($currentUser?.display_name ?? '');
   let color = $state($currentUser?.color ?? '');
+  let vkId = $state($currentUser?.vk_id ?? '');
   let newPassword = $state('');
   let confirmPassword = $state('');
   let saving = $state(false);
@@ -49,11 +50,12 @@
 
     saving = true;
     try {
-      const data: { username?: string; display_name?: string; password?: string; color?: string } = {};
+      const data: { username?: string; display_name?: string; password?: string; color?: string; vk_id?: string } = {};
       if (username !== $currentUser?.username) data.username = username;
       if (displayName !== $currentUser?.display_name) data.display_name = displayName;
       if (newPassword) data.password = newPassword;
       if (color && color !== $currentUser?.color) data.color = color;
+      if (vkId !== ($currentUser?.vk_id ?? '')) data.vk_id = vkId;
 
       const colorChanged = !!data.color;
 
@@ -147,6 +149,12 @@
         <div class="color-row">
           <input id="color-pick" type="color" bind:value={color} class="color-input" />
         </div>
+      </div>
+
+      <div class="field">
+        <label for="vk-id">ID ВКонтакте</label>
+        <input class="input-glass" id="vk-id" type="text" bind:value={vkId} placeholder="Например, 12345678" />
+        <span class="hint">Только цифры. Чтобы получать уведомления, напишите боту в ЛС или разрешите сообщения от группы.</span>
       </div>
 
       <div class="divider"></div>
@@ -323,6 +331,14 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+
+  .hint {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    opacity: 0.85;
+    margin-top: -2px;
+    line-height: 1.35;
   }
 
   .field label {

@@ -466,11 +466,20 @@ pub async fn patch_video(
 ) -> Result<Json<VideoFullDto>, AppError> {
     let db = state.db.clone();
     let user_id = user.id.clone();
+    let frontend_origin = state.frontend_origin.clone();
 
-    let dto = tokio::task::spawn_blocking(move || {
-        use crate::db::schema::{bouts, comment_reactions, comments, videos};
+    let (dto, notifications) = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::{bouts, comment_reactions, comments, videos, users};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // 1. Fetch old video first to see who was already tagged
+        let old_video = videos::table
+            .filter(videos::id.eq(&video_id))
+            .first::<Video>(&mut conn)
+            .optional()
+            .map_err(|e| AppError::Internal(e.to_string()))?
+            .ok_or(AppError::NotFound)?;
 
         let rows = diesel::update(videos::table.filter(videos::id.eq(&video_id)))
             .set((
@@ -488,6 +497,45 @@ pub async fn patch_video(
             .filter(videos::id.eq(&video_id))
             .first::<Video>(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // Collect new tags notifications
+        let mut notifications = Vec::new();
+
+        // Check if fighter A is newly added
+        if let Some(ref new_a) = video.fighter_a_id {
+            if Some(new_a) != old_video.fighter_a_id.as_ref() {
+                if let Ok(fighter_user) = users::table.filter(users::id.eq(new_a)).first::<User>(&mut conn) {
+                    if let Some(ref vk_id_str) = fighter_user.vk_id {
+                        if !vk_id_str.trim().is_empty() {
+                            let msg = format!(
+                                "⚔️ Вас добавили в качестве участника боя в видео.\n\nСсылка: {}/#/player/{}",
+                                frontend_origin,
+                                video_id
+                            );
+                            notifications.push((vk_id_str.clone(), msg));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check if fighter B is newly added
+        if let Some(ref new_b) = video.fighter_b_id {
+            if Some(new_b) != old_video.fighter_b_id.as_ref() {
+                if let Ok(fighter_user) = users::table.filter(users::id.eq(new_b)).first::<User>(&mut conn) {
+                    if let Some(ref vk_id_str) = fighter_user.vk_id {
+                        if !vk_id_str.trim().is_empty() {
+                            let msg = format!(
+                                "⚔️ Вас добавили в качестве участника боя в видео.\n\nСсылка: {}/#/player/{}",
+                                frontend_origin,
+                                video_id
+                            );
+                            notifications.push((vk_id_str.clone(), msg));
+                        }
+                    }
+                }
+            }
+        }
 
         let video_bouts = bouts::table
             .filter(bouts::video_id.eq(&video_id))
@@ -514,17 +562,28 @@ pub async fn patch_video(
 
         let users_map = load_users_for_video(&video, &video_comments, &mut conn)?;
 
-        Ok::<_, AppError>(build_video_full(
+        let full_dto = build_video_full(
             &video,
             video_bouts,
             video_comments,
             &users_map,
             &reactions_map,
             String::new(),
-        ))
+        );
+
+        Ok::<_, AppError>((full_dto, notifications))
     })
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    // Spawn async tasks to send notifications
+    let vk_notifier = state.vk_notifier.clone();
+    for (vk_id, message) in notifications {
+        let notifier = vk_notifier.clone();
+        tokio::spawn(async move {
+            notifier.send_notification(&vk_id, &message).await;
+        });
+    }
 
     let stream_url = format!("/api/videos/{}/stream", dto.id);
 

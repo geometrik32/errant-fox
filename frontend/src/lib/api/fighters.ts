@@ -27,6 +27,7 @@ export async function patchUser(id: string, data: {
   password?: string;
   color?: string;
   is_admin?: boolean;
+  vk_id?: string;
 }): Promise<User> {
   return apiFetch<User>(`/admin/users/${id}`, {
     method: 'PATCH',

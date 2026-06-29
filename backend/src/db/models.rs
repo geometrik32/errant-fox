@@ -17,6 +17,7 @@ pub struct User {
     pub avatar_path: Option<String>,
     pub color: Option<String>,
     pub created_at: NaiveDateTime,
+    pub vk_id: Option<String>,
 }
 
 #[derive(Insertable, Deserialize, Debug)]
@@ -29,6 +30,7 @@ pub struct NewUser {
     pub is_admin: bool,
     pub avatar_path: Option<String>,
     pub color: Option<String>,
+    pub vk_id: Option<String>,
 }
 
 // ── videos ────────────────────────────────────────────────────────────────────

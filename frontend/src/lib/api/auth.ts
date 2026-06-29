@@ -17,7 +17,7 @@ export async function getMe(): Promise<User> {
   return apiFetch<User>('/users/me');
 }
 
-export async function patchMe(data: { username?: string; display_name?: string; password?: string; color?: string }): Promise<User> {
+export async function patchMe(data: { username?: string; display_name?: string; password?: string; color?: string; vk_id?: string }): Promise<User> {
   return apiFetch<User>('/users/me', {
     method: 'PATCH',
     body: JSON.stringify(data),

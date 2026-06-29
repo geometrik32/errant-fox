@@ -72,6 +72,7 @@
   let editingId      = $state<string | null>(null);
   let editName       = $state('');
   let editColor      = $state('');
+  let editVkId       = $state('');
   let editPassword   = $state('');
   let editIsAdmin    = $state(false);
   let editAvatarFile = $state<File | null>(null);
@@ -83,6 +84,7 @@
     editingId      = f.id;
     editName       = f.display_name;
     editColor      = f.color ?? resolveColor(f.id, null);
+    editVkId       = f.vk_id ?? '';
     editPassword   = '';
     editIsAdmin    = f.is_admin;
     editAvatarFile = null;
@@ -110,10 +112,11 @@
     saving = true;
     editError = '';
     try {
-      const data: { display_name?: string; password?: string; color?: string; is_admin?: boolean } = {};
+      const data: { display_name?: string; password?: string; color?: string; is_admin?: boolean; vk_id?: string } = {};
       if (editName !== f.display_name) data.display_name = editName;
       if (editPassword) data.password = editPassword;
       if (editColor !== (f.color ?? '')) data.color = editColor;
+      if (editVkId !== (f.vk_id ?? '')) data.vk_id = editVkId;
       if (editIsAdmin !== f.is_admin) data.is_admin = editIsAdmin;
 
       let updated = f;
@@ -269,6 +272,7 @@
 
                 <div class="edit-fields">
                   <input class="input-glass" type="text" bind:value={editName} placeholder="Имя" />
+                  <input class="input-glass" type="text" bind:value={editVkId} placeholder="VK ID (например, 12345678)" />
                   <input class="input-glass" type="password" bind:value={editPassword} placeholder="Новый пароль (необязательно)" autocomplete="new-password" />
                   <div class="color-row">
                     <input type="color" class="color-input" bind:value={editColor} />

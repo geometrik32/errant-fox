@@ -9,6 +9,7 @@ pub struct Config {
     pub avatars_dir: String,
     pub server_port: u16,
     pub frontend_origin: String,
+    pub vk_group_token: Option<String>,
 }
 
 impl Config {
@@ -25,6 +26,7 @@ impl Config {
                 .parse()
                 .expect("SERVER_PORT must be a valid port number"),
             frontend_origin: required("FRONTEND_ORIGIN"),
+            vk_group_token: env::var("VK_GROUP_TOKEN").ok(),
         }
     }
 }
