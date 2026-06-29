@@ -2,7 +2,7 @@ use chrono::{NaiveDate, NaiveDateTime};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use super::schema::{bouts, comment_reactions, comments, techniques, users, videos};
+use super::schema::{bouts, comment_reactions, comments, techniques, users, videos, bout_history};
 
 // ── users ─────────────────────────────────────────────────────────────────────
 
@@ -151,4 +151,28 @@ pub struct CommentReaction {
     pub comment_id: i32,
     pub user_id: String,
     pub kind: String,
+}
+
+// ── bout_history ──────────────────────────────────────────────────────────────
+
+#[derive(Queryable, Identifiable, Serialize, Deserialize, Debug, Associations)]
+#[diesel(belongs_to(Bout, foreign_key = bout_id))]
+#[diesel(belongs_to(User, foreign_key = user_id))]
+#[diesel(table_name = bout_history)]
+pub struct BoutHistory {
+    pub id: i32,
+    pub bout_id: i32,
+    pub user_id: String,
+    pub action: String,
+    pub details: Option<String>,
+    pub created_at: NaiveDateTime,
+}
+
+#[derive(Insertable, Debug)]
+#[diesel(table_name = bout_history)]
+pub struct NewBoutHistory {
+    pub bout_id: i32,
+    pub user_id: String,
+    pub action: String,
+    pub details: Option<String>,
 }

@@ -4,8 +4,9 @@
   import type { Bout, VideoFighter } from '../api/types';
   import { resolveColor } from '../api/types';
   import { updateBout } from '../api/bouts';
-  import HitZonePicker from './HitZonePicker.svelte';
   import { deleteBout } from '../api/bouts';
+  import HitZonePicker from './HitZonePicker.svelte';
+  import BoutHistoryModal from './BoutHistoryModal.svelte';
 
   type ResultType = 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | 'disqualification' | 'afterblow';
 
@@ -33,6 +34,8 @@
   );
 
   // ── Form state ──────────────────────────────────────────────────────────────
+
+  let showHistory = $state(false);
 
   let timeStartMs = $state(untrack(() => bout.time_start_ms));
   let timeEndMs   = $state(untrack(() => bout.time_end_ms));
@@ -298,6 +301,7 @@
     class="card card--collapsed"
     style={winnerColor ? `border-left: 3px solid ${winnerColor}; background: color-mix(in srgb, ${winnerColor} 10%, var(--surface-hover))` : ''}
     onclick={onexpand}
+    oncontextmenu={(e) => { e.preventDefault(); showHistory = true; }}
   >
     <span class="card-label">
       Сход {boutIndex}
@@ -320,6 +324,7 @@
       style={winnerColor ? `background: color-mix(in srgb, ${winnerColor} 15%, var(--surface-solid)); border-bottom-color: color-mix(in srgb, ${winnerColor} 30%, var(--border-color))` : ''}
       onclick={handleCollapse}
       onkeydown={(e) => e.key === 'Enter' && handleCollapse()}
+      oncontextmenu={(e) => { e.preventDefault(); showHistory = true; }}
     >
       <span class="card-label">
         Сход {boutIndex}
@@ -493,6 +498,10 @@
     </div>
 
   </div>
+{/if}
+
+{#if showHistory}
+  <BoutHistoryModal boutId={bout.id} {boutIndex} onclose={() => { showHistory = false; }} />
 {/if}
 
 <style>

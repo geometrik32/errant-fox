@@ -164,6 +164,26 @@ pub async fn post_bout(
             .first::<Bout>(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
+        // Insert history record
+        use crate::db::models::NewBoutHistory;
+        use crate::db::schema::bout_history;
+
+        let details = format!(
+            "Время: {} — {}",
+            format_ms(bout.time_start_ms),
+            format_ms(bout.time_end_ms)
+        );
+
+        diesel::insert_into(bout_history::table)
+            .values(&NewBoutHistory {
+                bout_id: bout.id,
+                user_id: user_id.clone(),
+                action: "create".to_string(),
+                details: Some(details),
+            })
+            .execute(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
         let mut notifications = Vec::new();
 
         let video = videos::table
@@ -253,11 +273,12 @@ pub async fn post_bout(
 
 pub async fn patch_bout(
     State(state): State<AppState>,
-    _user: CurrentUser,
+    CurrentUser(user): CurrentUser,
     Path(id): Path<i32>,
     Json(body): Json<PatchBoutRequest>,
 ) -> Result<Json<BoutResponse>, AppError> {
     let db = state.db.clone();
+    let user_id = user.id.clone();
 
     let bout = tokio::task::spawn_blocking(move || {
         use crate::db::schema::bouts;
@@ -277,10 +298,78 @@ pub async fn patch_bout(
         let score_b = body.score_b.unwrap_or(cur.score_b);
         let technique_a_id = body.technique_a_id.unwrap_or(cur.technique_a_id);
         let technique_b_id = body.technique_b_id.unwrap_or(cur.technique_b_id);
-        let hit_zone_a = body.hit_zone_a.unwrap_or(cur.hit_zone_a);
-        let hit_zone_b = body.hit_zone_b.unwrap_or(cur.hit_zone_b);
-        let result_a = body.result_a.unwrap_or(cur.result_a);
-        let result_b = body.result_b.unwrap_or(cur.result_b);
+        let hit_zone_a = body.hit_zone_a.unwrap_or_else(|| cur.hit_zone_a.clone());
+        let hit_zone_b = body.hit_zone_b.unwrap_or_else(|| cur.hit_zone_b.clone());
+        let result_a = body.result_a.unwrap_or_else(|| cur.result_a.clone());
+        let result_b = body.result_b.unwrap_or_else(|| cur.result_b.clone());
+
+        // Compare and build changes list
+        let mut changes = Vec::new();
+        if time_start_ms != cur.time_start_ms {
+            changes.push(format!("Время начала: {} → {}", format_ms(cur.time_start_ms), format_ms(time_start_ms)));
+        }
+        if time_end_ms != cur.time_end_ms {
+            changes.push(format!("Время конца: {} → {}", format_ms(cur.time_end_ms), format_ms(time_end_ms)));
+        }
+        if score_a != cur.score_a {
+            changes.push(format!("Очки А: {} → {}", cur.score_a, score_a));
+        }
+        if score_b != cur.score_b {
+            changes.push(format!("Очки B: {} → {}", cur.score_b, score_b));
+        }
+
+        if technique_a_id != cur.technique_a_id || technique_b_id != cur.technique_b_id {
+            use crate::db::schema::techniques;
+            let mut tech_names = std::collections::HashMap::new();
+            if let Ok(list) = techniques::table.load::<crate::db::models::Technique>(&mut conn) {
+                for t in list {
+                    tech_names.insert(t.id, t.name);
+                }
+            }
+
+            let get_tech_name = |id_opt: Option<i32>| -> String {
+                id_opt.and_then(|id| tech_names.get(&id).cloned()).unwrap_or_else(|| "—".to_string())
+            };
+
+            if technique_a_id != cur.technique_a_id {
+                changes.push(format!("Прием А: {} → {}", get_tech_name(cur.technique_a_id), get_tech_name(technique_a_id)));
+            }
+            if technique_b_id != cur.technique_b_id {
+                changes.push(format!("Прием B: {} → {}", get_tech_name(cur.technique_b_id), get_tech_name(technique_b_id)));
+            }
+        }
+
+        let get_str_val = |val_opt: &Option<String>| -> String {
+            val_opt.as_deref().unwrap_or("—").to_string()
+        };
+
+        if hit_zone_a != cur.hit_zone_a {
+            changes.push(format!("Зона поражения А: {} → {}", get_str_val(&cur.hit_zone_a), get_str_val(&hit_zone_a)));
+        }
+        if hit_zone_b != cur.hit_zone_b {
+            changes.push(format!("Зона поражения B: {} → {}", get_str_val(&cur.hit_zone_b), get_str_val(&hit_zone_b)));
+        }
+
+        let translate_result = |res: &Option<String>| -> String {
+            match res.as_deref() {
+                Some("hit") => "Попал",
+                Some("miss") => "Промах",
+                Some("blocked") => "Заблок.",
+                Some("late") => "Опоздал",
+                Some("no_strike") => "Не бил",
+                Some("disqualification") => "Неквал.",
+                Some("afterblow") => "Афтерблоу",
+                Some(other) => other,
+                None => "—",
+            }.to_string()
+        };
+
+        if result_a != cur.result_a {
+            changes.push(format!("Результат А: {} → {}", translate_result(&cur.result_a), translate_result(&result_a)));
+        }
+        if result_b != cur.result_b {
+            changes.push(format!("Результат B: {} → {}", translate_result(&cur.result_b), translate_result(&result_b)));
+        }
 
         diesel::update(bouts::table.filter(bouts::id.eq(id)))
             .set((
@@ -297,6 +386,22 @@ pub async fn patch_bout(
             ))
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // Write to history if there are changes
+        if !changes.is_empty() {
+            use crate::db::models::NewBoutHistory;
+            use crate::db::schema::bout_history;
+
+            diesel::insert_into(bout_history::table)
+                .values(&NewBoutHistory {
+                    bout_id: id,
+                    user_id: user_id.clone(),
+                    action: "update".to_string(),
+                    details: Some(changes.join("; ")),
+                })
+                .execute(&mut conn)
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+        }
 
         bouts::table
             .filter(bouts::id.eq(id))
@@ -338,6 +443,70 @@ pub async fn delete_bout(
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
+
+#[derive(Serialize)]
+pub struct BoutHistoryUserResponse {
+    pub id: String,
+    pub display_name: String,
+    pub avatar_url: String,
+    pub color: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct BoutHistoryResponse {
+    pub id: i32,
+    pub bout_id: i32,
+    pub user: BoutHistoryUserResponse,
+    pub action: String,
+    pub details: Option<String>,
+    pub created_at: String,
+}
+
+pub async fn get_bout_history(
+    State(state): State<AppState>,
+    _user: CurrentUser,
+    Path(id): Path<i32>,
+) -> Result<Json<Vec<BoutHistoryResponse>>, AppError> {
+    let db = state.db.clone();
+
+    let history = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::{bout_history, users};
+
+        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // Query history joined with users
+        let list = bout_history::table
+            .filter(bout_history::bout_id.eq(id))
+            .inner_join(users::table)
+            .order(bout_history::created_at.desc())
+            .load::<(crate::db::models::BoutHistory, crate::db::models::User)>(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let res = list
+            .into_iter()
+            .map(|(bh, u)| BoutHistoryResponse {
+                id: bh.id,
+                bout_id: bh.bout_id,
+                user: BoutHistoryUserResponse {
+                    id: u.id.clone(),
+                    display_name: u.display_name.clone(),
+                    avatar_url: format!("/api/users/{}/avatar", u.id),
+                    color: u.color.clone(),
+                },
+                action: bh.action,
+                details: bh.details,
+                created_at: bh.created_at.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+            })
+            .collect::<Vec<_>>();
+
+        Ok(res)
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    Ok(Json(history))
+}
+
 
 pub async fn download_bout(
     State(state): State<AppState>,
@@ -481,3 +650,11 @@ pub fn transliterate(s: &str) -> String {
     }
     res.trim_matches('_').to_string()
 }
+
+fn format_ms(ms: i32) -> String {
+    let total_secs = ms / 1000;
+    let mins = total_secs / 60;
+    let secs = total_secs % 60;
+    format!("{:02}:{:02}", mins, secs)
+}
+
