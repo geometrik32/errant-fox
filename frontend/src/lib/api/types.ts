@@ -5,6 +5,7 @@ export interface User {
   is_admin: boolean;
   avatar_url: string;
   color: string | null;
+  vk_id?: string | null;
 }
 
 export interface Fighter {
@@ -14,6 +15,7 @@ export interface Fighter {
   avatar_url: string;
   color: string | null;
   is_admin: boolean;
+  vk_id?: string | null;
 }
 
 export function resolveColor(id: string, color: string | null | undefined): string {

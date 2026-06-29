@@ -27,6 +27,7 @@ pub struct FighterDto {
     pub avatar_url: String,
     pub color: Option<String>,
     pub is_admin: bool,
+    pub vk_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -59,6 +60,7 @@ pub struct UserMeDto {
     pub is_admin: bool,
     pub avatar_url: String,
     pub color: Option<String>,
+    pub vk_id: Option<String>,
 }
 
 fn to_fighter_dto(u: &User) -> FighterDto {
@@ -69,6 +71,7 @@ fn to_fighter_dto(u: &User) -> FighterDto {
         avatar_url: format!("/api/users/{}/avatar", u.id),
         color: u.color.clone(),
         is_admin: u.is_admin,
+        vk_id: u.vk_id.clone(),
     }
 }
 
@@ -80,6 +83,7 @@ fn to_me_dto(u: &User) -> UserMeDto {
         is_admin: u.is_admin,
         avatar_url: format!("/api/users/{}/avatar", u.id),
         color: u.color.clone(),
+        vk_id: u.vk_id.clone(),
     }
 }
 
@@ -91,6 +95,7 @@ pub struct PatchMeRequest {
     pub display_name: Option<String>,
     pub password: Option<String>,
     pub color: Option<String>,
+    pub vk_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -108,6 +113,7 @@ pub struct PatchAdminUserRequest {
     pub password: Option<String>,
     pub color: Option<String>,
     pub is_admin: Option<bool>,
+    pub vk_id: Option<String>,
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
@@ -259,7 +265,7 @@ pub async fn patch_me(
     let user_id = user.id.clone();
 
     let updated = tokio::task::spawn_blocking(move || {
-        use crate::db::schema::users::dsl::{color, display_name, id, password_hash, username, users};
+        use crate::db::schema::users::dsl::{color, display_name, id, password_hash, username, users, vk_id};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -272,6 +278,11 @@ pub async fn patch_me(
             user.password_hash
         };
         let new_color = body.color.or(user.color);
+        let new_vk_id = match body.vk_id {
+            Some(ref v) if !v.trim().is_empty() => Some(v.trim().to_string()),
+            Some(_) => None,
+            None => user.vk_id,
+        };
 
         diesel::update(users.filter(id.eq(&user_id)))
             .set((
@@ -279,6 +290,7 @@ pub async fn patch_me(
                 display_name.eq(&new_name),
                 password_hash.eq(&new_hash),
                 color.eq(&new_color),
+                vk_id.eq(&new_vk_id),
             ))
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -377,6 +389,7 @@ pub async fn create_user(
             is_admin: body.is_admin,
             avatar_path: None,
             color: body.color,
+            vk_id: None,
         };
 
         diesel::insert_into(users)
@@ -408,7 +421,7 @@ pub async fn patch_admin_user(
     let db = state.db.clone();
 
     let updated = tokio::task::spawn_blocking(move || {
-        use crate::db::schema::users::dsl::{color, display_name, id, is_admin, password_hash, users};
+        use crate::db::schema::users::dsl::{color, display_name, id, is_admin, password_hash, users, vk_id};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -428,6 +441,11 @@ pub async fn patch_admin_user(
         };
         let new_color = body.color.or(target_user.color);
         let new_is_admin = body.is_admin.unwrap_or(target_user.is_admin);
+        let new_vk_id = match body.vk_id {
+            Some(ref v) if !v.trim().is_empty() => Some(v.trim().to_string()),
+            Some(_) => None,
+            None => target_user.vk_id,
+        };
 
         diesel::update(users.filter(id.eq(&user_id)))
             .set((
@@ -435,6 +453,7 @@ pub async fn patch_admin_user(
                 password_hash.eq(&new_hash),
                 color.eq(&new_color),
                 is_admin.eq(new_is_admin),
+                vk_id.eq(&new_vk_id),
             ))
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;

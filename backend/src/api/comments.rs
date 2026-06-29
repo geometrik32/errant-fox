@@ -116,6 +116,11 @@ pub struct PatchCommentRequest {
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
+struct NotificationTarget {
+    vk_id: String,
+    message: String,
+}
+
 pub async fn post_comment(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -123,8 +128,10 @@ pub async fn post_comment(
 ) -> Result<(StatusCode, Json<CommentResponse>), AppError> {
     let db = state.db.clone();
     let user_id = user.id.clone();
+    let frontend_origin = state.frontend_origin.clone();
+    let commenter_name = user.display_name.clone();
 
-    let comment = tokio::task::spawn_blocking(move || {
+    let (comment, notifications) = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{comments, videos};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
@@ -164,11 +171,114 @@ pub async fn post_comment(
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        comments::table
+        let comment = comments::table
             .filter(comments::author_id.eq(&user_id))
             .order(comments::id.desc())
             .first::<Comment>(&mut conn)
-            .map_err(|e| AppError::Internal(e.to_string()))
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let mut notifications = Vec::new();
+
+        let video = videos::table
+            .filter(videos::id.eq(&comment.video_id))
+            .first::<crate::db::models::Video>(&mut conn)
+            .optional()
+            .unwrap_or(None);
+
+        if let Some(video) = video {
+            let get_display_name = |v: &crate::db::models::Video, c: &mut diesel::SqliteConnection| -> String {
+                use crate::db::schema::users;
+                let date_str = v.date.format("%d.%m.%Y").to_string();
+                
+                let name_a = v.fighter_a_id.as_ref().and_then(|id_a| {
+                    users::table.filter(users::id.eq(id_a))
+                        .first::<crate::db::models::User>(c)
+                        .ok()
+                        .map(|u| u.display_name)
+                });
+                
+                let name_b = v.fighter_b_id.as_ref().and_then(|id_b| {
+                    users::table.filter(users::id.eq(id_b))
+                        .first::<crate::db::models::User>(c)
+                        .ok()
+                        .map(|u| u.display_name)
+                });
+                
+                match (name_a, name_b) {
+                    (Some(a), Some(b)) => format!("{} vs {} ({})", a, b, date_str),
+                    (Some(a), None) => format!("{} ({})", a, date_str),
+                    (None, Some(b)) => format!("{} ({})", b, date_str),
+                    (None, None) => format!("Без названия ({})", date_str),
+                }
+            };
+
+            let video_title = get_display_name(&video, &mut conn);
+            let mut notified_reply_user_id: Option<String> = None;
+
+            // A. Check if it's a reply
+            if let Some(parent_id) = comment.reply_to_id {
+                if let Ok(parent_comment) = comments::table.filter(comments::id.eq(parent_id)).first::<Comment>(&mut conn) {
+                    if parent_comment.author_id != comment.author_id {
+                        use crate::db::schema::users;
+                        if let Ok(parent_author) = users::table.filter(users::id.eq(&parent_comment.author_id)).first::<User>(&mut conn) {
+                            if let Some(ref vk_id_str) = parent_author.vk_id {
+                                if !vk_id_str.trim().is_empty() {
+                                    let msg = format!(
+                                        "💬 Пользователь {} ответил на ваш комментарий к бою {}:\n\"{}\"\n\nСсылка: {}/#/player/{}?t={}",
+                                        commenter_name,
+                                        video_title,
+                                        comment.text,
+                                        frontend_origin,
+                                        comment.video_id,
+                                        comment.timestamp_ms
+                                    );
+                                    notifications.push(NotificationTarget {
+                                        vk_id: vk_id_str.clone(),
+                                        message: msg,
+                                    });
+                                    notified_reply_user_id = Some(parent_comment.author_id.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // B. Notify participants
+            let mut participants = Vec::new();
+            if let Some(ref fid) = video.fighter_a_id {
+                participants.push(fid.clone());
+            }
+            if let Some(ref fid) = video.fighter_b_id {
+                participants.push(fid.clone());
+            }
+
+            for part_id in participants {
+                if part_id != comment.author_id && Some(&part_id) != notified_reply_user_id.as_ref() {
+                    use crate::db::schema::users;
+                    if let Ok(part_user) = users::table.filter(users::id.eq(&part_id)).first::<User>(&mut conn) {
+                        if let Some(ref vk_id_str) = part_user.vk_id {
+                            if !vk_id_str.trim().is_empty() {
+                                let msg = format!(
+                                    "💬 В вашем бою {} оставлен новый комментарий:\n\"{}\"\n\nСсылка: {}/#/player/{}?t={}",
+                                    video_title,
+                                    comment.text,
+                                    frontend_origin,
+                                    comment.video_id,
+                                    comment.timestamp_ms
+                                );
+                                notifications.push(NotificationTarget {
+                                    vk_id: vk_id_str.clone(),
+                                    message: msg,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok::<_, AppError>((comment, notifications))
     })
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
@@ -176,6 +286,15 @@ pub async fn post_comment(
     let _ = state
         .ws_hub
         .send(WsEvent::NewComment(to_ws_comment(&comment, &user)));
+
+    // Spawn VK notification tasks
+    let vk_notifier = state.vk_notifier.clone();
+    for target in notifications {
+        let notifier = vk_notifier.clone();
+        tokio::spawn(async move {
+            notifier.send_notification(&target.vk_id, &target.message).await;
+        });
+    }
 
     Ok((StatusCode::CREATED, Json(to_response(&comment, &user, 0, 0, None))))
 }

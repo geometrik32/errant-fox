@@ -66,6 +66,7 @@ pub struct UserMeDto {
     pub is_admin: bool,
     pub avatar_url: String,
     pub color: Option<String>,
+    pub vk_id: Option<String>,
 }
 
 fn to_user_dto(u: &User) -> UserDto {
@@ -87,6 +88,7 @@ fn to_me_dto(u: &User) -> UserMeDto {
         is_admin: u.is_admin,
         avatar_url: format!("/api/users/{}/avatar", u.id),
         color: u.color.clone(),
+        vk_id: u.vk_id.clone(),
     }
 }
 

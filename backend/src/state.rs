@@ -12,4 +12,6 @@ pub struct AppState {
     pub ws_hub: WsHub,
     pub presence: Arc<tokio::sync::RwLock<crate::services::ws::PresenceRegistry>>,
     pub server_port: u16,
+    pub frontend_origin: String,
+    pub vk_notifier: Arc<crate::services::vk::VkNotificationService>,
 }

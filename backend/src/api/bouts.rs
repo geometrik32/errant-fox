@@ -110,13 +110,14 @@ pub struct PatchBoutRequest {
 
 pub async fn post_bout(
     State(state): State<AppState>,
-    _user: CurrentUser,
+    CurrentUser(user): CurrentUser,
     Json(body): Json<CreateBoutRequest>,
 ) -> Result<(StatusCode, Json<BoutResponse>), AppError> {
     let db = state.db.clone();
+    let user_id = user.id.clone();
 
-    let bout = tokio::task::spawn_blocking(move || {
-        use crate::db::schema::{bouts, videos};
+    let (bout, notifications) = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::{bouts, videos, users};
         use diesel::dsl::max;
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
@@ -157,16 +158,95 @@ pub async fn post_bout(
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        bouts::table
+        let bout = bouts::table
             .filter(bouts::video_id.eq(&body.video_id))
             .order(bouts::id.desc())
             .first::<Bout>(&mut conn)
-            .map_err(|e| AppError::Internal(e.to_string()))
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let mut notifications = Vec::new();
+
+        let video = videos::table
+            .filter(videos::id.eq(&bout.video_id))
+            .first::<crate::db::models::Video>(&mut conn)
+            .optional()
+            .unwrap_or(None);
+
+        if let Some(video) = video {
+            let get_display_name = |v: &crate::db::models::Video, c: &mut diesel::SqliteConnection| -> String {
+                use crate::db::schema::users;
+                let date_str = v.date.format("%d.%m.%Y").to_string();
+                
+                let name_a = v.fighter_a_id.as_ref().and_then(|id_a| {
+                    users::table.filter(users::id.eq(id_a))
+                        .first::<crate::db::models::User>(c)
+                        .ok()
+                        .map(|u| u.display_name)
+                });
+                
+                let name_b = v.fighter_b_id.as_ref().and_then(|id_b| {
+                    users::table.filter(users::id.eq(id_b))
+                        .first::<crate::db::models::User>(c)
+                        .ok()
+                        .map(|u| u.display_name)
+                });
+                
+                match (name_a, name_b) {
+                    (Some(a), Some(b)) => format!("{} vs {} ({})", a, b, date_str),
+                    (Some(a), None) => format!("{} ({})", a, date_str),
+                    (None, Some(b)) => format!("{} ({})", b, date_str),
+                    (None, None) => format!("Без названия ({})", date_str),
+                }
+            };
+
+            let video_title = get_display_name(&video, &mut conn);
+
+            let mut participants = Vec::new();
+            if let Some(ref fid) = video.fighter_a_id {
+                participants.push(fid.clone());
+            }
+            if let Some(ref fid) = video.fighter_b_id {
+                participants.push(fid.clone());
+            }
+
+            for part_id in participants {
+                if part_id != user_id {
+                    if let Ok(part_user) = users::table.filter(users::id.eq(&part_id)).first::<User>(&mut conn) {
+                        if let Some(ref vk_id_str) = part_user.vk_id {
+                            if !vk_id_str.trim().is_empty() {
+                                notifications.push((part_id.clone(), vk_id_str.clone(), video_title.clone()));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok::<_, AppError>((bout, notifications))
     })
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
     let _ = state.ws_hub.send(WsEvent::UpdateBout(to_ws_bout(&bout)));
+
+    // Spawn VK notification tasks if not throttled
+    let vk_notifier = state.vk_notifier.clone();
+    let frontend_origin = state.frontend_origin.clone();
+    let video_id = bout.video_id.clone();
+    for (part_id, vk_id, video_title) in notifications {
+        if vk_notifier.check_outcome_throttle(&part_id, &video_id) {
+            let notifier = vk_notifier.clone();
+            let msg = format!(
+                "⚔️ В вашем бою {} добавлены новые сходы.\n\nСсылка: {}/#/player/{}",
+                video_title,
+                frontend_origin,
+                video_id
+            );
+            tokio::spawn(async move {
+                notifier.send_notification(&vk_id, &msg).await;
+            });
+        }
+    }
 
     Ok((StatusCode::CREATED, Json(to_response(&bout))))
 }
