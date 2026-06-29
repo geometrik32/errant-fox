@@ -60,6 +60,7 @@ pub fn router(state: AppState) -> Router {
             patch(bouts::patch_bout).delete(bouts::delete_bout),
         )
         .route("/api/bouts/{id}/download", get(bouts::download_bout))
+        .route("/api/bouts/{id}/history", get(bouts::get_bout_history))
         // Comments
         .route("/api/comments", post(comments::post_comment))
         .route("/api/comments/search", get(comments::search_comments))

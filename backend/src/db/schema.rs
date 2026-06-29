@@ -71,8 +71,19 @@ diesel::table! {
 diesel::table! {
     comment_reactions (comment_id, user_id) {
         comment_id -> Integer,
-        user_id    -> Text,
-        kind       -> Text,
+        user_id -> Text,
+        kind -> Text,
+    }
+}
+
+diesel::table! {
+    bout_history (id) {
+        id -> Integer,
+        bout_id -> Integer,
+        user_id -> Text,
+        action -> Text,
+        details -> Nullable<Text>,
+        created_at -> Timestamp,
     }
 }
 
@@ -83,6 +94,8 @@ diesel::joinable!(comments          -> users    (author_id));
 diesel::joinable!(comments          -> bouts    (bout_id));
 diesel::joinable!(comment_reactions -> comments (comment_id));
 diesel::joinable!(comment_reactions -> users    (user_id));
+diesel::joinable!(bout_history      -> bouts    (bout_id));
+diesel::joinable!(bout_history      -> users    (user_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     users,
@@ -91,4 +104,5 @@ diesel::allow_tables_to_appear_in_same_query!(
     bouts,
     comments,
     comment_reactions,
+    bout_history,
 );
