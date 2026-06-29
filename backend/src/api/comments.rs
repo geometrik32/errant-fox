@@ -260,8 +260,9 @@ pub async fn post_comment(
                         if let Some(ref vk_id_str) = part_user.vk_id {
                             if !vk_id_str.trim().is_empty() {
                                 let msg = format!(
-                                    "💬 В вашем бою {} оставлен новый комментарий:\n\"{}\"\n\nСсылка: {}/#/player/{}?t={}",
+                                    "💬 В вашем бою {} пользователь {} оставил новый комментарий:\n\"{}\"\n\nСсылка: {}/#/player/{}?t={}",
                                     video_title,
+                                    commenter_name,
                                     comment.text,
                                     frontend_origin,
                                     comment.video_id,
