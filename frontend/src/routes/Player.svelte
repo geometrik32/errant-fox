@@ -54,6 +54,28 @@
   let onlineUsers = $state<any[]>([]);
   let myWsId = $state<string | null>(null);
 
+  let sharedBout = $derived(
+    sharedBoutId && video
+      ? video.bouts.find(b => b.id === sharedBoutId)
+      : null
+  );
+
+  let boutStart = $derived(sharedBout ? sharedBout.time_start_ms / 1000 : 0);
+  let boutEnd = $derived(sharedBout ? sharedBout.time_end_ms / 1000 : 0);
+  let timelineDuration = $derived(sharedBout ? boutEnd - boutStart : duration);
+  let timelineCurrentTime = $derived(sharedBout ? Math.max(0, Math.min(timelineDuration, currentTime - boutStart)) : currentTime);
+
+  let timelineComments = $derived(
+    sharedBout
+      ? liveComments
+          .filter(c => c.timestamp_ms >= sharedBout.time_start_ms && c.timestamp_ms <= sharedBout.time_end_ms)
+          .map(c => ({
+            ...c,
+            timestamp_ms: c.timestamp_ms - sharedBout.time_start_ms
+          }))
+      : liveComments
+  );
+
   let activeViewers = $derived.by(() => {
     const currentViewers = onlineUsers.filter(u => u.watching === videoId);
     const seen = new Set<string>();
@@ -105,7 +127,7 @@
               ? await getSharedVideo(videoId, shareToken)
               : await getVideo(videoId);
             video = reloaded;
-            liveBouts = [...reloaded.bouts];
+            liveBouts = sharedBoutId ? reloaded.bouts.filter(b => b.id === sharedBoutId) : [...reloaded.bouts];
             liveComments = [...reloaded.comments];
           }
         } else if (msg.type === 'presence_update') {
@@ -129,7 +151,7 @@
       video = shareToken ? await getSharedVideo(videoId, shareToken) : await getVideo(videoId);
       if (video.duration_ms) duration = video.duration_ms / 1000;
       fps = video.fps ?? null;
-      liveBouts = [...video.bouts];
+      liveBouts = sharedBoutId ? video.bouts.filter(b => b.id === sharedBoutId) : [...video.bouts];
       liveComments = [...video.comments];
       connectWS();
     } catch (e) {
@@ -191,7 +213,7 @@
       showChat = !showChat;
     } else if (e.code === 'KeyD') {
       e.preventDefault();
-      player?.toggleLoop();
+      if (!shareToken) player?.toggleLoop();
     }
   }
 </script>
@@ -278,10 +300,10 @@
     <!-- Bottom: Timeline -->
     <div class="timeline-row">
       <Timeline
-        {currentTime}
-        {duration}
-        bouts={liveBouts}
-        comments={liveComments}
+        currentTime={sharedBout ? timelineCurrentTime : currentTime}
+        duration={sharedBout ? timelineDuration : duration}
+        bouts={sharedBout ? [sharedBout] : liveBouts}
+        comments={sharedBout ? timelineComments : liveComments}
         fighterA={video.fighter_a}
         fighterB={video.fighter_b}
         {playing}
@@ -291,7 +313,10 @@
         {fps}
         {startTime}
         {finishing}
-        onseek={(ms) => player?.seekTo(ms)}
+        onseek={(ms) => {
+          const targetMs = sharedBout ? ms + sharedBout.time_start_ms : ms;
+          player?.seekTo(targetMs);
+        }}
         onloop={({ start, end }) => { player?.seekTo(start); player?.setLoop(start, end); }}
         onboutclick={(id) => { judgingPanel?.expandBout(id); }}
         oncommentclick={(id) => { highlightedCommentId = id; if (!showChat) showChat = true; }}

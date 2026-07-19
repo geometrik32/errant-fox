@@ -45,10 +45,14 @@
 
   // ── Local bouts state ────────────────────────────────────────────────────
 
-  let bouts = $state<Bout[]>([...untrack(() => video.bouts)]);
+  let bouts = $state<Bout[]>([]);
 
   $effect(() => {
-    bouts = [...video.bouts];
+    if (sharedBoutId !== null) {
+      bouts = video.bouts.filter(b => b.id === sharedBoutId);
+    } else {
+      bouts = [...video.bouts];
+    }
   });
 
   // ── Fighter assignment ───────────────────────────────────────────────────
@@ -232,6 +236,10 @@
     if (msg.type === 'update_bout') {
       const { type: _t, video_id: _v, ...fields } = msg;
       const id = fields.id as number;
+
+      if (sharedBoutId !== null && id !== sharedBoutId) {
+        return;
+      }
 
       if (fields.deleted) {
         bouts = bouts.filter(b => b.id !== id);

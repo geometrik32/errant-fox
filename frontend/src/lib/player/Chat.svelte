@@ -32,6 +32,15 @@
   const oncommentschange = $derived(props.oncommentschange);
 
   let comments = $state<Comment[]>([...untrack(() => initComments)]);
+  $effect(() => {
+    comments = [...initComments];
+  });
+
+  let sharedBout = $derived(
+    sharedBoutId
+      ? bouts.find(b => b.id === sharedBoutId)
+      : null
+  );
   let text = $state('');
   let replyTo = $state<Comment | null>(null);
   let sending = $state(false);
@@ -55,7 +64,11 @@
 
   let sortedComments = $derived.by(() => {
     let filtered = comments;
-    if (filterByActiveBout) {
+    if (sharedBout) {
+      filtered = comments.filter(c => {
+        return c.timestamp_ms >= sharedBout.time_start_ms && c.timestamp_ms <= sharedBout.time_end_ms;
+      });
+    } else if (filterByActiveBout) {
       if (currentBout) {
         filtered = comments.filter(c => {
           return c.timestamp_ms >= currentBout.time_start_ms && c.timestamp_ms <= currentBout.time_end_ms;
@@ -112,20 +125,24 @@
     sending = true;
     try {
       let created: Comment;
+      let commentTimeMs = replyTo ? replyTo.timestamp_ms : Math.round(currentTime * 1000);
+      if (sharedBout) {
+        commentTimeMs = Math.max(sharedBout.time_start_ms, Math.min(sharedBout.time_end_ms, commentTimeMs));
+      }
       if (shareToken || !$currentUser) {
         created = await createSharedComment({
           videoId,
           token: shareToken || localStorage.getItem('ef_token') || '',
           nickname: guestNickname || 'Гость',
           text: t,
-          timestamp_ms: replyTo ? replyTo.timestamp_ms : Math.round(currentTime * 1000),
+          timestamp_ms: commentTimeMs,
           reply_to_id: replyTo?.id ?? null,
           bout_id: sharedBoutId,
         });
       } else {
         created = await createComment({
           video_id: videoId,
-          timestamp_ms: replyTo ? replyTo.timestamp_ms : Math.round(currentTime * 1000),
+          timestamp_ms: commentTimeMs,
           text: t,
           reply_to_id: replyTo?.id ?? null,
         });
@@ -247,22 +264,24 @@
   <!-- Chat Header -->
   <div class="chat-header">
     <span class="chat-title">Комментарии</span>
-    <label class="filter-switch" title="Показывать только комментарии внутри текущего схода">
-      <div class="switch-container">
-        <input 
-          type="checkbox" 
-          bind:checked={filterByActiveBout} 
-        />
-        <span class="slider"></span>
-      </div>
-      <span class="switch-label">
-        {#if currentBoutIndex !== -1}
-          По сходу №{currentBoutIndex + 1}
-        {:else}
-          По сходу
-        {/if}
-      </span>
-    </label>
+    {#if !sharedBoutId}
+      <label class="filter-switch" title="Показывать только комментарии внутри текущего схода">
+        <div class="switch-container">
+          <input 
+            type="checkbox" 
+            bind:checked={filterByActiveBout} 
+          />
+          <span class="slider"></span>
+        </div>
+        <span class="switch-label">
+          {#if currentBoutIndex !== -1}
+            По сходу №{currentBoutIndex + 1}
+          {:else}
+            По сходу
+          {/if}
+        </span>
+      </label>
+    {/if}
   </div>
 
   <!-- Message list -->
@@ -318,8 +337,10 @@
             title="Не нравится"
           >👎 {#if c.dislikes > 0}<span class="react-count">{c.dislikes}</span>{/if}</button>
           <button class="reply-link" onclick={() => { replyTo = c; }}>Ответить</button>
-          {#if $currentUser?.id === c.author.id}
-            <button class="edit-link" onclick={() => startEdit(c)}>Ред.</button>
+          {#if $currentUser?.id === c.author.id || ($currentUser && c.author.id === 'guest')}
+            {#if $currentUser?.id === c.author.id}
+              <button class="edit-link" onclick={() => startEdit(c)}>Ред.</button>
+            {/if}
             <button class="del-link" onclick={() => handleDelete(c.id)} title="Удалить">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>
