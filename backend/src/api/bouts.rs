@@ -151,14 +151,19 @@ pub async fn post_bout(
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
 
-        let exists: bool = diesel::select(diesel::dsl::exists(
-            videos::table.filter(videos::id.eq(&body.video_id)),
-        ))
-        .get_result(&mut conn)
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+        let video_rec = videos::table
+            .filter(videos::id.eq(&body.video_id))
+            .first::<crate::db::models::Video>(&mut conn)
+            .optional()
+            .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        if !exists {
-            return Err(AppError::NotFound);
+        let video_rec = match video_rec {
+            Some(v) => v,
+            None => return Err(AppError::NotFound),
+        };
+
+        if video_rec.is_analyzing {
+            return Err(AppError::BadRequest("Видео в данный момент обрабатывается ИИ. Создание сходов недоступно до завершения анализа.".to_string()));
         }
 
         let max_order: Option<i32> = bouts::table
