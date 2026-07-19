@@ -52,6 +52,12 @@
     imgError = true;
   }
 
+  $effect(() => {
+    video.is_analyzing;
+    video.preview_url;
+    imgError = false;
+  });
+
   let previewSrc = $derived(previewVersion ? `${video.preview_url}?v=${previewVersion}` : video.preview_url);
 
   function handleContextMenu(e: MouseEvent) {

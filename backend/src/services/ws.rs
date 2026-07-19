@@ -118,6 +118,10 @@ pub enum WsEvent {
         is_ai_labeled: bool,
         is_analyzing: bool,
     },
+    UpdateVideoPreview {
+        video_id: String,
+        preview_url: String,
+    },
 }
 
 impl WsEvent {
@@ -125,6 +129,7 @@ impl WsEvent {
         matches!(
             self,
             WsEvent::UpdateVideoAiLabeled { .. }
+                | WsEvent::UpdateVideoPreview { .. }
                 | WsEvent::UpdateVideoScore { .. }
                 | WsEvent::UpdateVideoFighters { .. }
                 | WsEvent::NewVideo { .. }
@@ -142,6 +147,7 @@ impl WsEvent {
             WsEvent::UpdateVideoScore { video_id, .. } => Some(video_id),
             WsEvent::UpdateVideoFighters { video_id, .. } => Some(video_id),
             WsEvent::UpdateVideoAiLabeled { video_id, .. } => Some(video_id),
+            WsEvent::UpdateVideoPreview { video_id, .. } => Some(video_id),
             WsEvent::NewVideo { .. } => None,
             WsEvent::VideoRemoved { .. } => None,
             WsEvent::PresenceUpdate { .. } => None,

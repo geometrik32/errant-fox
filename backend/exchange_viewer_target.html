@@ -405,6 +405,10 @@
       border: 1px solid var(--stop-color);
       box-shadow: 0 0 5px rgba(255, 71, 87, 0.4);
     }
+    .word-btn.is-trigger-start {
+      border: 1px solid #10b981;
+      box-shadow: 0 0 5px rgba(16, 185, 129, 0.4);
+    }
     .word-btn.is-trigger-opt {
       border: 1px solid var(--peak-color);
       box-shadow: 0 0 5px rgba(255, 165, 2, 0.4);
@@ -819,8 +823,9 @@
       
       const wordStr = w.word || '';
       const txt = wordStr.replace(/[.,\/#!$%^&*;:{}=\-_`~()?]/g,"").toLowerCase().trim();
-      if (txt === 'стоп') btn.className += ' is-trigger';
-      if (txt === 'оп' || txt === 'топ' || txt === 'гоп' || txt === 'хоп') btn.className += ' is-trigger-opt';
+      if (/^(стоп|стопп|стопе|стопи|топ|топп|терпом|время|тайм|альт|хальт|halt|stop)$/.test(txt)) btn.className += ' is-trigger';
+      else if (/^(бой|бои|бойте|боите|бойтэ|бойтес|вход|входи|начали|начал)$/.test(txt)) btn.className += ' is-trigger-start';
+      else if (/^(оп|топ|гоп|хоп)$/.test(txt)) btn.className += ' is-trigger-opt';
       
       const startSec = typeof w.start === 'number' ? w.start : parseFloat(w.start || 0);
       const endSec = typeof w.end === 'number' ? w.end : parseFloat(w.end || 0);
