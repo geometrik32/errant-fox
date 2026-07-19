@@ -1444,7 +1444,7 @@ pub async fn ai_label_video(
                     "audio_url": download_url,
                     "video_id": video_id_worker
                 }))
-                .timeout(std::time::Duration::from_secs(600))
+                .timeout(std::time::Duration::from_secs(3600))
                 .send()
                 .await
                 .map_err(|e| format!("Whisper service unreachable: {}", e))?;

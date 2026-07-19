@@ -145,55 +145,69 @@ import asyncio
 analyze_lock = asyncio.Lock()
 
 
-def _process_analyze_sync(body: AnalyzeRequest):
-    try:
-        # 1. Download audio to a temp file
-        with tempfile.TemporaryDirectory() as tmpdir:
-            raw_path = os.path.join(tmpdir, "raw_audio")
-            wav_path = os.path.join(tmpdir, "audio.wav")
+def _download_and_convert_audio(audio_url: str, tmpdir: str) -> str:
+    raw_path = os.path.join(tmpdir, "raw_audio")
+    wav_path = os.path.join(tmpdir, "audio.wav")
 
-            print("  Downloading audio...", flush=True)
-            with requests.get(body.audio_url, stream=True, timeout=120) as r:
-                r.raise_for_status()
-                with open(raw_path, "wb") as f:
-                    for chunk in r.iter_content(chunk_size=65536):
-                        f.write(chunk)
+    print(f"  Downloading audio immediately from URL...", flush=True)
+    with requests.get(audio_url, stream=True, timeout=120) as r:
+        r.raise_for_status()
+        with open(raw_path, "wb") as f:
+            for chunk in r.iter_content(chunk_size=65536):
+                f.write(chunk)
 
-            # 2. Convert to 16 kHz mono WAV using ffmpeg
-            print("  Converting to 16kHz mono WAV...", flush=True)
-            result = subprocess.run(
-                [
-                    "ffmpeg", "-y",
-                    "-i", raw_path,
-                    "-ar", "16000",
-                    "-ac", "1",
-                    "-f", "wav",
-                    wav_path,
-                ],
-                capture_output=True,
-                text=True,
-            )
-            if result.returncode != 0:
-                msg = result.stderr[-2000:] if result.stderr else "ffmpeg failed"
-                return {"error": f"ffmpeg error: {msg}"}
+    print("  Converting to 16kHz mono WAV...", flush=True)
+    result = subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-i", raw_path,
+            "-ar", "16000",
+            "-ac", "1",
+            "-f", "wav",
+            wav_path,
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        msg = result.stderr[-2000:] if result.stderr else "ffmpeg failed"
+        raise RuntimeError(f"ffmpeg error: {msg}")
 
-            # 3. Run pure simple detection
-            print("  Running Whisper detection...", flush=True)
-            exchanges, all_words = _detect_exchanges(wav_path)
-
-        return {"video_id": body.video_id, "exchanges": exchanges, "words": all_words}
-
-    except Exception as exc:
-        traceback.print_exc(file=sys.stderr)
-        return {"error": str(exc)}
+    return wav_path
 
 
 @app.post("/analyze")
 async def analyze(body: AnalyzeRequest):
-    print(f"[analyze] video_id={body.video_id} queued in request lock.", flush=True)
-    async with analyze_lock:
-        print(f"[analyze] video_id={body.video_id} processing started.", flush=True)
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(None, _process_analyze_sync, body)
-        print(f"[analyze] video_id={body.video_id} processing finished.", flush=True)
-        return result
+    print(f"[analyze] video_id={body.video_id} request received.", flush=True)
+    loop = asyncio.get_running_loop()
+
+    # 1. Download and convert audio IMMEDIATELY so Seafile temporary URL never expires
+    tmpdir = tempfile.mkdtemp()
+    try:
+        wav_path = await loop.run_in_executor(None, _download_and_convert_audio, body.audio_url, tmpdir)
+    except Exception as exc:
+        print(f"[analyze] video_id={body.video_id} download failed: {exc}", flush=True)
+        try:
+            import shutil
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        except Exception:
+            pass
+        return {"error": f"Audio download failed: {exc}"}
+
+    # 2. Acquire GPU lock and run Whisper detection sequentially
+    try:
+        print(f"[analyze] video_id={body.video_id} waiting for GPU lock...", flush=True)
+        async with analyze_lock:
+            print(f"[analyze] video_id={body.video_id} GPU processing started.", flush=True)
+            exchanges, all_words = await loop.run_in_executor(None, _detect_exchanges, wav_path)
+            print(f"[analyze] video_id={body.video_id} GPU processing finished.", flush=True)
+            return {"video_id": body.video_id, "exchanges": exchanges, "words": all_words}
+    except Exception as exc:
+        traceback.print_exc(file=sys.stderr)
+        return {"error": str(exc)}
+    finally:
+        try:
+            import shutil
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        except Exception:
+            pass
