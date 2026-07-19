@@ -7,6 +7,7 @@
   import { deleteBout } from '../api/bouts';
   import HitZonePicker from './HitZonePicker.svelte';
   import BoutHistoryModal from './BoutHistoryModal.svelte';
+  import ShareModal from '../ui/ShareModal.svelte';
 
   type ResultType = 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | 'disqualification' | 'afterblow';
 
@@ -16,6 +17,9 @@
     fighters: [VideoFighter | null, VideoFighter | null];
     expanded: boolean;
     currentTime: number;
+    readonly?: boolean;
+    shareToken?: string;
+    videoId?: string;
     onexpand: () => void;
     oncollapse: () => void;
     onmarkdirty: (dirty: boolean) => void;
@@ -23,7 +27,23 @@
     ondelete?: () => void;
   }
 
-  let { bout, boutIndex, fighters, expanded, currentTime, onexpand, oncollapse, onmarkdirty, onupdate, ondelete }: Props = $props();
+  let {
+    bout,
+    boutIndex,
+    fighters,
+    expanded,
+    currentTime,
+    readonly = false,
+    shareToken = '',
+    videoId = '',
+    onexpand,
+    oncollapse,
+    onmarkdirty,
+    onupdate,
+    ondelete,
+  }: Props = $props();
+
+  let showShare = $state(false);
 
   let winnerColor = $derived(
     bout.score_a > bout.score_b
@@ -175,7 +195,10 @@
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
-      const response = await fetch(`/api/bouts/${bout.id}/download`, { headers });
+      const downloadUrl = readonly && shareToken
+        ? `/api/shared/bouts/${bout.id}/download?token=${encodeURIComponent(shareToken)}`
+        : `/api/bouts/${bout.id}/download`;
+      const response = await fetch(downloadUrl, { headers });
       if (!response.ok) {
         const text = await response.text().catch(() => '');
         throw new Error(text || `Ошибка сервера: ${response.status}`);
@@ -299,6 +322,7 @@
   <!-- ── Collapsed ── -->
   <button
     class="card card--collapsed"
+    class:is-ai={bout.is_ai}
     style={winnerColor ? `border-left: 3px solid ${winnerColor}; background: color-mix(in srgb, ${winnerColor} 10%, var(--surface-hover))` : ''}
     onclick={onexpand}
     oncontextmenu={(e) => { e.preventDefault(); showHistory = true; }}
@@ -313,7 +337,7 @@
 
 {:else}
   <!-- ── Expanded ── -->
-  <div class="card card--expanded">
+  <div class="card card--expanded" class:is-ai={bout.is_ai}>
 
     <!-- Header (click to collapse) -->
     <!-- svelte-ignore a11y_interactive_supports_focus -->
@@ -336,12 +360,12 @@
 
     <!-- Time range row -->
     <div class="time-row">
-      <button class="time-cap-btn" onclick={() => { timeStartMs = Math.round(currentTime * 1000); }} aria-label="Захватить начало схода">
+      <button class="time-cap-btn" onclick={() => { timeStartMs = Math.round(currentTime * 1000); }} disabled={readonly} aria-label="Захватить начало схода">
         <span class="time-cap-label">Начало</span>
         <span class="time-cap-value">{fmtMs(timeStartMs)}</span>
       </button>
       <div class="col-divider"></div>
-      <button class="time-cap-btn" onclick={() => { timeEndMs = Math.round(currentTime * 1000); }} aria-label="Захватить конец схода">
+      <button class="time-cap-btn" onclick={() => { timeEndMs = Math.round(currentTime * 1000); }} disabled={readonly} aria-label="Захватить конец схода">
         <span class="time-cap-label">Конец</span>
         <span class="time-cap-value">{fmtMs(timeEndMs)}</span>
       </button>
@@ -355,9 +379,9 @@
         <div class="fighter-name">{fighters[0]?.display_name ?? 'Боец A'}</div>
 
         <div class="score-row">
-          <button class="adj" onclick={() => { scoreA = Math.max(0, scoreA - 1); }} aria-label="−">−</button>
-          <input class="score-inp" type="number" min="0" bind:value={scoreA} aria-label="Очки A" />
-          <button class="adj" onclick={() => { scoreA += 1; }} aria-label="+">+</button>
+          <button class="adj" onclick={() => { scoreA = Math.max(0, scoreA - 1); }} disabled={readonly} aria-label="−">−</button>
+          <input class="score-inp" type="number" min="0" bind:value={scoreA} disabled={readonly} aria-label="Очки A" />
+          <button class="adj" onclick={() => { scoreA += 1; }} disabled={readonly} aria-label="+">+</button>
         </div>
 
         <div class="field">
@@ -366,7 +390,7 @@
             onmouseenter={() => startTooltip('a')}
             onmouseleave={stopTooltip}
           >
-            <select class="field-sel" bind:value={techAId}>
+            <select class="field-sel" bind:value={techAId} disabled={readonly}>
               <option value={null}>—</option>
               {#each $techniques as t (t.id)}
                 <option value={t.id}>{t.name}</option>
@@ -376,12 +400,12 @@
         </div>
 
         <div class="field">
-          <HitZonePicker value={zoneA} onchange={(z) => { zoneA = z; }} />
+          <HitZonePicker value={zoneA} readonly={readonly} onchange={(z) => { zoneA = z; }} />
         </div>
 
         <div class="field">
           <div class="res-wrap" bind:this={resWrapA}>
-            <button class="res-btn" onclick={() => openResDropdown('a')}>
+            <button class="res-btn" onclick={() => openResDropdown('a')} disabled={readonly}>
               {resLabel(resA)}
               <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><path d="M1 3l4 4 4-4"/></svg>
             </button>
@@ -396,9 +420,9 @@
         <div class="fighter-name">{fighters[1]?.display_name ?? 'Боец B'}</div>
 
         <div class="score-row">
-          <button class="adj" onclick={() => { scoreB = Math.max(0, scoreB - 1); }} aria-label="−">−</button>
-          <input class="score-inp" type="number" min="0" bind:value={scoreB} aria-label="Очки B" />
-          <button class="adj" onclick={() => { scoreB += 1; }} aria-label="+">+</button>
+          <button class="adj" onclick={() => { scoreB = Math.max(0, scoreB - 1); }} disabled={readonly} aria-label="−">−</button>
+          <input class="score-inp" type="number" min="0" bind:value={scoreB} disabled={readonly} aria-label="Очки B" />
+          <button class="adj" onclick={() => { scoreB += 1; }} disabled={readonly} aria-label="+">+</button>
         </div>
 
         <div class="field">
@@ -407,7 +431,7 @@
             onmouseenter={() => startTooltip('b')}
             onmouseleave={stopTooltip}
           >
-            <select class="field-sel" bind:value={techBId}>
+            <select class="field-sel" bind:value={techBId} disabled={readonly}>
               <option value={null}>—</option>
               {#each $techniques as t (t.id)}
                 <option value={t.id}>{t.name}</option>
@@ -417,12 +441,12 @@
         </div>
 
         <div class="field">
-          <HitZonePicker value={zoneB} onchange={(z) => { zoneB = z; }} />
+          <HitZonePicker value={zoneB} readonly={readonly} onchange={(z) => { zoneB = z; }} />
         </div>
 
         <div class="field">
           <div class="res-wrap" bind:this={resWrapB}>
-            <button class="res-btn" onclick={() => openResDropdown('b')}>
+            <button class="res-btn" onclick={() => openResDropdown('b')} disabled={readonly}>
               {resLabel(resB)}
               <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><path d="M1 3l4 4 4-4"/></svg>
             </button>
@@ -469,33 +493,77 @@
     {/if}
 
     <div class="card-actions">
-      <button class="btn btn-sm {dirty ? 'btn-primary' : 'btn-outline'}" onclick={handleSave} disabled={saving || !dirty}>
-        {saving ? 'Сохранение…' : 'Сохранить'}
-      </button>
-      <button class="btn btn-outline btn-sm" onclick={handleCollapse}>Свернуть</button>
-      <button
-        class="btn-download"
-        onclick={handleDownload}
-        disabled={downloading}
-        aria-label="Скачать сход"
-        title="Скачать фрагмент видео"
-      >
-        {#if downloading}
-          <span class="spinner-sm"></span>
-        {:else}
+      {#if !readonly}
+        <button class="btn btn-sm {dirty ? 'btn-primary' : 'btn-outline'}" onclick={handleSave} disabled={saving || !dirty}>
+          {saving ? 'Сохранение…' : 'Сохранить'}
+        </button>
+        <button class="btn btn-outline btn-sm" onclick={handleCollapse}>Свернуть</button>
+        <button
+          class="btn-download"
+          onclick={handleDownload}
+          disabled={downloading}
+          aria-label="Скачать сход"
+          title="Скачать фрагмент видео"
+        >
+          {#if downloading}
+            <span class="spinner-sm"></span>
+          {:else}
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+          {/if}
+        </button>
+        <button
+          class="btn-share"
+          onclick={(e) => { e.stopPropagation(); showShare = true; }}
+          aria-label="Поделиться сходом"
+          title="Поделиться фрагментом видео"
+        >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="7 10 12 15 17 10"/>
-            <line x1="12" y1="15" x2="12" y2="3"/>
+            <circle cx="18" cy="5" r="3" />
+            <circle cx="6" cy="12" r="3" />
+            <circle cx="18" cy="19" r="3" />
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
           </svg>
-        {/if}
-      </button>
-      <button class="btn-delete" onclick={handleDelete} disabled={deleting} aria-label="Удалить сход">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-          <polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14H6L5,6"/><path d="M10,11v6"/><path d="M14,11v6"/><path d="M9,6V4h6v2"/>
-        </svg>
-      </button>
+        </button>
+        <button class="btn-delete" onclick={handleDelete} disabled={deleting} aria-label="Удалить сход">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14H6L5,6"/><path d="M10,11v6"/><path d="M14,11v6"/><path d="M9,6V4h6v2"/>
+          </svg>
+        </button>
+      {:else}
+        <button class="btn btn-outline btn-sm" onclick={handleCollapse}>Свернуть</button>
+        <button
+          class="btn-download"
+          onclick={handleDownload}
+          disabled={downloading}
+          aria-label="Скачать сход"
+          title="Скачать фрагмент видео"
+        >
+          {#if downloading}
+            <span class="spinner-sm"></span>
+          {:else}
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+          {/if}
+        </button>
+      {/if}
     </div>
+
+    {#if showShare}
+      <ShareModal
+        {videoId}
+        boutId={bout.id}
+        initialTimeMs={bout.time_start_ms}
+        onclose={() => showShare = false}
+      />
+    {/if}
 
   </div>
 {/if}
@@ -927,6 +995,34 @@
     cursor: default;
   }
 
+  .btn-share {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    margin-left: 8px;
+    border-radius: var(--radius-sm);
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    color: var(--accent-green);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+  }
+
+  .btn-share:hover:not(:disabled) {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: rgba(16, 185, 129, 0.4);
+    color: #34d399;
+  }
+
+  .btn-share:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
   .spinner-sm {
     width: 12px;
     height: 12px;
@@ -938,5 +1034,10 @@
 
   @keyframes spin {
     to { transform: rotate(360deg); }
+  }
+
+  :global(.card.is-ai) {
+    border: 1.5px solid #7c3aed !important;
+    box-shadow: 0 0 12px rgba(124, 58, 237, 0.45) !important;
   }
 </style>

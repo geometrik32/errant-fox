@@ -25,6 +25,43 @@ async fn main() {
 
     let db_pool = db::init_pool(&config.database_url);
 
+    // Reset any stuck is_analyzing flags in the database on startup, and ensure system AI user exists
+    let db_pool_clone = db_pool.clone();
+    let _ = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::{videos, users};
+        use crate::db::models::NewUser;
+        use diesel::prelude::*;
+        if let Ok(mut conn) = db_pool_clone.get() {
+            // 1. Reset analyzing state
+            let _ = diesel::update(videos::table)
+                .set(videos::is_analyzing.eq(false))
+                .execute(&mut conn);
+
+            // 2. Ensure AI user exists
+            let ai_exists = users::table
+                .filter(users::id.eq("ai"))
+                .first::<crate::db::models::User>(&mut conn)
+                .is_ok();
+
+            if !ai_exists {
+                let new_ai_user = NewUser {
+                    id: "ai".to_string(),
+                    username: "ai".to_string(),
+                    display_name: "Нейросеть".to_string(),
+                    password_hash: "".to_string(),
+                    is_admin: false,
+                    avatar_path: None,
+                    color: Some("#a855f7".to_string()),
+                    vk_id: None,
+                    role: "user".to_string(),
+                };
+                let _ = diesel::insert_into(users::table)
+                    .values(&new_ai_user)
+                    .execute(&mut conn);
+            }
+        }
+    });
+
     let (ws_tx, _ws_rx) = tokio::sync::broadcast::channel::<services::ws::WsEvent>(256);
 
     tokio::spawn(services::sync::run_sync(
@@ -45,6 +82,8 @@ async fn main() {
         server_port: config.server_port,
         frontend_url: config.frontend_url.clone(),
         vk_notifier: std::sync::Arc::new(services::vk::VkNotificationService::new(config.vk_group_token.clone())),
+        vk_app_id: config.vk_app_id.clone(),
+        vk_app_secret: config.vk_app_secret.clone(),
     };
 
     let origin = config

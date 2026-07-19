@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { token, currentUser } from '../../stores';
+  import { token, currentUser, gallerySidebarOpen } from '../../stores';
   import { resolveColor } from '../api/types';
   import CreateUserModal from '../admin/CreateUserModal.svelte';
   import TechniquesModal from '../admin/TechniquesModal.svelte';
   import ProfileModal from './ProfileModal.svelte';
   import SearchPanel from './SearchPanel.svelte';
+  import SyncModal from './SyncModal.svelte';
 
   interface Props {
     hash: string;
@@ -16,9 +17,14 @@
   let showCreateUser = $state(false);
   let showTechniques = $state(false);
   let showProfile = $state(false);
+  let showSyncDatabase = $state(false);
 
   let activeNav = $derived(
     hash === '#/stats' ? 'stats' : hash === '#/search' ? 'search' : 'gallery'
+  );
+
+  let isGalleryRoute = $derived(
+    hash === '#/gallery' || hash === '' || hash === '#'
   );
 
   let showSearch = $state(false);
@@ -54,16 +60,7 @@
     }
   }
 
-  function toggleTheme() {
-    const currentTheme = document.documentElement.getAttribute('data-theme');
-    if (currentTheme === 'dark') {
-      document.documentElement.removeAttribute('data-theme');
-      localStorage.setItem('theme', 'light');
-    } else {
-      document.documentElement.setAttribute('data-theme', 'dark');
-      localStorage.setItem('theme', 'dark');
-    }
-  }
+
 
   $effect(() => {
     if (dropdownOpen) {
@@ -82,30 +79,47 @@
     <span>Errant Fox</span>
   </button>
 
+  <!-- Filter toggle (gallery only) -->
+  {#if isGalleryRoute}
+    <button
+      class="filter-toggle"
+      class:active={$gallerySidebarOpen}
+      onclick={() => gallerySidebarOpen.update(v => !v)}
+      aria-label="Фильтры"
+      title={$gallerySidebarOpen ? 'Скрыть фильтры' : 'Показать фильтры'}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+      </svg>
+    </button>
+  {/if}
+
   <!-- Center: nav (absolutely centered) -->
-  <nav class="nav">
-    <button
-      class="nav-btn"
-      class:active={activeNav === 'gallery'}
-      onclick={() => { navigate('#/gallery'); showSearch = false; }}
-    >
-      Видео
-    </button>
-    <button
-      class="nav-btn"
-      class:active={activeNav === 'stats'}
-      onclick={() => { navigate('#/stats'); showSearch = false; }}
-    >
-      Бойцы
-    </button>
-    <button
-      class="nav-btn"
-      class:active={activeNav === 'search'}
-      onclick={toggleSearch}
-    >
-      Поиск
-    </button>
-  </nav>
+  {#if $currentUser?.role !== 'guest'}
+    <nav class="nav">
+      <button
+        class="nav-btn"
+        class:active={activeNav === 'gallery'}
+        onclick={() => { navigate('#/gallery'); showSearch = false; }}
+      >
+        Видео
+      </button>
+      <button
+        class="nav-btn"
+        class:active={activeNav === 'stats'}
+        onclick={() => { navigate('#/stats'); showSearch = false; }}
+      >
+        Бойцы
+      </button>
+      <button
+        class="nav-btn"
+        class:active={activeNav === 'search'}
+        onclick={toggleSearch}
+      >
+        Поиск
+      </button>
+    </nav>
+  {/if}
 
   <!-- Right: user menu -->
   <div class="user-menu">
@@ -130,13 +144,18 @@
           Профиль
         </button>
 
-        <div class="dropdown-divider"></div>
-        <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showTechniques = true; }}>
-          Техники
-        </button>
+        {#if $currentUser?.role !== 'guest'}
+          <div class="dropdown-divider"></div>
+          <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showTechniques = true; }}>
+            Техники
+          </button>
+        {/if}
         {#if $currentUser?.is_admin}
           <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showCreateUser = true; }}>
-            Создать бойца
+            Пользователи
+          </button>
+          <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showSyncDatabase = true; }}>
+            Актуализировать базу
           </button>
         {/if}
 
@@ -165,12 +184,14 @@
   <TechniquesModal onclose={() => { showTechniques = false; }} />
 {/if}
 
+{#if showSyncDatabase}
+  <SyncModal onclose={() => { showSyncDatabase = false; }} />
+{/if}
+
 <style>
   .header {
     height: 64px;
     background: var(--surface);
-    backdrop-filter: blur(var(--blur-amount));
-    -webkit-backdrop-filter: blur(var(--blur-amount));
     border-bottom: 1px solid var(--border-color);
     display: flex;
     align-items: center;
@@ -243,6 +264,35 @@
     width: 32px;
     height: 32px;
     object-fit: contain;
+  }
+
+  /* Filter toggle button */
+  .filter-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 50%;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition);
+    flex-shrink: 0;
+    margin-left: 8px;
+  }
+
+  .filter-toggle:hover {
+    color: var(--text-primary);
+    background: var(--surface-hover);
+    border-color: var(--border-color);
+  }
+
+  .filter-toggle.active {
+    color: var(--accent-yellow);
+    background: rgba(245, 158, 11, 0.08);
+    border-color: rgba(245, 158, 11, 0.25);
   }
 
   /* User menu */
@@ -365,6 +415,9 @@
     .nav-btn {
       padding: 6px 12px;
       font-size: 0.85rem;
+    }
+    .user-menu {
+      margin-left: 0;
     }
   }
 </style>

@@ -89,10 +89,8 @@
 <style>
   .recent-opponents {
     background: var(--surface);
-    backdrop-filter: blur(var(--blur-amount));
-    -webkit-backdrop-filter: blur(var(--blur-amount));
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-2xl);
+    border-radius: var(--radius-lg);
     padding: 20px;
     display: flex;
     flex-direction: column;

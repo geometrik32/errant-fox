@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { getVideos } from '../lib/api/videos';
+  import { gallerySidebarOpen } from '../stores';
   import Sidebar from '../lib/gallery/Sidebar.svelte';
   import VideoGrid from '../lib/gallery/VideoGrid.svelte';
   import type { Video } from '../lib/api/types';
@@ -10,6 +11,7 @@
   let loading = $state(true);
   let errorMsg = $state('');
   let onlineUsers = $state<any[]>([]);
+
   let videoWatchers = $derived.by(() => {
     const obj: Record<string, any[]> = {};
     for (const u of onlineUsers) {
@@ -121,6 +123,30 @@
         } else if (msg.type === 'presence_update') {
           console.log('Gallery presence update:', msg.users);
           onlineUsers = msg.users;
+        } else if (msg.type === 'update_video_score') {
+          allVideos = allVideos.map(v => {
+            if (v.id === msg.video_id) {
+              return { ...v, total_score_a: msg.total_score_a, total_score_b: msg.total_score_b };
+            }
+            return v;
+          });
+          applyFilter();
+        } else if (msg.type === 'update_video_fighters') {
+          allVideos = allVideos.map(v => {
+            if (v.id === msg.video_id) {
+              return { ...v, fighter_a: msg.fighter_a, fighter_b: msg.fighter_b, is_tagged: !!(msg.fighter_a && msg.fighter_b) };
+            }
+            return v;
+          });
+          applyFilter();
+        } else if (msg.type === 'update_video_ai_labeled') {
+          allVideos = allVideos.map(v => {
+            if (v.id === msg.video_id) {
+              return { ...v, is_ai_labeled: msg.is_ai_labeled, is_analyzing: msg.is_analyzing };
+            }
+            return v;
+          });
+          applyFilter();
         }
       } catch {
         // ignore malformed messages
@@ -154,49 +180,59 @@
 {:else if errorMsg}
   <div class="state error">{errorMsg}</div>
 {:else}
-  <div class="gallery">
-    <div class="sidebar-sticky">
-      <Sidebar videos={allVideos} onfilter={handleFilter} initialFilter={activeFilter} />
-    </div>
+  <div class="gallery" class:gallery--no-sidebar={!$gallerySidebarOpen}>
+    <!-- Sidebar — grows to fit content, no scrollbars -->
+    {#if $gallerySidebarOpen}
+      <div class="sidebar-island">
+        <Sidebar videos={allVideos} onfilter={handleFilter} initialFilter={activeFilter} {onlineUsers} />
+      </div>
+    {/if}
+
     <div class="content">
-      <VideoGrid videos={filteredVideos} {videoWatchers} onopen={handleOpen} />
+      <VideoGrid videos={filteredVideos} {videoWatchers} onopen={handleOpen} onreload={loadVideos} />
     </div>
   </div>
 {/if}
 
 <style>
   .gallery {
-    display: flex;
+    display: grid;
+    grid-template-columns: 280px 1fr;
     gap: 24px;
     align-items: flex-start;
     min-height: calc(100vh - 64px);
     margin-top: -24px;
   }
 
-  .sidebar-sticky {
+  .gallery.gallery--no-sidebar {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar-island {
     position: sticky;
-    top: 0;
-    max-height: calc(100vh - 64px);
-    overflow-y: auto;
-    flex-shrink: 0;
-    align-self: flex-start;
+    top: 24px;
     width: 280px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-sizing: border-box;
+    overflow: visible;
   }
 
   .content {
-    flex: 1;
     min-width: 0;
-    padding-top: 24px; /* Restore padding only for video content */
+    padding-top: 24px;
   }
 
   @media (max-width: 768px) {
     .gallery {
-      flex-direction: column;
+      grid-template-columns: 1fr !important;
+      gap: 16px;
     }
-    .sidebar-sticky {
+    .sidebar-island {
       position: static;
       width: 100%;
-      max-height: none;
     }
   }
 

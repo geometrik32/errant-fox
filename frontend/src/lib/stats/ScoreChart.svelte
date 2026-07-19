@@ -379,7 +379,7 @@
   .chart-card {
     background: var(--surface);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-2xl);
+    border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
     padding: 24px 24px 12px 24px;
     height: 100%;
@@ -492,7 +492,6 @@
     color: var(--text-muted);
     font-size: 0.85rem;
     background: rgba(15, 23, 42, 0.4);
-    backdrop-filter: blur(4px);
     border-radius: var(--radius-lg);
     z-index: 5;
   }

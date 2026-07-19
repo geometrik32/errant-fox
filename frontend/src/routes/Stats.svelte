@@ -3,7 +3,6 @@
   import { getFighterBouts } from '../lib/api/fighters';
   import { getVideos } from '../lib/api/videos';
   import { resolveColor } from '../lib/api/types';
-  import FighterSidebar from '../lib/stats/FighterSidebar.svelte';
   import QuickStats from '../lib/stats/QuickStats.svelte';
   import FrequencyChart from '../lib/stats/FrequencyChart.svelte';
   import ResultsChart from '../lib/stats/ResultsChart.svelte';
@@ -116,9 +115,83 @@
     return result;
   });
 
+  let tableBouts = $derived.by(() => {
+    let result = [...filteredBouts];
+
+    const hasBoutFilters = !!(
+      tableFilters.my_technique ||
+      tableFilters.my_result ||
+      tableFilters.my_zone ||
+      tableFilters.opponent_technique ||
+      tableFilters.opponent_result ||
+      tableFilters.opponent_zone ||
+      tableFilters.score
+    );
+
+    if (!hasBoutFilters && selectedFighter) {
+      const taggedVideoIds = new Set(rawBouts.map(b => b.video_id));
+      for (const vid of filteredVideos) {
+        if (!taggedVideoIds.has(vid.id)) {
+          const am_a = vid.fighter_a?.id === selectedFighter.id;
+          const opp = am_a ? vid.fighter_b : vid.fighter_a;
+
+          result.push({
+            id: -Math.floor(Math.random() * 1000000) - 1,
+            video_id: vid.id,
+            video_date: vid.date,
+            opponent_id: opp?.id || '',
+            opponent_name: opp?.display_name || '—',
+            order_index: 0,
+            time_start_ms: 0,
+            time_end_ms: 0,
+            my_score: 0,
+            opponent_score: 0,
+            my_technique_id: null,
+            my_technique_name: null,
+            my_hit_zone: null,
+            my_result: null,
+            opponent_technique_id: null,
+            opponent_technique_name: null,
+            opponent_hit_zone: null,
+            opponent_result: null,
+            is_unmarked: true
+          } as any);
+        }
+      }
+    }
+
+    if (tableFilters.sort_col) {
+      const col = tableFilters.sort_col as keyof FighterBout;
+      const dir = tableFilters.sort_dir;
+      result.sort((a, b) => {
+        const va = a[col]; const vb = b[col];
+        if (va === null || va === undefined) return 1;
+        if (vb === null || vb === undefined) return -1;
+        if (typeof va === 'string' && typeof vb === 'string')
+          return dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+        return dir === 'asc'
+          ? (va as number) - (vb as number)
+          : (vb as number) - (va as number);
+      });
+    }
+
+    return result;
+  });
+
   let opponents = $derived.by(() => {
     const map = new Map<string, string>();
-    for (const b of rawBouts) map.set(b.opponent_id, b.opponent_name);
+    for (const b of rawBouts) {
+      if (b.opponent_id) map.set(b.opponent_id, b.opponent_name);
+    }
+    if (selectedFighter) {
+      for (const vid of rawVideos) {
+        const am_a = vid.fighter_a?.id === selectedFighter.id;
+        const opp = am_a ? vid.fighter_b : vid.fighter_a;
+        if (opp && opp.id) {
+          map.set(opp.id, opp.display_name);
+        }
+      }
+    }
     return [...map.entries()].map(([id, name]) => ({ id, name }));
   });
 
@@ -136,6 +209,10 @@
     if (tableFilters.opponent_id) result = result.filter(b => b.opponent_id === tableFilters.opponent_id);
     if (zoneFilter) result = result.filter(b => (b.my_hit_zone ?? '').split(':')[0] === zoneFilter || (b.opponent_hit_zone ?? '').split(':')[0] === zoneFilter);
     if (tableFilters.opponent_technique) result = result.filter(b => b.opponent_technique_name === tableFilters.opponent_technique);
+    if (tableFilters.video_id) result = result.filter(b => b.video_id === tableFilters.video_id);
+    if (tableFilters.date_start) result = result.filter(b => b.video_date >= tableFilters.date_start);
+    if (tableFilters.date_end) result = result.filter(b => b.video_date <= tableFilters.date_end);
+    if (tableFilters.date_week) result = result.filter(b => matchesWeek(b.video_date, tableFilters.date_week));
     return result;
   });
 
@@ -144,6 +221,10 @@
     if (tableFilters.opponent_id) result = result.filter(b => b.opponent_id === tableFilters.opponent_id);
     if (zoneFilter) result = result.filter(b => (b.my_hit_zone ?? '').split(':')[0] === zoneFilter || (b.opponent_hit_zone ?? '').split(':')[0] === zoneFilter);
     if (tableFilters.my_technique) result = result.filter(b => b.my_technique_name === tableFilters.my_technique);
+    if (tableFilters.video_id) result = result.filter(b => b.video_id === tableFilters.video_id);
+    if (tableFilters.date_start) result = result.filter(b => b.video_date >= tableFilters.date_start);
+    if (tableFilters.date_end) result = result.filter(b => b.video_date <= tableFilters.date_end);
+    if (tableFilters.date_week) result = result.filter(b => matchesWeek(b.video_date, tableFilters.date_week));
     return result;
   });
 
@@ -435,10 +516,10 @@
 
       <div class="table-slot">
         <HistoryTable
-          bouts={filteredBouts}
+          bouts={tableBouts}
           filters={tableFilters}
           {opponents}
-          fightDates={new Set(rawBouts.map(b => b.video_date.slice(0, 10)))}
+          fightDates={new Set(tableBouts.map(b => b.video_date.slice(0, 10)))}
           onfilter={handleFilter}
           onnavigate={handleNavigate}
         />

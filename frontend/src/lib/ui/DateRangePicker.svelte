@@ -11,6 +11,7 @@
   let isOpen = $state(false);
   let viewDate = $state(new Date());
   let container = $state<HTMLElement | null>(null);
+  let viewMode = $state<'weekly' | 'classic'>('weekly');
 
   const MONTH_NAMES = [
     'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
@@ -67,9 +68,72 @@
     return list;
   });
 
+  // Generate weeks list for weekly mode
+  let monthlyWeeks = $derived.by(() => {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const first = new Date(Date.UTC(year, month, 1));
+    const last = new Date(Date.UTC(year, month + 1, 0));
+    
+    // Find the Monday of the week containing the first day of the month
+    let d = new Date(first);
+    const dow = d.getUTCDay();
+    if (dow === 0) {
+      d.setUTCDate(d.getUTCDate() - 6);
+    } else if (dow > 1) {
+      d.setUTCDate(d.getUTCDate() - (dow - 1));
+    }
+    
+    const list: Array<{ start: string; end: string; label: string; hasFight: boolean }> = [];
+    
+    // Loop until we cover all weeks overlapping with this month
+    while (d <= last || (d.getUTCMonth() === month && d <= last)) {
+      const startStr = formatDate(d);
+      const sunday = new Date(d);
+      sunday.setUTCDate(sunday.getUTCDate() + 6);
+      const endStr = formatDate(sunday);
+      
+      // Check if any day in this week has a fight
+      let hasFight = false;
+      const checkDay = new Date(d);
+      for (let i = 0; i < 7; i++) {
+        if (fightDates.has(formatDate(checkDay))) {
+          hasFight = true;
+          break;
+        }
+        checkDay.setUTCDate(checkDay.getUTCDate() + 1);
+      }
+      
+      const formatLabel = (s: Date, e: Date) => {
+        const monthsRu = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+        return `${s.getUTCDate()} ${monthsRu[s.getUTCMonth()]} — ${e.getUTCDate()} ${monthsRu[e.getUTCMonth()]}`;
+      };
+      
+      list.push({
+        start: startStr,
+        end: endStr,
+        label: formatLabel(new Date(d), new Date(sunday)),
+        hasFight
+      });
+      
+      d.setUTCDate(d.getUTCDate() + 7);
+    }
+    return list;
+  });
+
   function prevMonth() {
     viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1);
   }
+
+  // Set view date to selected start date when opening calendar
+  $effect(() => {
+    if (isOpen && dateStart) {
+      const parts = dateStart.split('-');
+      if (parts.length === 3) {
+        viewDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1);
+      }
+    }
+  });
 
   function nextMonth() {
     viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1);
@@ -116,16 +180,6 @@
       isOpen = false;
     }
   }
-
-  // Set view date to selected start date when opening calendar
-  $effect(() => {
-    if (isOpen && dateStart) {
-      const parts = dateStart.split('-');
-      if (parts.length === 3) {
-        viewDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 1);
-      }
-    }
-  });
 </script>
 
 <svelte:window onclick={handleWindowClick} />
@@ -147,6 +201,17 @@
   <!-- Calendar Dropdown -->
   {#if isOpen}
     <div class="calendar-dropdown">
+      <!-- Mode Toggle -->
+      <div class="mode-selector">
+        <button class="mode-btn" class:active={viewMode === 'weekly'} onclick={() => viewMode = 'weekly'}>
+          По неделям
+        </button>
+        <button class="mode-btn" class:active={viewMode === 'classic'} onclick={() => viewMode = 'classic'}>
+          По дням
+        </button>
+      </div>
+
+      <!-- Header navigation -->
       <div class="calendar-header">
         <button class="nav-arrow" onclick={prevMonth} aria-label="Предыдущий месяц" title="Предыдущий месяц">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -163,33 +228,60 @@
         </button>
       </div>
 
-      <div class="weekdays-grid">
-        {#each WEEKDAYS as wd}
-          <div class="weekday-cell">{wd}</div>
-        {/each}
-      </div>
+      <!-- Weekly mode template -->
+      {#if viewMode === 'weekly'}
+        <div class="weeks-list">
+          {#each monthlyWeeks as week}
+            <button
+              type="button"
+              class="week-row"
+              class:selected={dateStart === week.start && dateEnd === week.end}
+              class:has-fight={week.hasFight}
+              onclick={() => {
+                dateStart = week.start;
+                dateEnd = week.end;
+                onchange(dateStart, dateEnd);
+                isOpen = false;
+              }}
+            >
+              <span class="week-label">{week.label}</span>
+              {#if week.hasFight}
+                <span class="week-fight-dot"></span>
+              {/if}
+            </button>
+          {/each}
+        </div>
+      {:else}
+        <!-- Classic mode template -->
+        <div class="weekdays-grid">
+          {#each WEEKDAYS as wd}
+            <div class="weekday-cell">{wd}</div>
+          {/each}
+        </div>
 
-      <div class="days-grid">
-        {#each calendarDays as day}
-          <!-- svelte-ignore a11y_click_events_have_key_events -->
-          <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-          <div 
-            class="day-cell" 
-            role="button"
-            tabindex="0"
-            class:muted={!day.isCurrentMonth}
-            class:selected-start={day.dateStr === dateStart}
-            class:selected-end={day.dateStr === dateEnd}
-            class:in-range={dateStart && dateEnd && day.dateStr > dateStart && day.dateStr < dateEnd}
-            onclick={() => selectDate(day.dateStr)}
-          >
-            <span class="day-number">{day.date.getDate()}</span>
-            {#if day.hasFight}
-              <span class="fight-dot"></span>
-            {/if}
-          </div>
-        {/each}
-      </div>
+        <div class="days-grid">
+          {#each calendarDays as day}
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+            <div 
+              class="day-cell" 
+              role="button"
+              tabindex="0"
+              class:muted={!day.isCurrentMonth}
+              class:selected-start={day.dateStr === dateStart}
+              class:selected-end={day.dateStr === dateEnd}
+              class:in-range={dateStart && dateEnd && day.dateStr > dateStart && day.dateStr < dateEnd}
+              class:has-fight={day.hasFight}
+              onclick={() => selectDate(day.dateStr)}
+            >
+              <span class="day-number">{day.date.getDate()}</span>
+              {#if day.hasFight}
+                <span class="fight-dot"></span>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      {/if}
 
       <div class="calendar-actions">
         <button class="action-btn clear-btn" onclick={clearFilter}>Сбросить</button>
@@ -267,6 +359,38 @@
     gap: 8px;
   }
 
+  .mode-selector {
+    display: flex;
+    background: var(--surface-hover);
+    padding: 3px;
+    border-radius: var(--radius-sm);
+    gap: 2px;
+    margin-bottom: 4px;
+  }
+
+  .mode-btn {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 6px;
+    border-radius: calc(var(--radius-sm) - 2px);
+    cursor: pointer;
+    transition: var(--transition);
+  }
+
+  .mode-btn:hover {
+    color: var(--text-primary);
+  }
+
+  .mode-btn.active {
+    background: var(--surface-solid);
+    color: var(--accent-yellow);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+
   .calendar-header {
     display: flex;
     align-items: center;
@@ -299,6 +423,68 @@
     color: var(--text-primary);
   }
 
+  /* Weekly Mode styles */
+  .weeks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 4px;
+  }
+
+  .week-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface-hover);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+    text-align: left;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .week-row:hover {
+    border-color: var(--accent-yellow);
+    background: rgba(245, 158, 11, 0.05);
+  }
+
+  .week-row.selected {
+    background: var(--accent-yellow) !important;
+    color: #000 !important;
+    border-color: var(--accent-yellow);
+    font-weight: 600;
+  }
+
+  .week-row.has-fight:not(.selected) {
+    border-color: rgba(245, 158, 11, 0.4);
+    background: rgba(245, 158, 11, 0.1) !important;
+  }
+  .week-row.has-fight .week-label {
+    color: var(--accent-yellow);
+    font-weight: 600;
+  }
+
+  .week-row.selected .week-fight-dot {
+    background: #000;
+  }
+
+  .week-fight-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent-yellow);
+    box-shadow: 0 0 4px var(--accent-yellow);
+    flex-shrink: 0;
+  }
+
+  /* Classic mode styles */
   .weekdays-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
@@ -355,7 +541,6 @@
     border-radius: 0;
   }
 
-  /* Support rounded caps for selected start/end dates in range */
   .day-cell.selected-start {
     border-top-left-radius: var(--radius-sm);
     border-bottom-left-radius: var(--radius-sm);
@@ -365,13 +550,29 @@
     border-bottom-right-radius: var(--radius-sm);
   }
 
+  .day-cell.has-fight {
+    color: var(--accent-yellow);
+    font-weight: 600;
+  }
+  .day-cell.has-fight:not(.selected-start):not(.selected-end):not(.in-range) {
+    background: rgba(245, 158, 11, 0.22) !important;
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    border-radius: 6px;
+    color: #fff;
+  }
+
+  .day-cell.has-fight .fight-dot {
+    display: none;
+  }
+
   .fight-dot {
     position: absolute;
     bottom: 3px;
     width: 4px;
     height: 4px;
     border-radius: 50%;
-    background: #6b7280; /* Gray dot */
+    background: var(--accent-yellow);
+    box-shadow: 0 0 3px var(--accent-yellow);
   }
 
   .day-cell.selected-start .fight-dot,

@@ -111,6 +111,7 @@
   // ── Moov-based FPS detection (fallback when API provides none) ──────────
 
   let fpsFromMoov = $state<number | null>(null);
+  let pendingSeekTimeMs = $state<number | null>(null);
 
   // Kick off FPS extraction from the moov atom on mount (when API has no fps).
   // This parses the first 1 MB of the video file to find the real frame rate.
@@ -147,7 +148,11 @@
         onloopingchange?.(false);
       }
     }
-    if (videoEl) videoEl.currentTime = ms / 1000;
+    if (videoEl && videoEl.readyState >= 1) {
+      videoEl.currentTime = ms / 1000;
+    } else {
+      pendingSeekTimeMs = ms;
+    }
   }
 
   export function pause(): void { videoEl?.pause(); }
@@ -235,7 +240,13 @@
   }
 
   function handleDurationChange() {
-    if (videoEl) ondurationchange?.(videoEl.duration);
+    if (videoEl) {
+      ondurationchange?.(videoEl.duration);
+      if (pendingSeekTimeMs !== null && videoEl.readyState >= 1) {
+        videoEl.currentTime = pendingSeekTimeMs / 1000;
+        pendingSeekTimeMs = null;
+      }
+    }
   }
 
   function handlePause() { onplayingchange?.(false); }
@@ -505,8 +516,6 @@
     display: flex;
     gap: 6px;
     background: rgba(15, 23, 42, 0.65);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
     border: 1px solid rgba(255, 255, 255, 0.08);
     padding: 5px;
     border-radius: 20px;

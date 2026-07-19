@@ -20,8 +20,10 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   }
 
   if (response.status === 401) {
-    localStorage.removeItem('ef_token');
-    window.location.href = '/auth';
+    if (typeof window !== 'undefined' && !window.location.hash.startsWith('#/share/')) {
+      localStorage.removeItem('ef_token');
+      window.location.href = '/auth';
+    }
     throw new Error('Сессия истекла. Войдите снова.');
   }
 

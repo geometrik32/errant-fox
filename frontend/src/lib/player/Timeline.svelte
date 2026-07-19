@@ -28,35 +28,40 @@
     finishing?: boolean;
     onstartclick?: () => void;
     onfinishclick?: () => void;
+    onshare?: () => void;
+    readonly?: boolean;
   }
 
-  let {
-    currentTime,
-    duration,
-    bouts = [],
-    comments = [],
-    fighterA = null,
-    fighterB = null,
-    playing = false,
-    looping = false,
-    speed = 1,
-    volume = 1,
-    fps = 25,
-    startTime = null,
-    finishing = false,
-    onseek,
-    onloop,
-    onboutclick,
-    oncommentclick,
-    onplay,
-    onstepback,
-    onstepforward,
-    onspeedchange,
-    onvolumechange,
-    onlooptoggle,
-    onstartclick,
-    onfinishclick,
-  }: Props = $props();
+  let props: Props = $props();
+
+  let currentTime = $derived(props.currentTime);
+  let duration = $derived(props.duration);
+  let bouts: Bout[] = $derived(props.bouts ?? []);
+  let comments: Comment[] = $derived(props.comments ?? []);
+  let fighterA: VideoFighter | null = $derived(props.fighterA ?? null);
+  let fighterB: VideoFighter | null = $derived(props.fighterB ?? null);
+  let playing = $derived(props.playing ?? false);
+  let looping = $derived(props.looping ?? false);
+  let speed = $derived(props.speed ?? 1);
+  let volume = $derived(props.volume ?? 1);
+  let fps = $derived(props.fps ?? 25);
+  let startTime = $derived(props.startTime ?? null);
+  let finishing = $derived(props.finishing ?? false);
+  let readonly = $derived(props.readonly ?? false);
+
+  const onseek = $derived(props.onseek);
+  const onloop = $derived(props.onloop);
+  const onboutclick = $derived(props.onboutclick);
+  const oncommentclick = $derived(props.oncommentclick);
+  const onplay = $derived(props.onplay);
+  const onstepback = $derived(props.onstepback);
+  const onstepforward = $derived(props.onstepforward);
+  const onspeedchange = $derived(props.onspeedchange);
+  const onvolumechange = $derived(props.onvolumechange);
+  const onlooptoggle = $derived(props.onlooptoggle);
+  const onstartclick = $derived(props.onstartclick);
+  const onfinishclick = $derived(props.onfinishclick);
+  const onshare = $derived(props.onshare);
 
   const SPEEDS = [0.15, 0.2, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5];
 
@@ -149,7 +154,11 @@
     e.preventDefault();
   }
 
-  let pct = $derived(duration > 0 ? (currentTime / duration) * 100 : 0);
+  let pct = $derived.by(() => {
+    const val = duration > 0 ? (currentTime / duration) * 100 : 0;
+    console.log("[Timeline] pct:", val, "currentTime:", currentTime, "duration:", duration);
+    return val;
+  });
 
   const isInsideBout = $derived(
     bouts.some(b => {
@@ -199,17 +208,20 @@
   </div>
 
   <!-- Row 3: Bout track -->
-  <div class="track track--bouts">
-    {#each bouts as b, i (b.id)}
-      <button
-        class="bout-seg"
-        style="left: {boutL(b)}%; width: {boutW(b)}%; --color: {boutColor(b)}"
-        onclick={() => { onloop?.({ start: b.time_start_ms, end: b.time_end_ms }); onboutclick?.(b.id); }}
-        aria-label="Сход {i + 1} — зациклить"
-        title="Сход {i + 1}"
-      ></button>
-    {/each}
-  </div>
+  {#if !readonly}
+    <div class="track track--bouts">
+      {#each bouts as b, i (b.id)}
+        <button
+          class="bout-seg"
+          class:is-ai={b.is_ai}
+          style="left: {boutL(b)}%; width: {boutW(b)}%; --color: {boutColor(b)}"
+          onclick={() => { onloop?.({ start: b.time_start_ms, end: b.time_end_ms }); onboutclick?.(b.id); }}
+          aria-label="Сход {i + 1} — зациклить"
+          title="Сход {i + 1}"
+        ></button>
+      {/each}
+    </div>
+  {/if}
 
   <!-- Row 4: Controls -->
   <div class="controls">
@@ -266,30 +278,32 @@
     </div>
 
     <div class="ctrl-group ctrl-group--center">
-      <button
-        class="ctrl-btn start-btn"
-        class:start-btn--active={startTime !== null}
-        onclick={onstartclick}
-        disabled={isInsideBout}
-        aria-label="Зафиксировать начало схода"
-        style="background: {startTime !== null ? '#0f4020' : '#1a6b35'}; border-color: {startTime !== null ? '#1a8040' : '#27ae60'}; color: {startTime !== null ? '#3bc266' : '#52d47a'};"
-      >
-        {#if startTime !== null}
-          {fmtSec(startTime)}
-        {:else}
-          START
-        {/if}
-      </button>
+      {#if !readonly}
+        <button
+          class="ctrl-btn start-btn"
+          class:start-btn--active={startTime !== null}
+          onclick={onstartclick}
+          disabled={isInsideBout}
+          aria-label="Зафиксировать начало схода"
+          style="background: {startTime !== null ? '#0f4020' : '#1a6b35'}; border-color: {startTime !== null ? '#1a8040' : '#27ae60'}; color: {startTime !== null ? '#3bc266' : '#52d47a'};"
+        >
+          {#if startTime !== null}
+            {fmtSec(startTime)}
+          {:else}
+            START
+          {/if}
+        </button>
 
-      <button
-        class="ctrl-btn finish-btn"
-        disabled={startTime === null || finishing}
-        onclick={onfinishclick}
-        aria-label="Зафиксировать конец схода"
-        style="color: #e05252; border-color: #ae2727; background: rgba(174, 39, 39, 0.1);"
-      >
-        {finishing ? '…' : 'FINISH'}
-      </button>
+        <button
+          class="ctrl-btn finish-btn"
+          disabled={startTime === null || finishing}
+          onclick={onfinishclick}
+          aria-label="Зафиксировать конец схода"
+          style="color: #e05252; border-color: #ae2727; background: rgba(174, 39, 39, 0.1);"
+        >
+          {finishing ? '…' : 'FINISH'}
+        </button>
+      {/if}
     </div>
 
     <div class="ctrl-group ctrl-group--right">
@@ -317,6 +331,18 @@
           aria-label="Громкость"
         />
       </div>
+
+      {#if onshare}
+        <button class="ctrl-btn" onclick={onshare} aria-label="Поделиться видео" title="Поделиться видео">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="18" cy="5" r="3" />
+            <circle cx="6" cy="12" r="3" />
+            <circle cx="18" cy="19" r="3" />
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+          </svg>
+        </button>
+      {/if}
 
       <time class="time-disp" datetime="PT{Math.round(currentTime)}S">
         {fmtWithFrame(currentTime)} / {fmtDuration(duration)}
@@ -385,7 +411,8 @@
 
   .prog-fill {
     position: absolute;
-    inset: 0;
+    left: 0;
+    top: 0;
     height: 100%;
     background: var(--accent-yellow);
     pointer-events: none;
@@ -428,6 +455,12 @@
 
   .bout-seg:hover {
     opacity: 1;
+  }
+
+  .bout-seg.is-ai {
+    background-color: #7c3aed !important;
+    opacity: 0.95 !important;
+    box-shadow: 0 0 6px rgba(124, 58, 237, 0.6);
   }
 
   /* ── Row 4: Controls ── */

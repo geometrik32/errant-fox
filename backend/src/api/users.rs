@@ -28,6 +28,7 @@ pub struct FighterDto {
     pub color: Option<String>,
     pub is_admin: bool,
     pub vk_id: Option<String>,
+    pub role: String,
 }
 
 #[derive(Serialize)]
@@ -61,6 +62,7 @@ pub struct UserMeDto {
     pub avatar_url: String,
     pub color: Option<String>,
     pub vk_id: Option<String>,
+    pub role: String,
 }
 
 fn to_fighter_dto(u: &User) -> FighterDto {
@@ -72,6 +74,7 @@ fn to_fighter_dto(u: &User) -> FighterDto {
         color: u.color.clone(),
         is_admin: u.is_admin,
         vk_id: u.vk_id.clone(),
+        role: u.role.clone(),
     }
 }
 
@@ -84,6 +87,7 @@ fn to_me_dto(u: &User) -> UserMeDto {
         avatar_url: format!("/api/users/{}/avatar", u.id),
         color: u.color.clone(),
         vk_id: u.vk_id.clone(),
+        role: u.role.clone(),
     }
 }
 
@@ -105,6 +109,7 @@ pub struct CreateUserRequest {
     pub password: String,
     pub is_admin: bool,
     pub color: Option<String>,
+    pub role: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -114,6 +119,7 @@ pub struct PatchAdminUserRequest {
     pub color: Option<String>,
     pub is_admin: Option<bool>,
     pub vk_id: Option<String>,
+    pub role: Option<String>,
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
@@ -122,11 +128,15 @@ pub async fn list_fighters(
     State(state): State<AppState>,
     _user: CurrentUser,
 ) -> Result<Json<Vec<FighterDto>>, AppError> {
+    if _user.0.role == "guest" {
+        return Err(AppError::Forbidden);
+    }
     let db = state.db.clone();
     let fighters = tokio::task::spawn_blocking(move || {
-        use crate::db::schema::users::dsl::users;
+        use crate::db::schema::users::dsl::{role, users};
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
         users
+            .filter(role.eq("fighter"))
             .load::<User>(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))
     })
@@ -141,6 +151,9 @@ pub async fn fighter_bouts(
     _user: CurrentUser,
     Path(fighter_id): Path<String>,
 ) -> Result<Json<Vec<FighterBoutDto>>, AppError> {
+    if _user.0.role == "guest" {
+        return Err(AppError::Forbidden);
+    }
     let db = state.db.clone();
 
     let result = tokio::task::spawn_blocking(move || {
@@ -390,6 +403,7 @@ pub async fn create_user(
             avatar_path: None,
             color: body.color,
             vk_id: None,
+            role: body.role.unwrap_or_else(|| "fighter".to_string()),
         };
 
         diesel::insert_into(users)
@@ -421,7 +435,7 @@ pub async fn patch_admin_user(
     let db = state.db.clone();
 
     let updated = tokio::task::spawn_blocking(move || {
-        use crate::db::schema::users::dsl::{color, display_name, id, is_admin, password_hash, users, vk_id};
+        use crate::db::schema::users::dsl::{color, display_name, id, is_admin, password_hash, users, vk_id, role};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -446,6 +460,7 @@ pub async fn patch_admin_user(
             Some(_) => None,
             None => target_user.vk_id,
         };
+        let new_role = body.role.unwrap_or(target_user.role);
 
         diesel::update(users.filter(id.eq(&user_id)))
             .set((
@@ -454,6 +469,7 @@ pub async fn patch_admin_user(
                 color.eq(&new_color),
                 is_admin.eq(new_is_admin),
                 vk_id.eq(&new_vk_id),
+                role.eq(&new_role),
             ))
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -523,21 +539,62 @@ pub async fn delete_user(
     if current.id == user_id {
         return Err(AppError::BadRequest("Cannot delete yourself".to_string()));
     }
+    if user_id == "guest" {
+        return Err(AppError::BadRequest("Cannot delete system guest user".to_string()));
+    }
 
     let db = state.db.clone();
 
     tokio::task::spawn_blocking(move || {
-        use crate::db::schema::users::dsl::{id, users};
+        use crate::db::schema::{users, comments, comment_reactions, bout_history, videos};
+        use diesel::prelude::*;
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
 
-        let deleted = diesel::delete(users.filter(id.eq(&user_id)))
-            .execute(&mut conn)
-            .map_err(|e| AppError::Internal(e.to_string()))?;
+        conn.transaction::<_, diesel::result::Error, _>(|tx_conn| {
+            // 1. Delete reactions on comments created by this user
+            let user_comment_ids: Vec<i32> = comments::table
+                .filter(comments::author_id.eq(&user_id))
+                .select(comments::id)
+                .load::<i32>(tx_conn)?;
 
-        if deleted == 0 {
-            return Err(AppError::NotFound);
-        }
+            diesel::delete(comment_reactions::table.filter(comment_reactions::comment_id.eq_any(user_comment_ids)))
+                .execute(tx_conn)?;
+
+            // 2. Delete reactions made by this user
+            diesel::delete(comment_reactions::table.filter(comment_reactions::user_id.eq(&user_id)))
+                .execute(tx_conn)?;
+
+            // 3. Delete comments created by this user
+            diesel::delete(comments::table.filter(comments::author_id.eq(&user_id)))
+                .execute(tx_conn)?;
+
+            // 4. Delete bout history created by this user
+            diesel::delete(bout_history::table.filter(bout_history::user_id.eq(&user_id)))
+                .execute(tx_conn)?;
+
+            // 5. Unset fighter_a_id/fighter_b_id in videos
+            diesel::update(videos::table.filter(videos::fighter_a_id.eq(&user_id)))
+                .set(videos::fighter_a_id.eq::<Option<String>>(None))
+                .execute(tx_conn)?;
+
+            diesel::update(videos::table.filter(videos::fighter_b_id.eq(&user_id)))
+                .set(videos::fighter_b_id.eq::<Option<String>>(None))
+                .execute(tx_conn)?;
+
+            // 6. Delete the user itself
+            let deleted = diesel::delete(users::table.filter(users::id.eq(&user_id)))
+                .execute(tx_conn)?;
+
+            if deleted == 0 {
+                return Err(diesel::result::Error::NotFound);
+            }
+
+            Ok(())
+        }).map_err(|e| match e {
+            diesel::result::Error::NotFound => AppError::NotFound,
+            other => AppError::Internal(other.to_string()),
+        })?;
 
         Ok(())
     })
@@ -545,4 +602,25 @@ pub async fn delete_user(
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn list_admin_users(
+    State(state): State<AppState>,
+    CurrentUser(current): CurrentUser,
+) -> Result<Json<Vec<UserMeDto>>, AppError> {
+    if !current.is_admin {
+        return Err(AppError::Forbidden);
+    }
+    let db = state.db.clone();
+    let all_users = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::users::dsl::users;
+        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+        users
+            .load::<User>(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    Ok(Json(all_users.iter().map(to_me_dto).collect()))
 }

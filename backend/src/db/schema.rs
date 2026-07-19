@@ -1,4 +1,4 @@
-// @generated — matches migrations/0001_initial + 0002_comment_reactions + 0003_comment_bout_search + 0004_technique_description
+// @generated — matches migrations/0001_initial + 0002_comment_reactions + 0003_comment_bout_search + 0004_technique_description + 0010_ai_label + 0011_video_is_analyzing
 
 diesel::table! {
     users (id) {
@@ -11,20 +11,23 @@ diesel::table! {
         color         -> Nullable<Text>,
         created_at    -> Timestamp,
         vk_id         -> Nullable<Text>,
+        role          -> Text,
     }
 }
 
 diesel::table! {
     videos (id) {
-        id            -> Text,
-        seafile_path  -> Text,
-        fighter_a_id  -> Nullable<Text>,
-        fighter_b_id  -> Nullable<Text>,
-        date          -> Date,
-        duration_ms   -> Nullable<Integer>,
-        preview_count -> Integer,
-        fps           -> Nullable<Float>,
-        created_at    -> Timestamp,
+        id             -> Text,
+        seafile_path   -> Text,
+        fighter_a_id   -> Nullable<Text>,
+        fighter_b_id   -> Nullable<Text>,
+        date           -> Date,
+        duration_ms    -> Nullable<Integer>,
+        preview_count  -> Integer,
+        fps            -> Nullable<Float>,
+        created_at     -> Timestamp,
+        is_ai_labeled  -> Bool,
+        is_analyzing   -> Bool,
     }
 }
 
@@ -65,6 +68,7 @@ diesel::table! {
         created_at   -> Timestamp,
         edited_at    -> Nullable<Timestamp>,
         bout_id      -> Nullable<Integer>,
+        guest_nickname -> Nullable<Text>,
     }
 }
 

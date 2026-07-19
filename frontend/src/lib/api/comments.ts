@@ -44,3 +44,27 @@ export async function deleteReact(id: number): Promise<void> {
 export async function searchComments(q: string): Promise<SearchResult[]> {
   return apiFetch<SearchResult[]>(`/comments/search?q=${encodeURIComponent(q)}`);
 }
+
+export interface CreateSharedCommentData {
+  videoId: string;
+  token: string;
+  nickname: string;
+  text: string;
+  timestamp_ms: number;
+  reply_to_id?: number | null;
+  bout_id?: number | null;
+}
+
+export async function createSharedComment(data: CreateSharedCommentData): Promise<Comment> {
+  const url = `/shared/videos/${data.videoId}/comments?token=${encodeURIComponent(data.token)}`;
+  return apiFetch<Comment>(url, {
+    method: 'POST',
+    body: JSON.stringify({
+      nickname: data.nickname,
+      text: data.text,
+      reply_to_id: data.reply_to_id,
+      timestamp_ms: data.timestamp_ms,
+      bout_id: data.bout_id,
+    }),
+  });
+}

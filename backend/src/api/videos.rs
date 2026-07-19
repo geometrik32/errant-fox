@@ -15,7 +15,18 @@ use crate::{
     errors::AppError,
     middleware::auth::CurrentUser,
     state::AppState,
+    services::ws::{WsEvent, WsFighter},
 };
+
+fn is_not_found_error(err: &anyhow::Error) -> bool {
+    if let Some(reqwest_err) = err.downcast_ref::<reqwest::Error>() {
+        if let Some(status) = reqwest_err.status() {
+            return status == reqwest::StatusCode::NOT_FOUND;
+        }
+    }
+    let err_str = err.to_string().to_lowercase();
+    err_str.contains("404") || err_str.contains("not found")
+}
 
 // ── DTOs ──────────────────────────────────────────────────────────────────────
 
@@ -40,6 +51,12 @@ pub struct VideoListDto {
     pub is_tagged: bool,
     pub preview_url: String,
     pub preview_count: i32,
+    pub is_ai_labeled: bool,
+    pub is_analyzing: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seafile_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seafile_web_url: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -88,6 +105,8 @@ pub struct VideoFullDto {
     pub stream_url: String,
     pub duration_ms: Option<i32>,
     pub fps: Option<f32>,
+    pub is_ai_labeled: bool,
+    pub is_analyzing: bool,
     pub bouts: Vec<BoutDto>,
     pub comments: Vec<CommentDto>,
 }
@@ -157,7 +176,7 @@ fn build_video_full(
     let comment_dtos = comments
         .iter()
         .map(|c| {
-            let author = users_map
+            let mut author = users_map
                 .get(&c.author_id)
                 .map(|u| CommentAuthorDto {
                     id: u.id.clone(),
@@ -171,6 +190,10 @@ fn build_video_full(
                     avatar_url: format!("/api/users/{}/avatar", c.author_id),
                     color: None,
                 });
+            if let Some(ref nick) = c.guest_nickname {
+                author.display_name = nick.clone();
+                author.color = Some(crate::api::auth::generate_color(nick));
+            }
             let (likes, dislikes, my_reaction) = reactions_map
                 .get(&c.id)
                 .cloned()
@@ -197,6 +220,8 @@ fn build_video_full(
         stream_url,
         duration_ms: video.duration_ms,
         fps: video.fps,
+        is_ai_labeled: video.is_ai_labeled,
+        is_analyzing: video.is_analyzing,
         bouts: bouts.iter().map(bout_dto).collect(),
         comments: comment_dtos,
     }
@@ -260,6 +285,9 @@ pub async fn list_videos(
     _user: CurrentUser,
     Query(params): Query<VideoListQuery>,
 ) -> Result<Json<Vec<VideoListDto>>, AppError> {
+    if _user.0.role == "guest" {
+        return Err(AppError::Forbidden);
+    }
     let date_from = params
         .date_from
         .as_deref()
@@ -279,6 +307,7 @@ pub async fn list_videos(
 
     let db = state.db.clone();
     let fighter_id = params.fighter_id.clone();
+    let is_admin = _user.0.is_admin;
 
     let result = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{bouts, users, videos};
@@ -384,6 +413,17 @@ pub async fn list_videos(
                     is_tagged,
                     preview_url: format!("/api/videos/{}/previews/0", v.id),
                     preview_count: v.preview_count,
+                    is_ai_labeled: v.is_ai_labeled,
+                    is_analyzing: v.is_analyzing,
+                    seafile_path: if is_admin { Some(v.seafile_path.clone()) } else { None },
+                    seafile_web_url: if is_admin {
+                        Some(format!(
+                            "https://seafile.aat-terra.ru/lib/3981eb27-f4c1-4c6d-a05e-5448ee140b8f/file/{}",
+                            v.seafile_path
+                        ))
+                    } else {
+                        None
+                    },
                 }
             })
             .collect();
@@ -396,34 +436,57 @@ pub async fn list_videos(
     Ok(Json(result))
 }
 
-pub async fn get_video(
-    State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path(video_id): Path<String>,
-) -> Result<Json<VideoFullDto>, AppError> {
+pub async fn get_video_dto_impl(
+    state: &AppState,
+    video_id: &str,
+    user_id: Option<&str>,
+) -> Result<VideoFullDto, AppError> {
     let db = state.db.clone();
-    let user_id = user.id.clone();
+    let user_id_opt = user_id.map(|s| s.to_string());
 
-    let dto = tokio::task::spawn_blocking(move || {
-        use crate::db::schema::{bouts, comment_reactions, comments, videos};
-
-        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
-
+    // 1. Fetch video record first
+    let video_id_clone = video_id.to_string();
+    let db_clone = db.clone();
+    let video = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::videos;
+        let mut conn = db_clone.get().map_err(|e| AppError::Internal(e.to_string()))?;
         let video = videos::table
-            .filter(videos::id.eq(&video_id))
+            .filter(videos::id.eq(&video_id_clone))
             .first::<Video>(&mut conn)
             .optional()
             .map_err(|e| AppError::Internal(e.to_string()))?
             .ok_or(AppError::NotFound)?;
+        Ok::<Video, AppError>(video)
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    // 2. Check physical existence in Seafile "on-the-fly"
+    if let Err(e) = state.seafile.get_download_url(&video.seafile_path).await {
+        if is_not_found_error(&e) {
+            tracing::info!("Video file not found in Seafile. Cascade deleting video_id: {}", video.id);
+            let _ = crate::services::sync::delete_videos_cascade(&state.db, &state.previews_dir, &[video.id.clone()]).await;
+            let _ = state.ws_hub.send(WsEvent::VideoRemoved { id: video.id.clone() });
+            return Err(AppError::NotFound);
+        }
+    }
+
+    // 3. Load relations and build full DTO
+    let video_id_clone = video_id.to_string();
+    let db_clone = db.clone();
+    let dto = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::{bouts, comment_reactions, comments};
+
+        let mut conn = db_clone.get().map_err(|e| AppError::Internal(e.to_string()))?;
 
         let video_bouts = bouts::table
-            .filter(bouts::video_id.eq(&video_id))
+            .filter(bouts::video_id.eq(&video_id_clone))
             .order(bouts::order_index.asc())
             .load::<Bout>(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
         let video_comments = comments::table
-            .filter(comments::video_id.eq(&video_id))
+            .filter(comments::video_id.eq(&video_id_clone))
             .order(comments::id.asc())
             .load::<Comment>(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -437,7 +500,7 @@ pub async fn get_video(
                 .load::<CommentReaction>(&mut conn)
                 .map_err(|e| AppError::Internal(e.to_string()))?
         };
-        let reactions_map = build_reactions_map(reactions, &user_id);
+        let reactions_map = build_reactions_map(reactions, user_id_opt.as_deref().unwrap_or(""));
 
         let users_map = load_users_for_video(&video, &video_comments, &mut conn)?;
 
@@ -455,8 +518,212 @@ pub async fn get_video(
 
     let stream_url = format!("/api/videos/{}/stream", dto.id);
 
-    Ok(Json(VideoFullDto { stream_url, ..dto }))
+    Ok(VideoFullDto { stream_url, ..dto })
 }
+
+pub async fn get_video(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(video_id): Path<String>,
+) -> Result<Json<VideoFullDto>, AppError> {
+    if user.role == "guest" {
+        return Err(AppError::Forbidden);
+    }
+    let dto = get_video_dto_impl(&state, &video_id, Some(&user.id)).await?;
+    Ok(Json(dto))
+}
+
+#[derive(Deserialize)]
+pub struct SharedVideoQuery {
+    pub token: String,
+}
+
+pub async fn get_shared_video(
+    State(state): State<AppState>,
+    Path(video_id): Path<String>,
+    Query(query): Query<SharedVideoQuery>,
+) -> Result<Json<VideoFullDto>, AppError> {
+    use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+    let claims: crate::api::auth::ShareClaims = decode::<crate::api::auth::ShareClaims>(
+        &query.token,
+        &DecodingKey::from_secret(state.jwt_secret.as_bytes()),
+        &Validation::new(Algorithm::HS256),
+    )
+    .map(|d| d.claims)
+    .map_err(|e| AppError::Unauthorized(format!("Invalid share token: {}", e)))?;
+
+    if claims.video_id != video_id {
+        return Err(AppError::Unauthorized("Invalid share token for this video".to_string()));
+    }
+
+    let dto = get_video_dto_impl(&state, &video_id, None).await?;
+    Ok(Json(dto))
+}
+
+#[derive(Deserialize)]
+pub struct CreateShareRequest {
+    pub bout_id: Option<i32>,
+}
+
+#[derive(Serialize)]
+pub struct CreateShareResponse {
+    pub token: String,
+}
+
+pub async fn create_share_token(
+    State(state): State<AppState>,
+    _user: CurrentUser,
+    Path(video_id): Path<String>,
+    Json(body): Json<CreateShareRequest>,
+) -> Result<Json<CreateShareResponse>, AppError> {
+    let token = crate::api::auth::make_share_token(&video_id, body.bout_id, &state.jwt_secret)?;
+    Ok(Json(CreateShareResponse { token }))
+}
+
+#[derive(Deserialize)]
+pub struct CreateSharedCommentRequest {
+    pub nickname: String,
+    pub text: String,
+    pub reply_to_id: Option<i32>,
+    pub timestamp_ms: i32,
+    pub bout_id: Option<i32>,
+}
+
+pub async fn create_shared_comment(
+    State(state): State<AppState>,
+    Path(video_id): Path<String>,
+    Query(query): Query<SharedVideoQuery>,
+    Json(body): Json<CreateSharedCommentRequest>,
+) -> Result<Json<crate::api::comments::CommentResponse>, AppError> {
+    use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+    let claims: crate::api::auth::ShareClaims = decode::<crate::api::auth::ShareClaims>(
+        &query.token,
+        &DecodingKey::from_secret(state.jwt_secret.as_bytes()),
+        &Validation::new(Algorithm::HS256),
+    )
+    .map(|d| d.claims)
+    .map_err(|e| AppError::Unauthorized(format!("Invalid share token: {}", e)))?;
+
+    if claims.video_id != video_id {
+        return Err(AppError::Unauthorized("Invalid share token for this video".to_string()));
+    }
+
+    let nickname = body.nickname.trim().to_string();
+    if nickname.is_empty() {
+        return Err(AppError::BadRequest("Nickname cannot be empty".to_string()));
+    }
+
+    if body.text.trim().is_empty() {
+        return Err(AppError::BadRequest("Comment text cannot be empty".to_string()));
+    }
+
+    let guest_id = "guest".to_string();
+
+    let claims_bout_id = claims.bout_id;
+    let db_pool = state.db.clone();
+    let comment_resp = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::users;
+        use crate::db::models::{User, NewUser, Comment, NewComment};
+        
+        let mut conn = db_pool.get().map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // 1. Get or create guest user
+        let user = conn.transaction::<User, diesel::result::Error, _>(|tx_conn| {
+            let existing = users::table
+                .filter(users::id.eq(&guest_id))
+                .first::<User>(tx_conn)
+                .optional()?;
+
+            if let Some(u) = existing {
+                Ok(u)
+            } else {
+                let new_user = NewUser {
+                    id: guest_id.clone(),
+                    username: guest_id.clone(),
+                    display_name: "Гость".to_string(),
+                    password_hash: "guest".to_string(),
+                    is_admin: false,
+                    avatar_path: None,
+                    color: Some("#9E9E9E".to_string()),
+                    vk_id: None,
+                    role: "guest".to_string(),
+                };
+                diesel::insert_into(users::table)
+                    .values(&new_user)
+                    .execute(tx_conn)?;
+                
+                users::table.filter(users::id.eq(&guest_id)).first::<User>(tx_conn)
+            }
+        }).map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // 2. Insert new comment
+        let new_comment = NewComment {
+            video_id: video_id.clone(),
+            author_id: user.id.clone(),
+            timestamp_ms: body.timestamp_ms,
+            text: body.text,
+            reply_to_id: body.reply_to_id,
+            bout_id: claims_bout_id.or(body.bout_id),
+            guest_nickname: Some(nickname.clone()),
+        };
+
+        use crate::db::schema::comments;
+        let c: Comment = conn.transaction::<Comment, diesel::result::Error, _>(|tx_conn| {
+            diesel::insert_into(comments::table)
+                .values(&new_comment)
+                .execute(tx_conn)?;
+            comments::table.order(comments::id.desc()).first::<Comment>(tx_conn)
+        }).map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let guest_color = Some(crate::api::auth::generate_color(&nickname));
+
+        // 3. Construct CommentResponse (0 likes, 0 dislikes, no reaction)
+        let response = crate::api::comments::CommentResponse {
+            id: c.id,
+            author: crate::api::comments::CommentAuthorResponse {
+                id: user.id.clone(),
+                display_name: nickname.clone(),
+                avatar_url: format!("/api/users/{}/avatar", user.id),
+                color: guest_color.clone(),
+            },
+            timestamp_ms: c.timestamp_ms,
+            text: c.text.clone(),
+            reply_to_id: c.reply_to_id,
+            created_at: c.created_at.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+            edited_at: None,
+            likes: 0,
+            dislikes: 0,
+            my_reaction: None,
+            bout_id: c.bout_id,
+        };
+
+        // 4. Send WS Event so other watching users see it!
+        let ws_event = crate::services::ws::WsEvent::NewComment(crate::services::ws::WsComment {
+            id: c.id,
+            video_id: c.video_id.clone(),
+            author: crate::services::ws::WsCommentAuthor {
+                id: user.id.clone(),
+                display_name: nickname.clone(),
+                avatar_url: format!("/api/users/{}/avatar", user.id),
+                color: guest_color,
+            },
+            timestamp_ms: c.timestamp_ms,
+            text: c.text.clone(),
+            reply_to_id: c.reply_to_id,
+            created_at: c.created_at.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+            edited_at: None,
+            bout_id: c.bout_id,
+        });
+        let _ = state.ws_hub.send(ws_event);
+
+        Ok::<_, AppError>(response)
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    Ok(Json(comment_resp))
+}
+
 
 pub async fn patch_video(
     State(state): State<AppState>,
@@ -467,6 +734,7 @@ pub async fn patch_video(
     let db = state.db.clone();
     let user_id = user.id.clone();
     let frontend_origin = state.frontend_url.clone();
+    let video_id_for_db = video_id.clone();
 
     let (dto, notifications) = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{bouts, comment_reactions, comments, videos, users};
@@ -475,13 +743,13 @@ pub async fn patch_video(
 
         // 1. Fetch old video first to see who was already tagged
         let old_video = videos::table
-            .filter(videos::id.eq(&video_id))
+            .filter(videos::id.eq(&video_id_for_db))
             .first::<Video>(&mut conn)
             .optional()
             .map_err(|e| AppError::Internal(e.to_string()))?
             .ok_or(AppError::NotFound)?;
 
-        let rows = diesel::update(videos::table.filter(videos::id.eq(&video_id)))
+        let rows = diesel::update(videos::table.filter(videos::id.eq(&video_id_for_db)))
             .set((
                 videos::fighter_a_id.eq(&body.fighter_a_id),
                 videos::fighter_b_id.eq(&body.fighter_b_id),
@@ -494,7 +762,7 @@ pub async fn patch_video(
         }
 
         let video = videos::table
-            .filter(videos::id.eq(&video_id))
+            .filter(videos::id.eq(&video_id_for_db))
             .first::<Video>(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -510,7 +778,7 @@ pub async fn patch_video(
                             let msg = format!(
                                 "⚔️ Вас добавили в качестве участника боя в видео.\n\nСсылка: {}/#/player/{}",
                                 frontend_origin,
-                                video_id
+                                video_id_for_db
                             );
                             notifications.push((vk_id_str.clone(), msg));
                         }
@@ -528,7 +796,7 @@ pub async fn patch_video(
                             let msg = format!(
                                 "⚔️ Вас добавили в качестве участника боя в видео.\n\nСсылка: {}/#/player/{}",
                                 frontend_origin,
-                                video_id
+                                video_id_for_db
                             );
                             notifications.push((vk_id_str.clone(), msg));
                         }
@@ -538,13 +806,13 @@ pub async fn patch_video(
         }
 
         let video_bouts = bouts::table
-            .filter(bouts::video_id.eq(&video_id))
+            .filter(bouts::video_id.eq(&video_id_for_db))
             .order(bouts::order_index.asc())
             .load::<Bout>(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
         let video_comments = comments::table
-            .filter(comments::video_id.eq(&video_id))
+            .filter(comments::video_id.eq(&video_id_for_db))
             .order(comments::id.asc())
             .load::<Comment>(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -586,6 +854,25 @@ pub async fn patch_video(
     }
 
     let stream_url = format!("/api/videos/{}/stream", dto.id);
+
+    // Broadcast update of fighters to WebSocket channel
+    let ws_fighter_a = dto.fighter_a.as_ref().map(|f| WsFighter {
+        id: f.id.clone(),
+        display_name: f.display_name.clone(),
+        avatar_url: f.avatar_url.clone(),
+        color: f.color.clone(),
+    });
+    let ws_fighter_b = dto.fighter_b.as_ref().map(|f| WsFighter {
+        id: f.id.clone(),
+        display_name: f.display_name.clone(),
+        avatar_url: f.avatar_url.clone(),
+        color: f.color.clone(),
+    });
+    let _ = state.ws_hub.send(WsEvent::UpdateVideoFighters {
+        video_id: video_id.clone(),
+        fighter_a: ws_fighter_a,
+        fighter_b: ws_fighter_b,
+    });
 
     Ok(Json(VideoFullDto { stream_url, ..dto }))
 }
@@ -663,12 +950,13 @@ pub async fn stream_video(
     req_headers: HeaderMap,
 ) -> Result<axum::response::Response, AppError> {
     let db = state.db.clone();
+    let video_id_for_db = video_id.clone();
 
     let seafile_path = tokio::task::spawn_blocking(move || {
         use crate::db::schema::videos;
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
         let video = videos::table
-            .filter(videos::id.eq(&video_id))
+            .filter(videos::id.eq(&video_id_for_db))
             .first::<Video>(&mut conn)
             .optional()
             .map_err(|e| AppError::Internal(e.to_string()))?
@@ -683,11 +971,22 @@ pub async fn stream_video(
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
 
-    let seafile_resp = state
+    let seafile_resp = match state
         .seafile
         .fetch_range(&seafile_path, range.as_deref())
         .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            if is_not_found_error(&e) {
+                tracing::info!("Video file not found in Seafile. Cascade deleting video_id: {}", video_id);
+                let _ = crate::services::sync::delete_videos_cascade(&state.db, &state.previews_dir, &[video_id.clone()]).await;
+                let _ = state.ws_hub.send(WsEvent::VideoRemoved { id: video_id.clone() });
+                return Err(AppError::NotFound);
+            }
+            return Err(AppError::Internal(e.to_string()));
+        }
+    };
 
     let status = seafile_resp.status();
     let mut builder = axum::response::Response::builder().status(status);
@@ -705,13 +1004,12 @@ pub async fn stream_video(
         .map_err(|e| AppError::Internal(e.to_string()))
 }
 
-pub async fn download_video(
-    State(state): State<AppState>,
-    _user: CurrentUser,
-    Path(video_id): Path<String>,
+pub async fn download_video_impl(
+    state: &AppState,
+    video_id: &str,
 ) -> Result<axum::response::Response, AppError> {
     let db = state.db.clone();
-    let vid_clone = video_id.clone();
+    let vid_clone = video_id.to_string();
 
     let (video, fighter_a, fighter_b, index) = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{videos, users};
@@ -774,11 +1072,22 @@ pub async fn download_video(
         format!("{}_vs_{}_{}_{}.mp4", clean_a, clean_b, date_str, index)
     };
 
-    let seafile_resp = state
+    let seafile_resp = match state
         .seafile
         .fetch_range(&video.seafile_path, None)
         .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            if is_not_found_error(&e) {
+                tracing::info!("Video file not found in Seafile. Cascade deleting video_id: {}", video_id);
+                let _ = crate::services::sync::delete_videos_cascade(&state.db, &state.previews_dir, &[video_id.to_string()]).await;
+                let _ = state.ws_hub.send(WsEvent::VideoRemoved { id: video_id.to_string() });
+                return Err(AppError::NotFound);
+            }
+            return Err(AppError::Internal(e.to_string()));
+        }
+    };
 
     let status = seafile_resp.status();
     let mut builder = axum::response::Response::builder().status(status);
@@ -799,6 +1108,36 @@ pub async fn download_video(
         .body(body)
         .map_err(|e| AppError::Internal(e.to_string()))
 }
+
+pub async fn download_video(
+    State(state): State<AppState>,
+    _user: CurrentUser,
+    Path(video_id): Path<String>,
+) -> Result<axum::response::Response, AppError> {
+    download_video_impl(&state, &video_id).await
+}
+
+pub async fn download_shared_video(
+    State(state): State<AppState>,
+    Path(video_id): Path<String>,
+    Query(query): Query<SharedVideoQuery>,
+) -> Result<axum::response::Response, AppError> {
+    use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+    let claims: crate::api::auth::ShareClaims = decode::<crate::api::auth::ShareClaims>(
+        &query.token,
+        &DecodingKey::from_secret(state.jwt_secret.as_bytes()),
+        &Validation::new(Algorithm::HS256),
+    )
+    .map(|d| d.claims)
+    .map_err(|e| AppError::Unauthorized(format!("Invalid share token: {}", e)))?;
+
+    if claims.video_id != video_id {
+        return Err(AppError::Unauthorized("Invalid share token for this video".to_string()));
+    }
+
+    download_video_impl(&state, &video_id).await
+}
+
 
 pub async fn regenerate_preview(
     State(state): State<AppState>,
@@ -854,3 +1193,360 @@ pub async fn regenerate_preview(
 
     Ok(Json(serde_json::json!({ "status": "regenerating" })))
 }
+
+// ── Admin Database Sync ───────────────────────────────────────────────────────
+
+pub async fn admin_sync_check(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<Json<Vec<crate::db::models::Video>>, AppError> {
+    if !user.is_admin {
+        return Err(AppError::Forbidden);
+    }
+
+    let stale = crate::services::sync::check_stale_videos(&state.seafile, &state.db)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    Ok(Json(stale))
+}
+
+#[derive(Deserialize)]
+pub struct AdminSyncCleanRequest {
+    pub ids: Vec<String>,
+}
+
+pub async fn admin_sync_clean(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Json(body): Json<AdminSyncCleanRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    if !user.is_admin {
+        return Err(AppError::Forbidden);
+    }
+
+    let count = body.ids.len();
+    
+    // Perform cascade deletion
+    crate::services::sync::delete_videos_cascade(&state.db, &state.previews_dir, &body.ids)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    // Send WebSocket notification for each removed video
+    for id in &body.ids {
+        let _ = state.ws_hub.send(WsEvent::VideoRemoved { id: id.clone() });
+    }
+
+    Ok(Json(serde_json::json!({
+        "status": "ok",
+        "deleted_count": count
+    })))
+}
+
+async fn check_admin_token(
+    headers: &HeaderMap,
+    query_token: Option<&str>,
+    jwt_secret: &str,
+    db: &crate::db::DbPool,
+) -> bool {
+    let token_opt = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+        .map(|s| s.to_string())
+        .or_else(|| query_token.map(|s| s.to_string()));
+
+    if let Some(token) = token_opt {
+        if let Ok(claims) = crate::api::auth::verify_token(&token, jwt_secret) {
+            let user_id = claims.sub;
+            let db_clone = db.clone();
+            let res = tokio::task::spawn_blocking(move || {
+                use crate::db::schema::users::dsl::{id, users};
+                let mut conn = db_clone.get().map_err(|e| e.to_string())?;
+                users.filter(id.eq(&user_id))
+                    .first::<User>(&mut conn)
+                    .optional()
+                    .map_err(|e| e.to_string())
+            }).await;
+            if let Ok(Ok(Some(user))) = res {
+                return user.is_admin;
+            }
+        }
+    }
+    false
+}
+
+#[derive(Deserialize)]
+pub struct AdminImportQuery {
+    pub key: Option<String>,
+    pub token: Option<String>,
+}
+
+pub async fn admin_import_videos(
+    State(state): State<AppState>,
+    Query(query): Query<AdminImportQuery>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let mut authorized = false;
+
+    // 1. Check IMPORT_TRIGGER_KEY from .env
+    if let Ok(secret_key) = std::env::var("IMPORT_TRIGGER_KEY") {
+        if let Some(ref req_key) = query.key {
+            if req_key == &secret_key {
+                authorized = true;
+            }
+        }
+    }
+
+    // 2. If key doesn't match, check regular Admin Bearer authorization
+    if !authorized {
+        let query_token = query.token.as_deref();
+        if check_admin_token(&headers, query_token, &state.jwt_secret, &state.db).await {
+            authorized = true;
+        }
+    }
+
+    if !authorized {
+        return Err(AppError::Forbidden);
+    }
+
+    // 3. Trigger video import
+    crate::services::sync::import_new_videos(&state.seafile, &state.db, &state.ws_hub)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    Ok(Json(serde_json::json!({
+        "status": "ok"
+    })))
+}
+
+// ── AI Label ──────────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct WhisperExchange {
+    start_ms: i32,
+    end_ms: i32,
+}
+
+#[derive(Deserialize)]
+struct WhisperResponse {
+    #[allow(dead_code)]
+    video_id: String,
+    exchanges: Vec<WhisperExchange>,
+}
+
+pub async fn ai_label_video(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(video_id): Path<String>,
+) -> Result<impl axum::response::IntoResponse, AppError> {
+    if !user.is_admin {
+        return Err(AppError::Forbidden);
+    }
+
+    // 1. Load video record
+    let db = state.db.clone();
+    let video_id_clone = video_id.clone();
+    let video = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::videos;
+        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+        videos::table
+            .filter(videos::id.eq(&video_id_clone))
+            .first::<Video>(&mut conn)
+            .optional()
+            .map_err(|e| AppError::Internal(e.to_string()))?
+            .ok_or(AppError::NotFound)
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    // Set is_analyzing = true in DB
+    let db_clone = state.db.clone();
+    let video_id_db_init = video_id.clone();
+    tokio::task::spawn_blocking(move || {
+        use crate::db::schema::videos;
+        let mut conn = db_clone.get().map_err(|e| AppError::Internal(e.to_string()))?;
+        diesel::update(videos::table.filter(videos::id.eq(&video_id_db_init)))
+            .set(videos::is_analyzing.eq(true))
+            .execute(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+        Ok::<(), AppError>(())
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    // Send initial WS message to show the spinner in all active clients
+    let _ = state.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoAiLabeled {
+        video_id: video_id.clone(),
+        is_ai_labeled: false,
+        is_analyzing: true,
+    });
+
+    // Spawn background worker to download and analyze the video
+    let video_id_worker = video_id.clone();
+    let ws_hub = state.ws_hub.clone();
+    let seafile = state.seafile.clone();
+    let db_for_worker = state.db.clone();
+    
+    tokio::spawn(async move {
+        let run_analysis = || async {
+            // Get download URL from Seafile
+            let download_url = seafile
+                .get_download_url(&video.seafile_path)
+                .await
+                .map_err(|e| format!("Seafile error: {}", e))?;
+
+            // Contact whisper-service
+            let whisper_url = std::env::var("WHISPER_URL")
+                .unwrap_or_else(|_| "http://whisper-service:8000".to_string());
+
+            let client = reqwest::Client::new();
+            let resp = client
+                .post(format!("{}/analyze", whisper_url))
+                .json(&serde_json::json!({
+                    "audio_url": download_url,
+                    "video_id": video_id_worker
+                }))
+                .timeout(std::time::Duration::from_secs(600))
+                .send()
+                .await
+                .map_err(|e| format!("Whisper service unreachable: {}", e))?;
+
+            if !resp.status().is_success() {
+                let msg = resp.text().await.unwrap_or_default();
+                return Err(format!("Whisper service error: {}", msg));
+            }
+
+            let whisper_resp: WhisperResponse = resp
+                .json()
+                .await
+                .map_err(|e| format!("Failed to parse whisper response: {}", e))?;
+
+            // Replace bouts in DB
+            let exchanges = whisper_resp.exchanges;
+            let video_id_db = video_id_worker.clone();
+            let db_clone = db_for_worker.clone();
+            
+            tokio::task::spawn_blocking(move || {
+                use crate::db::schema::{bouts, videos};
+                use crate::db::models::NewBout;
+
+                let mut conn = db_clone.get().map_err(|e| e.to_string())?;
+
+                // Delete existing bouts
+                diesel::delete(bouts::table.filter(bouts::video_id.eq(&video_id_db)))
+                    .execute(&mut conn)
+                    .map_err(|e| e.to_string())?;
+
+                // Insert new bouts
+                for (i, ex) in exchanges.iter().enumerate() {
+                    diesel::insert_into(bouts::table)
+                        .values(&NewBout {
+                            video_id: video_id_db.clone(),
+                            order_index: (i + 1) as i32,
+                            time_start_ms: ex.start_ms,
+                            time_end_ms: ex.end_ms,
+                            score_a: 0,
+                            score_b: 0,
+                            technique_a_id: None,
+                            technique_b_id: None,
+                            hit_zone_a: None,
+                            hit_zone_b: None,
+                            result_a: None,
+                            result_b: None,
+                        })
+                        .execute(&mut conn)
+                        .map_err(|e| e.to_string())?;
+                }
+
+                // Query the inserted bouts to get their generated IDs
+                let inserted_bouts = bouts::table
+                    .filter(bouts::video_id.eq(&video_id_db))
+                    .load::<crate::db::models::Bout>(&mut conn)
+                    .map_err(|e| e.to_string())?;
+
+                // Insert history records for the AI-created bouts
+                use crate::db::models::NewBoutHistory;
+                use crate::db::schema::bout_history;
+                use crate::api::bouts::format_ms;
+
+                for bout in &inserted_bouts {
+                    let details = format!(
+                        "Время: {} — {}",
+                        format_ms(bout.time_start_ms),
+                        format_ms(bout.time_end_ms)
+                    );
+
+                    diesel::insert_into(bout_history::table)
+                        .values(&NewBoutHistory {
+                            bout_id: bout.id,
+                            user_id: "ai".to_string(),
+                            action: "create".to_string(),
+                            details: Some(details),
+                        })
+                        .execute(&mut conn)
+                        .map_err(|e| e.to_string())?;
+                }
+
+                // Mark video as AI-labeled and set is_analyzing to false
+                diesel::update(videos::table.filter(videos::id.eq(&video_id_db)))
+                    .set((
+                        videos::is_ai_labeled.eq(true),
+                        videos::is_analyzing.eq(false),
+                    ))
+                    .execute(&mut conn)
+                    .map_err(|e| e.to_string())?;
+
+                Ok::<(), String>(())
+            })
+            .await
+            .map_err(|e| format!("Task join error: {}", e))?
+        };
+
+        match run_analysis().await {
+            Ok(_) => {
+                println!("AI labeling completed successfully for video {}", video_id_worker);
+                let _ = ws_hub.send(crate::services::ws::WsEvent::UpdateVideoAiLabeled {
+                    video_id: video_id_worker.clone(),
+                    is_ai_labeled: true,
+                    is_analyzing: false,
+                });
+                let _ = ws_hub.send(crate::services::ws::WsEvent::UpdateVideoScore {
+                    video_id: video_id_worker,
+                    total_score_a: 0,
+                    total_score_b: 0,
+                });
+            }
+            Err(err) => {
+                eprintln!("AI labeling failed for video {}: {}", video_id_worker, err);
+                
+                // Reset is_analyzing in DB on failure
+                let db_clone = db_for_worker.clone();
+                let video_id_db = video_id_worker.clone();
+                let _ = tokio::task::spawn_blocking(move || {
+                    use crate::db::schema::videos;
+                    if let Ok(mut conn) = db_clone.get() {
+                        let _ = diesel::update(videos::table.filter(videos::id.eq(&video_id_db)))
+                            .set(videos::is_analyzing.eq(false))
+                            .execute(&mut conn);
+                    }
+                }).await;
+
+                let _ = ws_hub.send(crate::services::ws::WsEvent::UpdateVideoAiLabeled {
+                    video_id: video_id_worker,
+                    is_ai_labeled: false,
+                    is_analyzing: false,
+                });
+            }
+        }
+    });
+
+    Ok((
+        axum::http::StatusCode::ACCEPTED,
+        Json(serde_json::json!({
+            "status": "processing",
+            "video_id": video_id
+        })),
+    ))
+}
+

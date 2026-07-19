@@ -1,22 +1,42 @@
 <script lang="ts">
   import type { Video } from '../api/types';
   import { resolveColor } from '../api/types';
-  import { regeneratePreview } from '../api/videos';
+  import { regeneratePreview, aiLabelVideo } from '../api/videos';
   import { currentUser } from '../../stores';
+  import ShareModal from '../ui/ShareModal.svelte';
 
   interface Props {
     video: Video;
     watchers?: any[];
     onopen?: (id: string) => void;
+    onreload?: () => void;
   }
 
-  let { video, watchers = [], onopen }: Props = $props();
+  let { video, watchers = [], onopen, onreload }: Props = $props();
 
   let imgError = $state(false);
   let isRegenerating = $state(false);
+  let isAiLabeling = $state(false);
   let menuOpen = $state(false);
+  let showShare = $state(false);
+  let showInfo = $state(false);
   let menuPos = $state({ x: 0, y: 0 });
   let previewVersion = $state(0);
+
+  // Visual state derived from video data
+  // 0 = untagged, 1 = fighters-only, 2 = human-labeled, 3 = ai-labeled
+  let cardState = $derived(() => {
+    const hasFighters = !!video.fighter_a && !!video.fighter_b;
+    const hasBouts = (video.total_score_a !== undefined || video.total_score_b !== undefined) &&
+                    (video.total_score_a !== 0 || video.total_score_b !== 0 || video.is_tagged);
+    if (!hasFighters) return 0;
+    if (!video.is_tagged) return 0;
+    // is_tagged = has fighters. Check if bouts exist by checking scores are defined
+    const hasExchanges = video.total_score_a !== undefined;
+    if (!hasExchanges) return 1;
+    if (video.is_ai_labeled) return 3;
+    return 2;
+  });
 
   function handleClick() {
     onopen?.(video.id);
@@ -40,7 +60,7 @@
     e.stopPropagation(); // Prevent immediate closing from window contextmenu handler
     
     const menuWidth = 190;
-    const menuHeight = 90;
+    const menuHeight = 150;
     let x = e.clientX;
     let y = e.clientY;
     
@@ -111,8 +131,14 @@
   onkeydown={handleWindowKeyDown} 
 />
 
+<!-- AI-border wrapper -->
+<div class="card-wrapper" 
+     class:ai-labeled={video.is_ai_labeled && !video.is_analyzing}
+     class:analyzing={video.is_analyzing || isAiLabeling}>
 <button
   class="card"
+  class:state-untagged={cardState() === 0}
+  class:state-fighters-only={cardState() === 1}
   onclick={handleClick}
   onauxclick={handleAuxClick}
   oncontextmenu={handleContextMenu}
@@ -134,13 +160,24 @@
         {/each}
       </div>
     {/if}
-    {#if isRegenerating}
+    {#if isAiLabeling || video.is_analyzing}
+      <div class="spinner-container">
+        <div class="spinner ai-spinner"></div>
+        <span class="spinner-text">Анализ ИИ...</span>
+      </div>
+    {:else if isRegenerating}
       <div class="spinner-container">
         <div class="spinner"></div>
         <span class="spinner-text">Обновление...</span>
       </div>
     {:else if !imgError}
       <img src={previewSrc} alt="" loading="lazy" onerror={handleImgError} oncontextmenu={handleContextMenu} />
+    {/if}
+    <!-- State overlay for untagged / fighters-only -->
+    {#if cardState() === 0}
+      <div class="state-overlay" style="--overlay-opacity: 0.55;"></div>
+    {:else if cardState() === 1}
+      <div class="state-overlay" style="--overlay-opacity: 0.25;"></div>
     {/if}
   </div>
 
@@ -170,6 +207,7 @@
     {/if}
   </div>
 </button>
+</div>
 
 {#if menuOpen}
   <div 
@@ -187,7 +225,46 @@
       </svg>
       <span>Скачать видео</span>
     </button>
+    <button 
+      class="menu-item" 
+      onclick={(e) => { e.stopPropagation(); closeMenu(); showShare = true; }}
+    >
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="18" cy="5" r="3" />
+        <circle cx="6" cy="12" r="3" />
+        <circle cx="18" cy="19" r="3" />
+        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+      </svg>
+      <span>Поделиться</span>
+    </button>
     {#if $currentUser?.is_admin}
+      <button 
+        class="menu-item menu-item-ai" 
+        onclick={async (e) => { 
+          e.stopPropagation(); 
+          closeMenu(); 
+          video.is_analyzing = true;
+          isAiLabeling = true; 
+          try { 
+            await aiLabelVideo(video.id);
+          } catch (err) { 
+            video.is_analyzing = false;
+            alert(err instanceof Error ? err.message : 'Ошибка анализа ИИ'); 
+          } finally {
+            isAiLabeling = false; 
+          }
+        }}
+        disabled={isAiLabeling}
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a10 10 0 1 0 10 10" />
+          <path d="M12 6v6l4 2" />
+          <circle cx="19" cy="5" r="3" fill="currentColor" stroke="none" />
+        </svg>
+        <span>Разметить сходы (ИИ)</span>
+      </button>
+
       <button 
         class="menu-item" 
         onclick={async (e) => { 
@@ -209,15 +286,132 @@
         </svg>
         <span>Обновить превью</span>
       </button>
+
+      <button 
+        class="menu-item" 
+        onclick={(e) => { 
+          e.stopPropagation(); 
+          closeMenu(); 
+          showInfo = true;
+        }}
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="16" x2="12" y2="12" />
+          <line x1="12" y1="8" x2="12.01" y2="8" />
+        </svg>
+        <span>Сведения о видео</span>
+      </button>
     {/if}
   </div>
 {/if}
 
+{#if showShare}
+  <ShareModal videoId={video.id} onclose={() => showShare = false} />
+{/if}
+
+{#if showInfo}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="modal-overlay" onclick={() => showInfo = false} role="presentation">
+    <div class="modal-card info-modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Сведения о видео" tabindex="-1">
+      <div class="modal-header">
+        <h3>Сведения о видео</h3>
+        <button class="close-btn" onclick={() => showInfo = false} aria-label="Закрыть">✕</button>
+      </div>
+      <div class="modal-body">
+        <table class="info-table">
+          <tbody>
+            <tr>
+              <td><strong>Имя файла:</strong></td>
+              <td>{video.seafile_path ? video.seafile_path.split('/').pop() : 'Неизвестно'}</td>
+            </tr>
+            <tr>
+              <td><strong>Путь на сервере:</strong></td>
+              <td><code>{video.seafile_path || 'Неизвестно'}</code></td>
+            </tr>
+            <tr>
+              <td><strong>Ссылка в Seafile:</strong></td>
+              <td>
+                {#if video.seafile_web_url}
+                  <a href={video.seafile_web_url} target="_blank" rel="noopener noreferrer" class="link-styled">
+                    Открыть в Seafile
+                  </a>
+                {:else}
+                  <span>Недоступно</span>
+                {/if}
+              </td>
+            </tr>
+            <tr>
+              <td><strong>Ссылка на скачивание:</strong></td>
+              <td>
+                <a href="/api/videos/{video.id}/download?token={encodeURIComponent(localStorage.getItem('ef_token') || '')}" target="_blank" rel="noopener noreferrer" class="link-styled">
+                  Скачать файл
+                </a>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
+  /* ── AI-border wrapper ─────────────────────────────── */
+  .card-wrapper {
+    position: relative;
+    border-radius: calc(var(--radius-md) + 3px);
+    padding: 0;
+    transition: padding 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  @property --ai-angle {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
+  }
+
+  @keyframes ai-spin {
+    to { --ai-angle: 360deg; }
+  }
+
+  /* Active processing state: animated flowing rainbow border */
+  .card-wrapper.analyzing {
+    padding: 2px;
+    background: conic-gradient(
+      from var(--ai-angle),
+      #7c3aed 0%,
+      #2563eb 25%,
+      #06b6d4 50%,
+      #7c3aed 75%,
+      #7c3aed 100%
+    );
+    animation: ai-spin 3s linear infinite;
+    box-shadow: 0 0 16px 3px rgba(124, 58, 237, 0.5);
+  }
+
+  /* Completed AI labeling state: static glowing border */
+  .card-wrapper.ai-labeled {
+    padding: 2px;
+    background: linear-gradient(
+      135deg,
+      #7c3aed 0%,
+      #2563eb 50%,
+      #06b6d4 100%
+    );
+    box-shadow: 0 0 10px 1px rgba(124, 58, 237, 0.25);
+  }
+
+  .card-wrapper.analyzing .card,
+  .card-wrapper.ai-labeled .card {
+    border-color: transparent;
+  }
+
+  /* ── Card base ─────────────────────────────────────── */
   .card {
     background: var(--surface);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-sm);
@@ -251,6 +445,20 @@
     height: 100%;
     object-fit: cover;
     display: block;
+  }
+
+  /* ── State overlays ───────────────────────────────── */
+  .state-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(30, 30, 45, var(--overlay-opacity, 0.5));
+    pointer-events: none;
+  }
+
+  /* ── AI spinner ───────────────────────────────────── */
+  .ai-spinner {
+    border-top-color: #7c3aed !important;
+    border-right-color: #2563eb !important;
   }
 
   .info {
@@ -312,8 +520,6 @@
   .context-menu {
     position: fixed;
     background: rgba(30, 41, 59, 0.95);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: var(--radius-sm);
     box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
@@ -350,6 +556,16 @@
   .menu-item:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .menu-item-ai:not(:disabled) {
+    background: linear-gradient(90deg, rgba(124,58,237,0.08), transparent);
+    border-left: 2px solid #7c3aed;
+  }
+
+  .menu-item-ai:hover:not(:disabled) {
+    background: rgba(124, 58, 237, 0.18);
+    color: #a78bfa;
   }
 
   .spinner-container {
@@ -419,5 +635,82 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+
+  .info-modal {
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    width: 90%;
+    max-width: 600px;
+    padding: 24px;
+    box-shadow: var(--shadow-lg);
+    color: var(--text-primary);
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  .modal-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+  }
+
+  .close-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 4px;
+    transition: var(--transition);
+  }
+
+  .close-btn:hover {
+    color: var(--text-primary);
+  }
+
+  .info-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .info-table td {
+    padding: 10px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.9rem;
+    vertical-align: top;
+    word-break: break-all;
+  }
+
+  .info-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .link-styled {
+    color: var(--accent-yellow, #ffd700);
+    text-decoration: underline;
+  }
+
+  .link-styled:hover {
+    color: #fff;
   }
 </style>
