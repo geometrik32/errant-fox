@@ -5,14 +5,13 @@ import subprocess
 import sys
 import tempfile
 import traceback
-
 import gc
+
 import requests
-import whisper
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-app = FastAPI(title="Whisper Exchange Detection Service")
+app = FastAPI(title="Whisper Exchange Detection Service (Faster-Whisper CTranslate2)")
 
 WHISPER_MODEL_NAME = os.environ.get("WHISPER_MODEL", "medium")
 
@@ -28,25 +27,24 @@ _start_pattern = re.compile(
 )
 
 
-def _extract_simple_exchanges(segments):
+def _extract_simple_exchanges_from_faster(segments_list):
     """
-    Pure & Simple Detection:
+    Pure & Simple Detection for faster-whisper output:
     Every 'Стоп' word detected at T_stop creates a bout: [max(0, T_stop - 2.0s), T_stop + 1.0s].
     Close duplicate stop words (within 3.0s) are grouped to keep only the first trigger.
     """
     all_words = []
     stops = []
 
-    for seg in segments:
-        if "words" in seg and seg["words"]:
-            for w in seg["words"]:
-                word_raw = w.get("word", "").strip()
+    for seg in segments_list:
+        if hasattr(seg, "words") and seg.words:
+            for w in seg.words:
+                word_raw = w.word.strip()
                 word_clean = re.sub(r'[^\w\s]', '', word_raw.lower())
-                start_t = w.get("start")
-                end_t = w.get("end")
-                prob = w.get("probability", 1.0)
+                start_t = w.start
+                end_t = w.end
+                prob = getattr(w, "probability", 1.0)
 
-                # Normalize words for cleaner UI display
                 disp_word = word_raw
                 if re.search(r'\b(боите|бои|бойте|бойтэ|бойтес)\b', word_clean, re.IGNORECASE):
                     disp_word = "Бой"
@@ -91,39 +89,30 @@ def _extract_simple_exchanges(segments):
 
 
 def _detect_exchanges(wav_path: str):
-    print(f"  Loading Whisper model '{WHISPER_MODEL_NAME}' on-demand...", flush=True)
-    _device = "cpu"
-    try:
-        import torch
-        if torch.cuda.is_available():
-            _device = "cuda"
-    except ImportError:
-        pass
+    from faster_whisper import WhisperModel
 
-    model = whisper.load_model(WHISPER_MODEL_NAME, device=_device)
+    print(f"  Loading Faster-Whisper (CTranslate2) model '{WHISPER_MODEL_NAME}' on CPU...", flush=True)
+    # compute_type="int8" optimized specifically for Intel CPU AVX2/AVX512 (3-4x speedup, 4x less RAM)
+    model = WhisperModel(WHISPER_MODEL_NAME, device="cpu", compute_type="int8")
 
     try:
-        result = model.transcribe(
+        segments, info = model.transcribe(
             wav_path,
             language="ru",
-            word_timestamps=True
+            word_timestamps=True,
+            initial_prompt="Бой! Стоп! Удар! Разметка сходов фехтовального поединка."
         )
-        exchanges, all_words = _extract_simple_exchanges(result.get("segments", []))
+        segments_list = list(segments)
+        exchanges, all_words = _extract_simple_exchanges_from_faster(segments_list)
 
         for idx, ex in enumerate(exchanges):
             print(f"  Exchange {idx+1}: {ex['start_ms']}ms – {ex['end_ms']}ms ('{ex.get('stop_word', '')}')", flush=True)
 
         return exchanges, all_words
     finally:
-        print("  Unloading Whisper model to free RAM...", flush=True)
+        print("  Unloading Faster-Whisper model from RAM...", flush=True)
         del model
         gc.collect()
-        try:
-            import torch
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        except ImportError:
-            pass
 
 
 # ── Request / Response schemas ────────────────────────────────────────────────
@@ -194,13 +183,13 @@ async def analyze(body: AnalyzeRequest):
             pass
         return {"error": f"Audio download failed: {exc}"}
 
-    # 2. Acquire GPU lock and run Whisper detection sequentially
+    # 2. Acquire lock and run Faster-Whisper detection sequentially
     try:
-        print(f"[analyze] video_id={body.video_id} waiting for GPU lock...", flush=True)
+        print(f"[analyze] video_id={body.video_id} waiting for CPU lock...", flush=True)
         async with analyze_lock:
-            print(f"[analyze] video_id={body.video_id} GPU processing started.", flush=True)
+            print(f"[analyze] video_id={body.video_id} Faster-Whisper processing started.", flush=True)
             exchanges, all_words = await loop.run_in_executor(None, _detect_exchanges, wav_path)
-            print(f"[analyze] video_id={body.video_id} GPU processing finished.", flush=True)
+            print(f"[analyze] video_id={body.video_id} Faster-Whisper processing finished.", flush=True)
             return {"video_id": body.video_id, "exchanges": exchanges, "words": all_words}
     except Exception as exc:
         traceback.print_exc(file=sys.stderr)
