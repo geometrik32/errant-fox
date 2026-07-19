@@ -25,15 +25,14 @@
 
   // Visual state derived from video data
   // 0 = untagged, 1 = fighters-only, 2 = human-labeled, 3 = ai-labeled
-  let cardState = $derived(() => {
+  let cardState = $derived((): 0 | 1 | 2 | 3 => {
     const hasFighters = !!video.fighter_a && !!video.fighter_b;
-    const hasBouts = (video.total_score_a !== undefined || video.total_score_b !== undefined) &&
-                    (video.total_score_a !== 0 || video.total_score_b !== 0 || video.is_tagged);
-    if (!hasFighters) return 0;
-    if (!video.is_tagged) return 0;
-    // is_tagged = has fighters. Check if bouts exist by checking scores are defined
-    const hasExchanges = video.total_score_a !== undefined;
-    if (!hasExchanges) return 1;
+    if (!hasFighters || !video.is_tagged) return 0;
+    const scoreA = video.total_score_a;
+    const scoreB = video.total_score_b;
+    const hasScores = scoreA !== undefined && scoreB !== undefined;
+    const hasBouts = hasScores && ((scoreA ?? 0) > 0 || (scoreB ?? 0) > 0);
+    if (!hasBouts) return 0;
     if (video.is_ai_labeled) return 3;
     return 2;
   });
@@ -99,6 +98,12 @@
     a.click();
   }
 
+  function handleOpenTranscript() {
+    const token = localStorage.getItem('ef_token') || '';
+    const transcriptUrl = `/api/videos/${video.id}/transcript?token=${encodeURIComponent(token)}`;
+    window.open(transcriptUrl, '_blank');
+  }
+
   function pollPreview() {
     const url = video.preview_url;
     let attempts = 0;
@@ -138,7 +143,6 @@
 <button
   class="card"
   class:state-untagged={cardState() === 0}
-  class:state-fighters-only={cardState() === 1}
   onclick={handleClick}
   onauxclick={handleAuxClick}
   oncontextmenu={handleContextMenu}
@@ -173,11 +177,9 @@
     {:else if !imgError}
       <img src={previewSrc} alt="" loading="lazy" onerror={handleImgError} oncontextmenu={handleContextMenu} />
     {/if}
-    <!-- State overlay for untagged / fighters-only -->
+    <!-- State overlay for untagged / no bouts -->
     {#if cardState() === 0}
       <div class="state-overlay" style="--overlay-opacity: 0.55;"></div>
-    {:else if cardState() === 1}
-      <div class="state-overlay" style="--overlay-opacity: 0.25;"></div>
     {/if}
   </div>
 
@@ -239,9 +241,30 @@
       <span>Поделиться</span>
     </button>
     {#if $currentUser?.is_admin}
+      {#if video.is_ai_labeled}
+        <button 
+          class="menu-item"
+          onclick={(e) => {
+            e.stopPropagation();
+            closeMenu();
+            handleOpenTranscript();
+          }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+          </svg>
+          <span>Расшифровка ИИ</span>
+        </button>
+      {/if}
+
+      {@const isHumanLabeled = cardState() === 2}
       <button 
         class="menu-item menu-item-ai" 
         onclick={async (e) => { 
+          if (isHumanLabeled) return;
           e.stopPropagation(); 
           closeMenu(); 
           video.is_analyzing = true;
@@ -255,14 +278,15 @@
             isAiLabeling = false; 
           }
         }}
-        disabled={isAiLabeling}
+        disabled={isAiLabeling || isHumanLabeled}
+        title={isHumanLabeled ? 'Нельзя запускать ИИ-разметку для видео, размеченного человеком' : video.is_ai_labeled ? 'Переразметить сходы с помощью ИИ' : 'Разметить сходы (ИИ)'}
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 2a10 10 0 1 0 10 10" />
           <path d="M12 6v6l4 2" />
           <circle cx="19" cy="5" r="3" fill="currentColor" stroke="none" />
         </svg>
-        <span>Разметить сходы (ИИ)</span>
+        <span>{video.is_ai_labeled ? 'Переразметить сходы (ИИ)' : 'Разметить сходы (ИИ)'}</span>
       </button>
 
       <button 

@@ -1,0 +1,1 @@
+ALTER TABLE bouts DROP COLUMN is_ai;

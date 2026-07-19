@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, tick, untrack } from 'svelte';
-  import { fighters } from '../../stores';
+  import { fighters, sortedFighters } from '../../stores';
   import type { VideoFull, Bout, VideoFighter } from '../api/types';
   import { resolveColor } from '../api/types';
   import { createBout } from '../api/bouts';
@@ -11,6 +11,9 @@
     video: VideoFull;
     currentTime: number;
     playing?: boolean;
+    readonly?: boolean;
+    shareToken?: string;
+    sharedBoutId?: number | null;
     onboutschange?: (bouts: Bout[]) => void;
     onseekrequest?: (ms: number, endMs: number) => void;
     onpauserequest?: () => void;
@@ -26,6 +29,9 @@
     video,
     currentTime,
     playing = false,
+    readonly = false,
+    shareToken = '',
+    sharedBoutId = null,
     onboutschange,
     onseekrequest,
     onpauserequest,
@@ -41,6 +47,10 @@
 
   let bouts = $state<Bout[]>([...untrack(() => video.bouts)]);
 
+  $effect(() => {
+    bouts = [...video.bouts];
+  });
+
   // ── Fighter assignment ───────────────────────────────────────────────────
 
   let fighterAId = $state<string>(untrack(() => video.fighter_a?.id ?? ''));
@@ -52,6 +62,19 @@
   let activeFighterB = $derived<VideoFighter | null>(
     $fighters.find(f => f.id === fighterBId) as VideoFighter | null ?? null
   );
+
+  let selectableFightersA = $derived(
+    $sortedFighters.filter(f => f.role !== 'retired' || f.id === fighterAId)
+  );
+  let selectableFightersB = $derived(
+    $sortedFighters.filter(f => f.role !== 'retired' || f.id === fighterBId)
+  );
+
+  let activeSelectableA = $derived(selectableFightersA.filter(f => f.role !== 'retired'));
+  let retiredSelectableA = $derived(selectableFightersA.filter(f => f.role === 'retired'));
+
+  let activeSelectableB = $derived(selectableFightersB.filter(f => f.role !== 'retired'));
+  let retiredSelectableB = $derived(selectableFightersB.filter(f => f.role === 'retired'));
   let footerFighterA = $derived(activeFighterA ?? video.fighter_a);
   let footerFighterB = $derived(activeFighterB ?? video.fighter_b);
   let footerFighterAColor = $derived(
@@ -134,7 +157,7 @@
 
   // ── Expand / collapse ────────────────────────────────────────────────────
 
-  let expandedBoutId = $state<number | null>(null);
+  let expandedBoutId = $state<number | null>(untrack(() => sharedBoutId ?? null));
   let dirtyBoutIds = $state(new Set<number>());
 
   async function handleExpand(id: number) {
@@ -212,7 +235,7 @@
     ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
 
     ws.onopen = () => {
-      const token = localStorage.getItem('ef_token');
+      const token = shareToken || localStorage.getItem('ef_token');
       if (!token) return;
       ws!.send(JSON.stringify({ token }));
       ws!.send(JSON.stringify({ watching: video.id }));
@@ -317,6 +340,8 @@
           boutIndex={i + 1}
           fighters={[activeFighterA, activeFighterB]}
           {currentTime}
+          {readonly}
+          {shareToken}
           expanded={expandedBoutId === bout.id}
           onexpand={() => handleExpand(bout.id)}
           oncollapse={handleCollapse}
@@ -357,7 +382,7 @@
             <span class="fighter-opt-avatar unselected"></span>
             <span class="fighter-opt-name">Не выбран</span>
           </button>
-          {#each $fighters as f (f.id)}
+          {#each activeSelectableA as f (f.id)}
             {@const optColor = resolveColor(f.id, f.color)}
             <button
               class="fighter-opt"
@@ -376,6 +401,34 @@
               <span class="fighter-opt-name">{f.display_name}</span>
             </button>
           {/each}
+
+          {#if retiredSelectableA.length > 0}
+            <div class="dropdown-divider-wrap">
+              <span class="dropdown-divider-line"></span>
+              <span class="dropdown-divider-text">На пенсии</span>
+              <span class="dropdown-divider-line"></span>
+            </div>
+
+            {#each retiredSelectableA as f (f.id)}
+              {@const optColor = resolveColor(f.id, f.color)}
+              <button
+                class="fighter-opt fighter-opt--retired"
+                class:selected={fighterAId === f.id}
+                onclick={() => selectFighter('a', f.id)}
+              >
+                <span class="fighter-opt-avatar" style:background={optColor} style:border-color={optColor}>
+                  <svg class="fighter-opt-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5" />
+                    <path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                  </svg>
+                  {#if f.avatar_url}
+                    <img src={f.avatar_url} alt="" onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  {/if}
+                </span>
+                <span class="fighter-opt-name">{f.display_name}</span>
+              </button>
+            {/each}
+          {/if}
         </div>
       {/if}
     </div>
@@ -410,7 +463,7 @@
             <span class="fighter-opt-avatar unselected"></span>
             <span class="fighter-opt-name">Не выбран</span>
           </button>
-          {#each $fighters as f (f.id)}
+          {#each activeSelectableB as f (f.id)}
             {@const optColor = resolveColor(f.id, f.color)}
             <button
               class="fighter-opt"
@@ -429,6 +482,34 @@
               <span class="fighter-opt-name">{f.display_name}</span>
             </button>
           {/each}
+
+          {#if retiredSelectableB.length > 0}
+            <div class="dropdown-divider-wrap">
+              <span class="dropdown-divider-line"></span>
+              <span class="dropdown-divider-text">На пенсии</span>
+              <span class="dropdown-divider-line"></span>
+            </div>
+
+            {#each retiredSelectableB as f (f.id)}
+              {@const optColor = resolveColor(f.id, f.color)}
+              <button
+                class="fighter-opt fighter-opt--retired"
+                class:selected={fighterBId === f.id}
+                onclick={() => selectFighter('b', f.id)}
+              >
+                <span class="fighter-opt-avatar" style:background={optColor} style:border-color={optColor}>
+                  <svg class="fighter-opt-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5" />
+                    <path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                  </svg>
+                  {#if f.avatar_url}
+                    <img src={f.avatar_url} alt="" onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  {/if}
+                </span>
+                <span class="fighter-opt-name">{f.display_name}</span>
+              </button>
+            {/each}
+          {/if}
         </div>
       {/if}
     </div>
@@ -564,6 +645,28 @@
 
   .fighter-opt:hover { background: var(--surface-hover); color: var(--text-primary); }
   .fighter-opt.selected { background: rgba(219, 132, 31, 0.12); color: var(--accent-yellow); }
+  .fighter-opt--retired { opacity: 0.75; }
+
+  .dropdown-divider-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 6px;
+  }
+
+  .dropdown-divider-line {
+    flex: 1;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .dropdown-divider-text {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted, #94a3b8);
+  }
 
   .fighter-opt-avatar {
     position: relative;

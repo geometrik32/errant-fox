@@ -65,6 +65,10 @@ pub fn router(state: AppState) -> Router {
             "/api/videos/{id}/ai-label",
             post(videos::ai_label_video),
         )
+        .route(
+            "/api/videos/{id}/transcript",
+            get(videos::get_video_transcript),
+        )
         // Admin Videos Sync
         .route(
             "/api/admin/videos/sync-check",

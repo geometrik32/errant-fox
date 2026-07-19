@@ -95,17 +95,41 @@
     return c.text.length > 60 ? c.text.slice(0, 60) + '…' : c.text;
   }
 
+  let isGuestMode = $derived(!!shareToken || !$currentUser);
+  let guestNickname = $state(typeof localStorage !== 'undefined' ? (localStorage.getItem('ef_guest_nickname') || 'Гость') : 'Гость');
+
+  function onGuestNicknameChange(e: Event) {
+    const val = (e.target as HTMLInputElement).value;
+    guestNickname = val;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('ef_guest_nickname', val);
+    }
+  }
+
   async function submit() {
     const t = text.trim();
     if (!t || sending) return;
     sending = true;
     try {
-      const created = await createComment({
-        video_id: videoId,
-        timestamp_ms: replyTo ? replyTo.timestamp_ms : Math.round(currentTime * 1000),
-        text: t,
-        reply_to_id: replyTo?.id ?? null,
-      });
+      let created: Comment;
+      if (shareToken || !$currentUser) {
+        created = await createSharedComment({
+          videoId,
+          token: shareToken || localStorage.getItem('ef_token') || '',
+          nickname: guestNickname || 'Гость',
+          text: t,
+          timestamp_ms: replyTo ? replyTo.timestamp_ms : Math.round(currentTime * 1000),
+          reply_to_id: replyTo?.id ?? null,
+          bout_id: sharedBoutId,
+        });
+      } else {
+        created = await createComment({
+          video_id: videoId,
+          timestamp_ms: replyTo ? replyTo.timestamp_ms : Math.round(currentTime * 1000),
+          text: t,
+          reply_to_id: replyTo?.id ?? null,
+        });
+      }
       const idx = comments.findIndex(c => c.id === created.id);
       if (idx >= 0) {
         comments = comments.map((c, i) => i === idx ? created : c);
@@ -118,6 +142,8 @@
       requestAnimationFrame(() => {
         if (listEl) listEl.scrollTop = listEl.scrollHeight;
       });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Ошибка отправки комментария');
     } finally {
       sending = false;
     }
@@ -195,7 +221,7 @@
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
     ws.onopen = () => {
-      const token = localStorage.getItem('ef_token');
+      const token = shareToken || localStorage.getItem('ef_token');
       if (!token) return;
       ws!.send(JSON.stringify({ token }));
       ws!.send(JSON.stringify({ watching: videoId }));
@@ -215,6 +241,15 @@
               if (listEl) listEl.scrollTop = listEl.scrollHeight;
             });
           }
+          oncommentschange?.(comments);
+        } else if (msg.type === 'update_comment' && msg.video_id === videoId) {
+          const { type: _t, video_id: _v, ...fields } = msg;
+          const incoming = fields as unknown as Comment;
+          comments = comments.map(c => c.id === incoming.id ? incoming : c);
+          oncommentschange?.(comments);
+        } else if (msg.type === 'delete_comment' && msg.video_id === videoId) {
+          const id = msg.id as number;
+          comments = comments.filter(c => c.id !== id);
           oncommentschange?.(comments);
         }
       } catch { /* ignore malformed */ }
@@ -328,6 +363,18 @@
 
   <!-- Input area -->
   <div class="input-area">
+    {#if isGuestMode}
+      <div class="guest-name-bar">
+        <span class="guest-label">Имя гостя:</span>
+        <input
+          type="text"
+          class="guest-input"
+          value={guestNickname}
+          oninput={onGuestNicknameChange}
+          placeholder="Гость"
+        />
+      </div>
+    {/if}
     {#if replyTo}
       <div class="reply-to-bar">
         <span class="reply-to-label">
@@ -681,5 +728,33 @@
     font-size: 0.8rem;
     font-variant-numeric: tabular-nums;
     color: inherit;
+  }
+
+  .guest-name-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .guest-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+
+  .guest-input {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    padding: 4px 8px;
+    font-size: 0.85rem;
+    width: 100%;
+    outline: none;
+  }
+
+  .guest-input:focus {
+    border-color: var(--accent-yellow);
   }
 </style>

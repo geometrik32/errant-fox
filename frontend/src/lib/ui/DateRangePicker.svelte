@@ -238,9 +238,15 @@
               class:selected={dateStart === week.start && dateEnd === week.end}
               class:has-fight={week.hasFight}
               onclick={() => {
-                dateStart = week.start;
-                dateEnd = week.end;
-                onchange(dateStart, dateEnd);
+                if (dateStart === week.start && dateEnd === week.end) {
+                  dateStart = '';
+                  dateEnd = '';
+                  onchange('', '');
+                } else {
+                  dateStart = week.start;
+                  dateEnd = week.end;
+                  onchange(dateStart, dateEnd);
+                }
                 isOpen = false;
               }}
             >
@@ -459,6 +465,11 @@
     background: var(--accent-yellow) !important;
     color: #000 !important;
     border-color: var(--accent-yellow);
+    font-weight: 600;
+  }
+
+  .week-row.selected .week-label {
+    color: #000 !important;
     font-weight: 600;
   }
 

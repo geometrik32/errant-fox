@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { currentUser } from '../stores';
-  import { getVideo } from '../lib/api/videos';
+  import { getVideo, getSharedVideo } from '../lib/api/videos';
   import type { VideoFull, Bout, Comment } from '../lib/api/types';
   import VideoPlayer from '../lib/player/VideoPlayer.svelte';
   import JudgingPanel from '../lib/player/JudgingPanel.svelte';
@@ -11,8 +11,10 @@
   interface Props {
     videoId: string;
     initialTimeMs?: number;
+    shareToken?: string;
+    sharedBoutId?: number | null;
   }
-  let { videoId, initialTimeMs = 0 }: Props = $props();
+  let { videoId, initialTimeMs = 0, shareToken = '', sharedBoutId = null }: Props = $props();
 
   let video = $state<VideoFull | null>(null);
   let loading = $state(true);
@@ -72,13 +74,55 @@
   // Comment highlight driven by timeline marker click
   let highlightedCommentId = $state<number | null>(null);
 
+  let ws: WebSocket | null = null;
+
+  function connectWS() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+    ws.onopen = () => {
+      const tok = shareToken || localStorage.getItem('ef_token');
+      if (tok) ws!.send(JSON.stringify({ token: tok }));
+      ws!.send(JSON.stringify({ watching: videoId }));
+    };
+
+    ws.onmessage = async (e) => {
+      try {
+        const msg = JSON.parse(e.data as string);
+        if (msg.type === 'update_video_ai_labeled' && msg.video_id === videoId) {
+          if (video) {
+            video.is_ai_labeled = msg.is_ai_labeled;
+            video.is_analyzing = msg.is_analyzing;
+          }
+          if (!msg.is_analyzing) {
+            const reloaded = shareToken
+              ? await getSharedVideo(videoId, shareToken)
+              : await getVideo(videoId);
+            video = reloaded;
+            liveBouts = [...reloaded.bouts];
+            liveComments = [...reloaded.comments];
+          }
+        } else if (msg.type === 'presence_update') {
+          onlineUsers = msg.users as any[];
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    ws.onclose = () => {
+      setTimeout(() => { if (ws !== null) connectWS(); }, 4000);
+    };
+  }
+
   onMount(async () => {
     try {
-      video = await getVideo(videoId);
+      video = shareToken ? await getSharedVideo(videoId, shareToken) : await getVideo(videoId);
       if (video.duration_ms) duration = video.duration_ms / 1000;
       fps = video.fps ?? null;
       liveBouts = [...video.bouts];
       liveComments = [...video.comments];
+      connectWS();
     } catch (e) {
       loadError = e instanceof Error ? e.message : 'Ошибка загрузки видео';
     } finally {
@@ -86,9 +130,22 @@
     }
   });
 
-  // Seek to initial time after player is ready
+  onDestroy(() => {
+    const w = ws;
+    ws = null;
+    w?.close();
+  });
+
+  // Seek to initial time or shared bout after player is ready
   $effect(() => {
-    if (player && initialTimeMs > 0 && !loading && video) {
+    if (player && !loading && video && sharedBoutId != null) {
+      const bout = video.bouts.find(b => b.id === sharedBoutId);
+      if (bout) {
+        const targetMs = initialTimeMs > 0 ? initialTimeMs : bout.time_start_ms;
+        player.seekTo(targetMs);
+        player.setLoop(bout.time_start_ms, bout.time_end_ms);
+      }
+    } else if (player && initialTimeMs > 0 && !loading && video) {
       player.seekTo(initialTimeMs);
     }
   });
@@ -148,6 +205,9 @@
           {video}
           {currentTime}
           {playing}
+          {shareToken}
+          {sharedBoutId}
+          readonly={!!shareToken}
           bind:startTime={startTime}
           bind:finishing={finishing}
           onboutschange={(b) => { liveBouts = b; }}
@@ -195,6 +255,8 @@
             {currentTime}
             highlightedId={highlightedCommentId}
             bouts={liveBouts}
+            {shareToken}
+            {sharedBoutId}
             onseek={(ms) => { player?.seekTo(ms); player?.pause(); }}
             oncommentschange={(c) => { liveComments = c; }}
           />

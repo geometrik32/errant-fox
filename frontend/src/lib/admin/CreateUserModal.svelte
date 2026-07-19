@@ -42,7 +42,7 @@
   let activeTab = $state<'fighters' | 'guests'>('fighters');
   let showCreateForm = $state(false);
 
-  let fightersList = $derived(allUsers.filter(u => u.role === 'fighter'));
+  let fightersList = $derived(allUsers.filter(u => u.role === 'fighter' || u.role === 'retired'));
   let guestsList = $derived(allUsers.filter(u => u.role === 'guest'));
 
   // ── CREATE form ──────────────────────────────────────────────────────────────
@@ -157,8 +157,8 @@
       if (editPassword) data.password = editPassword;
       if (editRole !== f.role) data.role = editRole;
 
-      // Only save color/avatar/admin if user is/remains a fighter
-      if (editRole === 'fighter') {
+      // Save color/avatar/admin if user is fighter or retired
+      if (editRole === 'fighter' || editRole === 'retired') {
         if (editColor !== (f.color ?? '')) data.color = editColor;
         if (editIsAdmin !== f.is_admin) data.is_admin = editIsAdmin;
       } else {
@@ -169,11 +169,11 @@
 
       if (editVkId !== (f.vk_id ?? '')) data.vk_id = editVkId;
 
-      if (Object.keys(data).length > 0 || (editRole === 'fighter' && editAvatarFile)) {
+      if (Object.keys(data).length > 0 || ((editRole === 'fighter' || editRole === 'retired') && editAvatarFile)) {
         if (Object.keys(data).length > 0) {
           await patchUser(f.id, data);
         }
-        if (editRole === 'fighter' && editAvatarFile) {
+        if ((editRole === 'fighter' || editRole === 'retired') && editAvatarFile) {
           await uploadUserAvatar(f.id, editAvatarFile);
         }
         await loadUsers();
@@ -393,10 +393,11 @@
                       <select class="input-glass select-glass-inline-modern" bind:value={editRole}>
                         <option value="fighter">Боец</option>
                         <option value="guest">Гость</option>
+                        <option value="retired">На пенсии</option>
                       </select>
                     </div>
 
-                    {#if editRole === 'fighter'}
+                    {#if editRole === 'fighter' || editRole === 'retired'}
                       <div class="field color-field">
                         <label class="label-sm">Цвет</label>
                         <div class="color-picker-wrapper">
@@ -429,7 +430,7 @@
               <!-- Collapsed row -->
               <div class="collapsed-row-content">
                 <div class="user-info">
-                  {#if f.role === 'fighter'}
+                  {#if f.role === 'fighter' || f.role === 'retired'}
                     <div class="user-dot" style:background={resolveColor(f.id, f.color)}></div>
                     <div class="user-avatar-wrap">
                       <svg class="user-avatar-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -447,7 +448,7 @@
                       {/if}
                     </span>
                     <span class="user-login">
-                      @{f.username}{f.is_admin ? ' · Администратор' : ''}
+                      @{f.username}{f.is_admin ? ' · Администратор' : ''}{f.role === 'retired' ? ' · На пенсии' : ''}
                     </span>
                   </div>
                 </div>

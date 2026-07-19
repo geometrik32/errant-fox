@@ -65,6 +65,7 @@ fn to_ws_bout(b: &Bout) -> WsBout {
         hit_zone_b: b.hit_zone_b.clone(),
         result_a: b.result_a.clone(),
         result_b: b.result_b.clone(),
+        is_ai: b.is_ai,
         deleted: None,
     }
 }
@@ -182,6 +183,7 @@ pub async fn post_bout(
                 hit_zone_b: None,
                 result_a: None,
                 result_b: None,
+                is_ai: false,
             })
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -418,6 +420,7 @@ pub async fn patch_bout(
                 bouts::hit_zone_b.eq(hit_zone_b),
                 bouts::result_a.eq(result_a),
                 bouts::result_b.eq(result_b),
+                bouts::is_ai.eq(false),
             ))
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;

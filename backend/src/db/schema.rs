@@ -54,6 +54,7 @@ diesel::table! {
         hit_zone_b     -> Nullable<Text>,
         result_a       -> Nullable<Text>,
         result_b       -> Nullable<Text>,
+        is_ai          -> Bool,
     }
 }
 

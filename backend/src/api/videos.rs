@@ -1360,6 +1360,28 @@ pub async fn ai_label_video(
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
+    // Check if video is human-labeled (has human bouts)
+    let db_check = state.db.clone();
+    let video_id_check = video_id.clone();
+    let video_is_ai_labeled = video.is_ai_labeled;
+    let is_human_labeled = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::bouts;
+        let mut conn = db_check.get().map_err(|e| AppError::Internal(e.to_string()))?;
+        let human_bouts_count: i64 = bouts::table
+            .filter(bouts::video_id.eq(&video_id_check))
+            .filter(bouts::is_ai.eq(false))
+            .count()
+            .get_result(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+        Ok::<bool, AppError>(human_bouts_count > 0)
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    if is_human_labeled {
+        return Err(AppError::BadRequest("Нельзя размечать с помощью ИИ видео, размеченное человеком".to_string()));
+    }
+
     // Set is_analyzing = true in DB
     let db_clone = state.db.clone();
     let video_id_db_init = video_id.clone();
@@ -1412,14 +1434,17 @@ pub async fn ai_label_video(
                 .await
                 .map_err(|e| format!("Whisper service unreachable: {}", e))?;
 
-            if !resp.status().is_success() {
-                let msg = resp.text().await.unwrap_or_default();
-                return Err(format!("Whisper service error: {}", msg));
-            }
-
-            let whisper_resp: WhisperResponse = resp
-                .json()
+            let raw_json = resp
+                .text()
                 .await
+                .map_err(|e| format!("Failed to read whisper response text: {}", e))?;
+
+            // Save raw transcript response for admin viewer
+            let _ = tokio::fs::create_dir_all("data/transcripts").await;
+            let transcript_path = format!("data/transcripts/{}.json", video_id_worker);
+            let _ = tokio::fs::write(&transcript_path, &raw_json).await;
+
+            let whisper_resp: WhisperResponse = serde_json::from_str(&raw_json)
                 .map_err(|e| format!("Failed to parse whisper response: {}", e))?;
 
             // Replace bouts in DB
@@ -1454,6 +1479,7 @@ pub async fn ai_label_video(
                             hit_zone_b: None,
                             result_a: None,
                             result_b: None,
+                            is_ai: true,
                         })
                         .execute(&mut conn)
                         .map_err(|e| e.to_string())?;
@@ -1548,5 +1574,282 @@ pub async fn ai_label_video(
             "video_id": video_id
         })),
     ))
+}
+
+#[derive(Deserialize)]
+pub struct TranscriptQuery {
+    pub token: Option<String>,
+}
+
+pub async fn get_video_transcript(
+    State(state): State<AppState>,
+    Path(video_id): Path<String>,
+    Query(query): Query<TranscriptQuery>,
+) -> Result<axum::response::Response, AppError> {
+    let token = query.token.unwrap_or_default();
+    let is_admin = match crate::api::auth::verify_token(&token, &state.jwt_secret) {
+        Ok(claims) => {
+            let db = state.db.clone();
+            let uid = claims.sub;
+            tokio::task::spawn_blocking(move || {
+                use crate::db::schema::users;
+                if let Ok(mut conn) = db.get() {
+                    users::table
+                        .filter(users::id.eq(&uid))
+                        .first::<crate::db::models::User>(&mut conn)
+                        .map(|u| u.is_admin)
+                        .unwrap_or(false)
+                } else {
+                    false
+                }
+            })
+            .await
+            .unwrap_or(false)
+        }
+        Err(_) => false,
+    };
+
+    if !is_admin {
+        return Err(AppError::Forbidden);
+    }
+
+    let json_path = format!("data/transcripts/{}.json", video_id);
+    let html_content = match tokio::fs::read_to_string(&json_path).await {
+        Ok(raw_json) => render_transcript_html(&video_id, &raw_json),
+        Err(_) => format!(
+            r#"<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Расшифровка ИИ: {}</title>
+    <style>
+        body {{ background: #0f172a; color: #f8fafc; font-family: system-ui, sans-serif; padding: 40px; text-align: center; }}
+        .card {{ background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 40px; border-radius: 12px; max-width: 600px; margin: 0 auto; }}
+        h1 {{ color: #f59e0b; font-size: 1.5rem; }}
+        p {{ color: #94a3b8; font-size: 0.95rem; line-height: 1.6; }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Расшифровка ИИ отсутствует</h1>
+        <p>Для видео <code>{}</code> файл расшифровки распознавания пока не создан или был выполнен по старой версии сервиса.</p>
+    </div>
+</body>
+</html>"#,
+            video_id, video_id
+        ),
+    };
+
+    let response = axum::response::Response::builder()
+        .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+        .body(axum::body::Body::from(html_content))
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    Ok(response)
+}
+
+fn render_transcript_html(video_id: &str, raw_json: &str) -> String {
+    let parsed: serde_json::Value = serde_json::from_str(raw_json).unwrap_or(serde_json::Value::Null);
+
+    let format_time = |ms: i64| -> String {
+        let total_sec = ms / 1000;
+        let mins = total_sec / 60;
+        let secs = total_sec % 60;
+        let millis = ms % 1000;
+        format!("{:02}:{:02}.{:03}", mins, secs, millis)
+    };
+
+    let mut rows_html = String::new();
+    if let Some(exchanges) = parsed.get("exchanges").and_then(|v| v.as_array()) {
+        for (idx, ex) in exchanges.iter().enumerate() {
+            let start = ex.get("start_ms").and_then(|v| v.as_i64()).unwrap_or(0);
+            let end = ex.get("end_ms").and_then(|v| v.as_i64()).unwrap_or(0);
+            let duration = (end - start) as f64 / 1000.0;
+            let text = ex.get("text").or_else(|| ex.get("transcript")).and_then(|v| v.as_str()).unwrap_or("—");
+            
+            let is_stop_detected = text.to_lowercase().contains("стоп") || text.to_lowercase().contains("stop");
+
+            rows_html.push_str(&format!(
+                r#"<tr class="{}">
+                    <td><strong>Сход #{}</strong></td>
+                    <td class="time">{}</td>
+                    <td class="time">{}</td>
+                    <td>{:.2} с</td>
+                    <td class="text-cell">{}</td>
+                    <td>{}</td>
+                </tr>"#,
+                if is_stop_detected { "stop-row" } else { "" },
+                idx + 1,
+                format_time(start),
+                format_time(end),
+                duration,
+                text,
+                if is_stop_detected { r#"<span class="badge stop">СТОП</span>"# } else { r#"<span class="badge">ИНТЕРВАЛ</span>"# }
+            ));
+        }
+    }
+
+    let pretty_json = serde_json::to_string_pretty(&parsed).unwrap_or_else(|_| raw_json.to_string());
+
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Расшифровка ИИ: {}</title>
+    <style>
+        :root {{
+            --bg: #0b0f19;
+            --panel: #131b2e;
+            --border: rgba(255, 255, 255, 0.1);
+            --accent: #f59e0b;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+        }}
+        body {{
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 30px 20px;
+        }}
+        .container {{
+            max-width: 1100px;
+            margin: 0 auto;
+        }}
+        .header {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }}
+        h1 {{
+            font-size: 1.4rem;
+            margin: 0;
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }}
+        .video-id {{
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.05);
+            padding: 4px 10px;
+            border-radius: 6px;
+        }}
+        .table-wrap {{
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            margin-bottom: 30px;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }}
+        th, td {{
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }}
+        th {{
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
+        }}
+        tr:last-child td {{
+            border-bottom: none;
+        }}
+        tr.stop-row {{
+            background: rgba(239, 68, 68, 0.15);
+        }}
+        .time {{
+            font-family: monospace;
+            color: #38bdf8;
+        }}
+        .text-cell {{
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }}
+        .badge {{
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-muted);
+        }}
+        .badge.stop {{
+            background: #ef4444;
+            color: #fff;
+        }}
+        details {{
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+        }}
+        summary {{
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--text-muted);
+            outline: none;
+        }}
+        pre {{
+            margin-top: 16px;
+            padding: 16px;
+            background: #070a12;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 0.82rem;
+            color: #a7f3d0;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎙️ Расшифровка ИИ (Exchange Viewer)</h1>
+            <span class="video-id">ID: {}</span>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Сход</th>
+                        <th>Начало</th>
+                        <th>Конец</th>
+                        <th>Длительность</th>
+                        <th>Распознанный текст / Контекст</th>
+                        <th>Статус</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {}
+                </tbody>
+            </table>
+        </div>
+
+        <details>
+            <summary>📄 Исходный сырой JSON-ответ (Whisper / Model)</summary>
+            <pre>{}</pre>
+        </details>
+    </div>
+</body>
+</html>"#,
+        video_id, video_id, rows_html, pretty_json
+    )
 }
 

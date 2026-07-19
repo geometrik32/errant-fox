@@ -1,3 +1,5 @@
+export type UserRole = 'fighter' | 'guest' | 'retired';
+
 export interface User {
   id: string;
   username: string;
@@ -6,7 +8,7 @@ export interface User {
   avatar_url: string;
   color: string | null;
   vk_id?: string | null;
-  role: 'fighter' | 'guest';
+  role: UserRole;
 }
 
 export interface Fighter {
@@ -17,7 +19,7 @@ export interface Fighter {
   color: string | null;
   is_admin: boolean;
   vk_id?: string | null;
-  role: 'fighter' | 'guest';
+  role: UserRole;
 }
 
 export function resolveColor(id: string, color: string | null | undefined): string {
@@ -110,6 +112,7 @@ export interface VideoFull {
   duration_ms: number;
   fps?: number | null;
   is_ai_labeled: boolean;
+  is_analyzing?: boolean;
   bouts: Bout[];
   comments: Comment[];
 }
