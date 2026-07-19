@@ -17,10 +17,10 @@ services:
       - proxy
 
   whisper-service:
-    build: ./whisper-service
+    image: ghcr.io/geometrik32/errant-fox-whisper-service:latest
     restart: unless-stopped
     environment:
-      WHISPER_MODEL: medium
+      WHISPER_MODEL: small
     volumes:
       - whisper_cache:/root/.cache/whisper
     networks:
