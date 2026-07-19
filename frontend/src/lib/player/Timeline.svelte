@@ -458,9 +458,22 @@
   }
 
   .bout-seg.is-ai {
-    background-color: #7c3aed !important;
+    background: linear-gradient(
+      90deg,
+      #7c3aed 0%,
+      #2563eb 50%,
+      #06b6d4 100%
+    ) !important;
+    background-size: 200% 100%;
+    animation: timeline-glow 3s linear infinite;
     opacity: 0.95 !important;
-    box-shadow: 0 0 6px rgba(124, 58, 237, 0.6);
+    box-shadow: 0 0 8px rgba(124, 58, 237, 0.7);
+  }
+
+  @keyframes timeline-glow {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
   }
 
   /* ── Row 4: Controls ── */
