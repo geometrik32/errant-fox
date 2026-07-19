@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { fighters, currentUser } from '../stores';
+  import { fighters, sortedFighters, currentUser } from '../stores';
   import { getFighterBouts } from '../lib/api/fighters';
   import { getVideos } from '../lib/api/videos';
   import { resolveColor } from '../lib/api/types';
@@ -18,7 +18,12 @@
   let selectedFighter = $state<Fighter | null>(null);
   let rawBouts = $state<FighterBout[]>([]);
   let rawVideos = $state<any[]>([]);
-  let loading = $state(false);
+  let loading = $state(true);
+  let showFighterDropdown = $state(false);
+
+  let activeFighters = $derived($sortedFighters.filter(f => f.role !== 'retired'));
+  let retiredFighters = $derived($sortedFighters.filter(f => f.role === 'retired'));
+
   let errorMsg = $state('');
 
   let defaultFilters: TableFilters = {
@@ -346,8 +351,6 @@
     if (!d) return '';
     return new Date(d).toLocaleDateString('ru-RU', { year: 'numeric', month: 'long', day: 'numeric' });
   }
-
-  let showFighterDropdown = $state(false);
 </script>
 
 <div class="stats-layout">
@@ -403,7 +406,7 @@
                 <div class="fighter-dropdown" onclick={(e) => e.stopPropagation()}>
                   <div class="dropdown-header">Выберите бойца</div>
                   <div class="dropdown-list">
-                    {#each $fighters as f (f.id)}
+                    {#each activeFighters as f (f.id)}
                       <button class="fighter-opt" class:selected={selectedFighter.id === f.id} onclick={() => { selectFighter(f); showFighterDropdown = false; }}>
                         <div class="opt-avatar" style:background={resolveColor(f.id, f.color)}>
                           <svg class="opt-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -418,6 +421,30 @@
                         <span class="opt-name">{f.display_name}</span>
                       </button>
                     {/each}
+
+                    {#if retiredFighters.length > 0}
+                      <div class="dropdown-divider-wrap">
+                        <span class="dropdown-divider-line"></span>
+                        <span class="dropdown-divider-text">На пенсии</span>
+                        <span class="dropdown-divider-line"></span>
+                      </div>
+
+                      {#each retiredFighters as f (f.id)}
+                        <button class="fighter-opt fighter-opt--retired" class:selected={selectedFighter.id === f.id} onclick={() => { selectFighter(f); showFighterDropdown = false; }}>
+                          <div class="opt-avatar" style:background={resolveColor(f.id, f.color)}>
+                            <svg class="opt-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                              <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="1.5"/>
+                              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+                            </svg>
+                            {#if f.avatar_url}
+                              <img class="opt-img" src={f.avatar_url} alt={f.display_name}
+                                onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                            {/if}
+                          </div>
+                          <span class="opt-name">{f.display_name}</span>
+                        </button>
+                      {/each}
+                    {/if}
                   </div>
                 </div>
               {/if}
@@ -676,12 +703,32 @@
   .dropdown-list { padding: 8px; display: flex; flex-direction: column; gap: 4px; }
 
   .fighter-opt {
-    display: flex; align-items: center; gap: 12px; padding: 8px 12px;
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
     background: transparent; border: none; border-radius: var(--radius-sm);
     cursor: pointer; text-align: left; transition: var(--transition);
   }
   .fighter-opt:hover { background: var(--surface-hover); }
   .fighter-opt.selected { background: rgba(245, 158, 11, 0.12); }
+  .fighter-opt--retired { opacity: 0.75; }
+
+  .dropdown-divider-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 12px;
+  }
+  .dropdown-divider-line {
+    flex: 1;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.12);
+  }
+  .dropdown-divider-text {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted, #94a3b8);
+  }
 
   .opt-avatar {
     width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;

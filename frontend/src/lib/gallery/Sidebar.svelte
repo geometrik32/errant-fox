@@ -26,6 +26,14 @@
 
   let onlineFighterIds = $derived(new Set(onlineUsers.map(u => u.id)));
 
+  // Filter videos by current date range for sidebar counting
+  let dateFilteredVideos = $derived.by(() => {
+    let list = videos;
+    if (dateFrom) list = list.filter(v => v.date >= dateFrom);
+    if (dateTo) list = list.filter(v => v.date <= dateTo);
+    return list;
+  });
+
   // YYYY-MM-DD Dates with spars matching selected fighters
   let videoDatesSet = $derived.by(() => {
     const s = new Set<string>();
@@ -42,18 +50,32 @@
   });
 
   function countForFighter(id: string): number {
+    const targetVideos = dateFilteredVideos;
     if (selectedIds.size === 1) {
       const [selectedId] = selectedIds;
       if (selectedId === id) {
-        return videos.filter(v => v.fighter_a?.id === id || v.fighter_b?.id === id).length;
+        return targetVideos.filter(v => v.fighter_a?.id === id || v.fighter_b?.id === id).length;
       }
-      return videos.filter(v =>
+      return targetVideos.filter(v =>
         (v.fighter_a?.id === selectedId || v.fighter_b?.id === selectedId) &&
         (v.fighter_a?.id === id || v.fighter_b?.id === id)
       ).length;
     }
-    return videos.filter(v => v.fighter_a?.id === id || v.fighter_b?.id === id).length;
+    return targetVideos.filter(v => v.fighter_a?.id === id || v.fighter_b?.id === id).length;
   }
+
+  // Sort fighters descending by date-filtered video count, then by display name
+  let sortedFighters = $derived.by(() => {
+    return [...$fighters].sort((a, b) => {
+      const countA = countForFighter(a.id);
+      const countB = countForFighter(b.id);
+      if (countB !== countA) return countB - countA;
+      return a.display_name.localeCompare(b.display_name);
+    });
+  });
+
+  let activeFighters = $derived(sortedFighters.filter(f => f.role !== 'retired'));
+  let retiredFighters = $derived(sortedFighters.filter(f => f.role === 'retired'));
 
   function isDisabled(id: string): boolean {
     return selectedIds.size >= 2 && !selectedIds.has(id);
@@ -84,7 +106,7 @@
   <section class="section">
     <h3 class="section-title">Бойцы</h3>
     <div class="fighters-list">
-      {#each $fighters as fighter (fighter.id)}
+      {#each activeFighters as fighter (fighter.id)}
         {@const count = countForFighter(fighter.id)}
         {@const disabled = isDisabled(fighter.id)}
         {@const isOnline = onlineFighterIds.has(fighter.id)}
@@ -109,6 +131,40 @@
           <span class="count">{count}</span>
         </label>
       {/each}
+
+      {#if retiredFighters.length > 0}
+        <div class="sidebar-divider">
+          <span class="divider-line"></span>
+          <span class="divider-text">На пенсии</span>
+          <span class="divider-line"></span>
+        </div>
+
+        {#each retiredFighters as fighter (fighter.id)}
+          {@const count = countForFighter(fighter.id)}
+          {@const disabled = isDisabled(fighter.id)}
+          {@const isOnline = onlineFighterIds.has(fighter.id)}
+          <!-- svelte-ignore a11y_label_has_associated_control -->
+          <label class="row row--retired" class:row--disabled={disabled}>
+            <input type="checkbox" checked={selectedIds.has(fighter.id)} disabled={disabled} tabindex="-1" onchange={() => toggleFighter(fighter.id)} />
+            <div class="fighter-info">
+              <div class="avatar-container">
+                <div class="avatar" style="--fighter-color: {resolveColor(fighter.id, fighter.color)}">
+                  <svg class="avatar-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="1.5" opacity="0.6"/>
+                    <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+                  </svg>
+                  {#if fighter.avatar_url}
+                    <img src={fighter.avatar_url} alt="" onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  {/if}
+                </div>
+                <span class="status-dot" class:online={isOnline}></span>
+              </div>
+              <span class="fighter-name">{fighter.display_name}</span>
+            </div>
+            <span class="count">{count}</span>
+          </label>
+        {/each}
+      {/if}
     </div>
     {#if $fighters.length === 0}
       <p class="empty">Нет бойцов</p>
@@ -269,6 +325,32 @@
     opacity: 0.35;
     cursor: not-allowed;
     pointer-events: none;
+  }
+
+  .sidebar-divider {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 14px 0 6px 0;
+    padding: 0 4px;
+  }
+
+  .divider-line {
+    flex: 1;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .divider-text {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted, #94a3b8);
+  }
+
+  .row--retired {
+    opacity: 0.75;
   }
 
   .empty {

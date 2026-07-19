@@ -101,6 +101,7 @@ pub struct Bout {
     pub hit_zone_b: Option<String>,
     pub result_a: Option<String>,
     pub result_b: Option<String>,
+    pub is_ai: bool,
 }
 
 #[derive(Insertable, Deserialize, Debug)]
@@ -118,6 +119,7 @@ pub struct NewBout {
     pub hit_zone_b: Option<String>,
     pub result_a: Option<String>,
     pub result_b: Option<String>,
+    pub is_ai: bool,
 }
 
 // ── comments ──────────────────────────────────────────────────────────────────

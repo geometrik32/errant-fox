@@ -112,6 +112,8 @@
             fighter_a: null,
             fighter_b: null,
             is_tagged: false,
+            is_ai_labeled: false,
+            is_analyzing: false,
             preview_url: msg.preview_url ?? `/api/videos/${msg.id}/previews/0`,
             preview_count: 0,
           };

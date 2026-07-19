@@ -136,7 +136,7 @@ pub async fn list_fighters(
         use crate::db::schema::users::dsl::{role, users};
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
         users
-            .filter(role.eq("fighter"))
+            .filter(role.eq("fighter").or(role.eq("retired")))
             .load::<User>(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))
     })

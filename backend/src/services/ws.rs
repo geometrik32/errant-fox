@@ -51,6 +51,7 @@ pub struct WsBout {
     pub hit_zone_b: Option<String>,
     pub result_a: Option<String>,
     pub result_b: Option<String>,
+    pub is_ai: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deleted: Option<bool>,
 }
@@ -120,6 +121,18 @@ pub enum WsEvent {
 }
 
 impl WsEvent {
+    pub fn is_gallery_event(&self) -> bool {
+        matches!(
+            self,
+            WsEvent::UpdateVideoAiLabeled { .. }
+                | WsEvent::UpdateVideoScore { .. }
+                | WsEvent::UpdateVideoFighters { .. }
+                | WsEvent::NewVideo { .. }
+                | WsEvent::VideoRemoved { .. }
+                | WsEvent::PresenceUpdate { .. }
+        )
+    }
+
     pub fn video_id(&self) -> Option<&str> {
         match self {
             WsEvent::NewComment(c) => Some(&c.video_id),
@@ -160,7 +173,7 @@ pub async fn ws_handler(
 
 async fn handle_socket(mut socket: WebSocket, state: AppState) {
     // First message must be {"token": "..."}
-    let user_id = match socket.recv().await {
+    let (user_id, is_guest) = match socket.recv().await {
         Some(Ok(Message::Text(text))) => {
             println!("WS [init] received text: {}", text);
             let val: serde_json::Value = match serde_json::from_str(&text) {
@@ -172,52 +185,77 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                 None => return,
             };
             match crate::api::auth::verify_token(&token, &state.jwt_secret) {
-                Ok(claims) => claims.sub,
-                Err(_) => return,
+                Ok(claims) => (claims.sub, false),
+                Err(_) => {
+                    // Fallback to ShareClaims token for guest connections
+                    use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+                    match decode::<crate::api::auth::ShareClaims>(
+                        &token,
+                        &DecodingKey::from_secret(state.jwt_secret.as_bytes()),
+                        &Validation::new(Algorithm::HS256),
+                    ) {
+                        Ok(_) => ("guest".to_string(), true),
+                        Err(_) => return,
+                    }
+                }
             }
         }
         _ => return,
     };
 
-    // Fetch user from DB to populate OnlineUser details
-    let db = state.db.clone();
-    let uid_clone = user_id.clone();
-    let db_user = match tokio::task::spawn_blocking(move || {
-        use crate::db::schema::users::dsl::{id, users};
-        use diesel::prelude::*;
-        let mut conn = db.get().map_err(|e| e.to_string())?;
-        users
-            .filter(id.eq(&uid_clone))
-            .first::<crate::db::models::User>(&mut conn)
-            .map_err(|e| e.to_string())
-    })
-    .await {
-        Ok(Ok(u)) => u,
-        _ => return,
-    };
-
-    let avatar_url = format!("/api/users/{}/avatar", db_user.id);
-    let color = db_user.color.clone().unwrap_or_else(|| crate::api::auth::generate_color(&db_user.id));
-
-    let online_user = OnlineUser {
-        id: db_user.id,
-        username: db_user.username,
-        display_name: db_user.display_name,
-        avatar_url,
-        color,
-        watching: None,
-    };
-
-    println!("WS user connected: {} (conn_id: {})", online_user.display_name, state.presence.read().await.next_id);
-
-    // Register connection
     let conn_id = {
         let mut reg = state.presence.write().await;
         let id = reg.next_id;
         reg.next_id += 1;
-        reg.connections.insert(id, online_user);
         id
     };
+
+    let online_user = if is_guest {
+        let guest_uid = format!("guest_{}", conn_id);
+        OnlineUser {
+            id: guest_uid.clone(),
+            username: guest_uid.clone(),
+            display_name: format!("Гость #{}", conn_id),
+            avatar_url: "/api/users/guest/avatar".to_string(),
+            color: crate::api::auth::generate_color(&guest_uid),
+            watching: None,
+        }
+    } else {
+        let db = state.db.clone();
+        let uid_clone = user_id.clone();
+        let db_user = match tokio::task::spawn_blocking(move || {
+            use crate::db::schema::users;
+            use diesel::prelude::*;
+            let mut conn = db.get().map_err(|e| e.to_string())?;
+            users::table
+                .filter(users::id.eq(&uid_clone))
+                .first::<crate::db::models::User>(&mut conn)
+                .map_err(|e| e.to_string())
+        })
+        .await {
+            Ok(Ok(u)) => u,
+            _ => return,
+        };
+
+        let avatar_url = format!("/api/users/{}/avatar", db_user.id);
+        let color = db_user.color.clone().unwrap_or_else(|| crate::api::auth::generate_color(&db_user.id));
+
+        OnlineUser {
+            id: db_user.id,
+            username: db_user.username,
+            display_name: db_user.display_name,
+            avatar_url,
+            color,
+            watching: None,
+        }
+    };
+
+    println!("WS user connected: {} (conn_id: {})", online_user.display_name, conn_id);
+
+    {
+        let mut reg = state.presence.write().await;
+        reg.connections.insert(conn_id, online_user);
+    }
 
     let mut rx = state.ws_hub.subscribe();
 
@@ -259,9 +297,13 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
             event = rx.recv() => {
                 match event {
                     Ok(ev) => {
-                        let should_send = match ev.video_id() {
-                            Some(vid) => watching.as_deref() == Some(vid),
-                            None => true,
+                        let should_send = if ev.is_gallery_event() {
+                            true
+                        } else {
+                            match ev.video_id() {
+                                Some(vid) => watching.as_deref() == Some(vid),
+                                None => true,
+                            }
                         };
                         if should_send {
                             if let Ok(json) = serde_json::to_string(&ev) {
