@@ -50,3 +50,4 @@ yolov8n.pt
 yolov8x.pt
 directives/
 scratch/
+yolov8x-pose.pt
