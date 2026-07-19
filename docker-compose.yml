@@ -20,7 +20,7 @@ services:
     image: ghcr.io/geometrik32/errant-fox-whisper-service:latest
     restart: unless-stopped
     environment:
-      WHISPER_MODEL: small
+      WHISPER_MODEL: medium
     volumes:
       - whisper_cache:/root/.cache/whisper
     networks:
