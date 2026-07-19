@@ -1710,33 +1710,11 @@ async fn render_transcript_html(video_id: &str, token: &str, raw_json: &str) -> 
     let stream_url = format!("/api/videos/{}/stream?token={}", video_id, token);
 
     let html = template
-        .replace("<title>Errant Fox — Проверка разметки сходов</title>", &format!("<title>Errant Fox — Проверка разметки сходов: {}</title>", video_id));
+        .replace("<title>Errant Fox — Проверка разметки сходов</title>", &format!("<title>Errant Fox — Проверка разметки сходов: {}</title>", video_id))
+        .replace("let EMBEDDED_EXCHANGES = [];", &format!("let EMBEDDED_EXCHANGES = {};", exchanges_json))
+        .replace("let allWords = [];", &format!("let allWords = {};", words_json))
+        .replace("let streamUrl = \"\";", &format!("let streamUrl = \"{}\";", stream_url));
 
-    let injection = format!(
-        r#"
-<script>
-  const EMBEDDED_EXCHANGES = {};
-  const allWords = {};
-  document.addEventListener('DOMContentLoaded', () => {{
-    const vid = document.getElementById('vid');
-    if (vid) {{
-      vid.src = "{}";
-      const dropOverlay = document.getElementById('dropOverlay');
-      if (dropOverlay) dropOverlay.classList.add('hidden');
-    }}
-  }});
-</script>
-"#,
-        exchanges_json, words_json, stream_url
-    );
-
-    if let Some(pos) = html.rfind("</body>") {
-        let mut res = html[..pos].to_string();
-        res.push_str(&injection);
-        res.push_str(&html[pos..]);
-        res
-    } else {
-        html + &injection
-    }
+    html
 }
 
