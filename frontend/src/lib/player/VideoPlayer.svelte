@@ -238,11 +238,17 @@
 
   function handleTimeUpdate() {
     if (!videoEl) return;
-    if (looping && loopRange && videoEl.currentTime * 1000 >= loopRange.end) {
-      videoEl.currentTime = loopRange.start / 1000;
+    if (!videoEl.paused) {
       stepFrameTarget = null;
-      ontimeupdate?.(videoEl.currentTime);
-      return;
+    }
+    if (looping && loopRange) {
+      const curMs = videoEl.currentTime * 1000;
+      if (curMs >= loopRange.end || curMs < loopRange.start - 300) {
+        videoEl.currentTime = loopRange.start / 1000;
+        stepFrameTarget = null;
+        ontimeupdate?.(videoEl.currentTime);
+        return;
+      }
     }
     if (stepFrameTarget === null) ontimeupdate?.(videoEl.currentTime);
   }
@@ -254,6 +260,12 @@
         videoEl.currentTime = pendingSeekTimeMs / 1000;
         pendingSeekTimeMs = null;
       }
+      if (looping && loopRange && videoEl.readyState >= 1) {
+        const curMs = videoEl.currentTime * 1000;
+        if (curMs >= loopRange.end || curMs < loopRange.start - 300) {
+          videoEl.currentTime = loopRange.start / 1000;
+        }
+      }
     }
   }
 
@@ -261,6 +273,12 @@
 
   function handlePlay() {
     stepFrameTarget = null;
+    if (looping && loopRange && videoEl) {
+      const curMs = videoEl.currentTime * 1000;
+      if (curMs >= loopRange.end || curMs < loopRange.start - 300) {
+        videoEl.currentTime = loopRange.start / 1000;
+      }
+    }
     onplayingchange?.(true);
   }
 
