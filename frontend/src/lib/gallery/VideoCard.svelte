@@ -64,6 +64,9 @@
     e.preventDefault();
     e.stopPropagation(); // Prevent immediate closing from window contextmenu handler
     
+    // Broadcast event to close all other open context menus in gallery
+    window.dispatchEvent(new CustomEvent('ef-close-context-menus', { detail: { videoId: video.id } }));
+
     const menuWidth = 190;
     const menuHeight = 150;
     let x = e.clientX;
@@ -82,6 +85,13 @@
 
   function closeMenu() {
     menuOpen = false;
+  }
+
+  function handleOtherMenuOpen(e: Event) {
+    const detail = (e as CustomEvent).detail;
+    if (detail?.videoId !== video.id && menuOpen) {
+      closeMenu();
+    }
   }
 
   function handleWindowClick() {
@@ -140,6 +150,7 @@
   onclick={handleWindowClick} 
   oncontextmenu={handleWindowContextMenu} 
   onkeydown={handleWindowKeyDown} 
+  onef-close-context-menus={handleOtherMenuOpen}
 />
 
 <!-- AI-border wrapper -->

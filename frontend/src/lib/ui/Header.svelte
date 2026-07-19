@@ -6,6 +6,7 @@
   import ProfileModal from './ProfileModal.svelte';
   import SearchPanel from './SearchPanel.svelte';
   import SyncModal from './SyncModal.svelte';
+  import BatchAiModal from './BatchAiModal.svelte';
 
   interface Props {
     hash: string;
@@ -18,6 +19,7 @@
   let showTechniques = $state(false);
   let showProfile = $state(false);
   let showSyncDatabase = $state(false);
+  let showBatchAi = $state(false);
 
   let activeNav = $derived(
     hash === '#/stats' ? 'stats' : hash === '#/search' ? 'search' : 'gallery'
@@ -157,6 +159,9 @@
           <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showSyncDatabase = true; }}>
             Актуализировать базу
           </button>
+          <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showBatchAi = true; }}>
+            Разметить неразмеченные (ИИ)
+          </button>
         {/if}
 
         <div class="dropdown-divider"></div>
@@ -186,6 +191,10 @@
 
 {#if showSyncDatabase}
   <SyncModal onclose={() => { showSyncDatabase = false; }} />
+{/if}
+
+{#if showBatchAi}
+  <BatchAiModal onclose={() => { showBatchAi = false; }} />
 {/if}
 
 <style>
