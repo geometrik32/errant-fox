@@ -1473,6 +1473,17 @@ pub async fn ai_label_video(
 
                 let mut conn = db_clone.get().map_err(|e| e.to_string())?;
 
+                // Check if user cancelled analysis while it was running
+                let is_still_analyzing: bool = videos::table
+                    .filter(videos::id.eq(&video_id_db))
+                    .select(videos::is_analyzing)
+                    .first::<bool>(&mut conn)
+                    .unwrap_or(false);
+
+                if !is_still_analyzing {
+                    return Err("AI analysis was cancelled by user".to_string());
+                }
+
                 // Delete existing bouts
                 diesel::delete(bouts::table.filter(bouts::video_id.eq(&video_id_db)))
                     .execute(&mut conn)
@@ -1589,6 +1600,47 @@ pub async fn ai_label_video(
             "video_id": video_id
         })),
     ))
+}
+
+pub async fn cancel_ai_label_video(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(video_id): Path<String>,
+) -> Result<impl axum::response::IntoResponse, AppError> {
+    if !user.is_admin {
+        return Err(AppError::Forbidden);
+    }
+
+    let db_clone = state.db.clone();
+    let video_id_db = video_id.clone();
+
+    let is_ai_labeled = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::videos;
+        let mut conn = db_clone.get().map_err(|e| AppError::Internal(e.to_string()))?;
+        diesel::update(videos::table.filter(videos::id.eq(&video_id_db)))
+            .set(videos::is_analyzing.eq(false))
+            .execute(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let v = videos::table
+            .filter(videos::id.eq(&video_id_db))
+            .first::<Video>(&mut conn)
+            .optional()
+            .map_err(|e| AppError::Internal(e.to_string()))?
+            .ok_or(AppError::NotFound)?;
+
+        Ok::<bool, AppError>(v.is_ai_labeled)
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    let _ = state.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoAiLabeled {
+        video_id: video_id.clone(),
+        is_ai_labeled,
+        is_analyzing: false,
+    });
+
+    Ok(Json(serde_json::json!({ "status": "cancelled" })))
 }
 
 #[derive(Deserialize)]

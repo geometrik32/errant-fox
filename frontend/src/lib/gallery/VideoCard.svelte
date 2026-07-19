@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Video } from '../api/types';
   import { resolveColor } from '../api/types';
-  import { regeneratePreview, aiLabelVideo } from '../api/videos';
+  import { regeneratePreview, aiLabelVideo, cancelAiLabelVideo } from '../api/videos';
   import { currentUser } from '../../stores';
   import ShareModal from '../ui/ShareModal.svelte';
 
@@ -267,33 +267,55 @@
       {/if}
 
       {@const isHumanLabeled = cardState() === 2}
-      <button 
-        class="menu-item menu-item-ai" 
-        onclick={async (e) => { 
-          if (isHumanLabeled) return;
-          e.stopPropagation(); 
-          closeMenu(); 
-          video.is_analyzing = true;
-          isAiLabeling = true; 
-          try { 
-            await aiLabelVideo(video.id);
-          } catch (err) { 
-            video.is_analyzing = false;
-            alert(err instanceof Error ? err.message : 'Ошибка анализа ИИ'); 
-          } finally {
-            isAiLabeling = false; 
-          }
-        }}
-        disabled={isAiLabeling || isHumanLabeled}
-        title={isHumanLabeled ? 'Нельзя запускать ИИ-разметку для видео, размеченного человеком' : video.is_ai_labeled ? 'Переразметить сходы с помощью ИИ' : 'Разметить сходы (ИИ)'}
-      >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 2a10 10 0 1 0 10 10" />
-          <path d="M12 6v6l4 2" />
-          <circle cx="19" cy="5" r="3" fill="currentColor" stroke="none" />
-        </svg>
-        <span>{video.is_ai_labeled ? 'Переразметить сходы (ИИ)' : 'Разметить сходы (ИИ)'}</span>
-      </button>
+      {#if video.is_analyzing}
+        <button 
+          class="menu-item" 
+          onclick={async (e) => { 
+            e.stopPropagation(); 
+            closeMenu(); 
+            try { 
+              await cancelAiLabelVideo(video.id); 
+            } catch (err) { 
+              alert(err instanceof Error ? err.message : 'Ошибка отмены анализа'); 
+            } 
+          }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="15" y1="9" x2="9" y2="15" />
+            <line x1="9" y1="9" x2="15" y2="15" />
+          </svg>
+          <span>Отменить анализ ИИ</span>
+        </button>
+      {:else}
+        <button 
+          class="menu-item menu-item-ai" 
+          onclick={async (e) => { 
+            if (isHumanLabeled) return;
+            e.stopPropagation(); 
+            closeMenu(); 
+            video.is_analyzing = true;
+            isAiLabeling = true; 
+            try { 
+              await aiLabelVideo(video.id);
+            } catch (err) { 
+              video.is_analyzing = false;
+              alert(err instanceof Error ? err.message : 'Ошибка анализа ИИ'); 
+            } finally {
+              isAiLabeling = false; 
+            }
+          }}
+          disabled={isAiLabeling || isHumanLabeled}
+          title={isHumanLabeled ? 'Нельзя запускать ИИ-разметку для видео, размеченного человеком' : video.is_ai_labeled ? 'Переразметить сходы с помощью ИИ' : 'Разметить сходы (ИИ)'}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a10 10 0 1 0 10 10" />
+            <path d="M12 6v6l4 2" />
+            <circle cx="19" cy="5" r="3" fill="currentColor" stroke="none" />
+          </svg>
+          <span>{video.is_ai_labeled ? 'Переразметить сходы (ИИ)' : 'Разметить сходы (ИИ)'}</span>
+        </button>
+      {/if}
 
       <button 
         class="menu-item" 
