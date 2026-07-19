@@ -19,10 +19,26 @@ WHISPER_MODEL_NAME = os.environ.get("WHISPER_MODEL", "small")
 # ── Stop-word detection helpers ───────────────────────────────────────────────
 
 import re
+import wave
+import numpy as np
 
-_stop_pattern = re.compile(r'\b(стоп|оп|топ|гоп|доп|хоп|альт|stop)\b', re.IGNORECASE)
-_start_pattern = re.compile(r'\b(бой|ой|fight|begin|начали)\b', re.IGNORECASE)
+_stop_pattern = re.compile(r'\b(стоп|хоп|оп|ап|хальт|альт|halt|stop)\b', re.IGNORECASE)
+_start_pattern = re.compile(r'\b(бой|бои|бойцы|вход|входи|входь|начали|начал|начало|начнем|fight|begin|ready|go)\b', re.IGNORECASE)
 _filler_pattern = re.compile(r'^(ха|хаха|ха-ха|хх|э|ээ|хм|мм|гм|ух|ах|ох|фу|ы)$', re.IGNORECASE)
+
+
+def _read_wav_mono(wav_path: str):
+    """
+    Reads 16kHz mono PCM 16-bit WAV file using Python's built-in wave module and numpy.
+    """
+    with wave.open(wav_path, 'rb') as w:
+        params = w.getparams()
+        nchannels, sampwidth, framerate, nframes = params[:4]
+        if nchannels != 1 or sampwidth != 2:
+            raise ValueError("WAV file must be mono 16-bit PCM")
+        frames = w.readframes(nframes)
+        data = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+        return framerate, data
 
 
 def _filter_overlapping_bouts(bouts, min_gap_sec=3.0):
@@ -43,7 +59,6 @@ def _filter_overlapping_bouts(bouts, min_gap_sec=3.0):
             prev_stop = prev.get("stop_word", "")
             
             # Prefer explicit stop word over fallback spoken word
-            _stop_pattern = re.compile(r'\b(стоп|оп|топ|гоп|доп|хоп|альт|stop)\b', re.IGNORECASE)
             curr_is_explicit = bool(_stop_pattern.search(curr_stop))
             prev_is_explicit = bool(_stop_pattern.search(prev_stop))
 
@@ -56,7 +71,7 @@ def _filter_overlapping_bouts(bouts, min_gap_sec=3.0):
     return filtered
 
 
-def _extract_decision_tree_exchanges(segments):
+def _extract_decision_tree_exchanges(segments, peaks):
     all_words = []
     starts = []
     explicit_stops = []
@@ -79,17 +94,17 @@ def _extract_decision_tree_exchanges(segments):
                 }
                 all_words.append(item)
 
-                if _start_pattern.search(word_clean) and prob >= 0.01:
+                if _start_pattern.search(word_clean) and prob >= 0.10:
                     starts.append(item)
-                elif _stop_pattern.search(word_clean) and prob >= 0.20:
+                elif _stop_pattern.search(word_clean) and prob >= 0.15:
                     explicit_stops.append(item)
 
-    # Filter close duplicate 'Бой' markers (within 2.5s)
+    # Filter close duplicate 'Бой' markers (within 3.0s)
     unique_starts = []
     if starts:
         curr = starts[0]
         for nxt in starts[1:]:
-            if nxt["start"] - curr["start"] >= 2.5:
+            if nxt["start"] - curr["start"] >= 3.0:
                 unique_starts.append(curr)
                 curr = nxt
         unique_starts.append(curr)
@@ -102,8 +117,7 @@ def _extract_decision_tree_exchanges(segments):
         start_time = st["start"]
         next_start_time = unique_starts[i+1]["start"] if i + 1 < len(unique_starts) else 99999.0
 
-        # Scenario 4: Duplicate/Short 'Бой' noise
-        if next_start_time - start_time < 2.5:
+        if next_start_time - start_time < 3.0:
             continue
 
         candidates = [
@@ -111,35 +125,42 @@ def _extract_decision_tree_exchanges(segments):
             if w["start"] >= start_time + 0.4 and w["start"] < next_start_time
         ]
 
-        # Scenario 1 & 5: Search for explicit stop words in range
-        candidate_stops = [w for w in candidates if _stop_pattern.search(w["clean"]) and w["prob"] >= 0.20]
-
         selected_stop = None
+        final_stop_t = None
 
-        if candidate_stops:
-            # Scenario 5: Pick the stop with best dialogue proximity
-            best_st = candidate_stops[0]
-            best_score = -999.0
-            for c_st in candidate_stops:
-                st_t = c_st["start"]
-                foll_word = next((w for w in all_words if w["start"] >= st_t + 0.1), None)
-                foll_gap = (foll_word["start"] - st_t) if foll_word else 999.0
-                score = c_st["prob"] + (3.0 if foll_gap <= 2.5 else 0.0)
-                if score > best_score:
-                    best_score = score
-                    best_st = c_st
-            selected_stop = best_st
-        else:
-            # Scenario 3: Missing 'Стоп' -> Fallback to first meaningful spoken word after 1.0s (skipping vocal fillers like 'ха-ха')
-            first_spoken = next((w for w in candidates if w["start"] >= start_time + 1.0 and not _filler_pattern.search(w["clean"])), None)
-            if first_spoken:
-                selected_stop = first_spoken
+        for cand in candidates:
+            is_explicit = bool(_stop_pattern.search(cand["clean"]) and cand["prob"] >= 0.15)
+            is_fallback = False
+            if not is_explicit and cand["start"] >= start_time + 1.5 and not _filler_pattern.search(cand["clean"]):
+                is_fallback = True
 
-        if selected_stop:
-            stop_t = selected_stop["start"]
-            bout_start = max(0.0, stop_t - 2.0)
-            bout_end = stop_t + 1.0
-            covered_stop_times.add(round(stop_t, 2))
+            if is_explicit or is_fallback:
+                cand_t = cand["start"]
+                # Filter active future peaks (if combat clashing continues within 1.0s to 3.5s after stop word, it is not a stop)
+                future_peaks = [p for p in peaks if p[0] > cand_t + 1.0 and p[0] <= cand_t + 3.5 and p[1] > 0.08]
+                if (not is_explicit or cand["prob"] < 0.50) and future_peaks:
+                    continue
+
+                # Align fallback/low-confidence stops to preceding peaks in the last 15 seconds
+                stop_t = cand_t
+                preceding_peaks = [p for p in peaks if p[0] >= start_time and p[0] <= stop_t and p[0] >= stop_t - 15.0]
+                if (cand["prob"] < 0.50 or not _stop_pattern.search(cand["clean"])) and preceding_peaks:
+                    last_peak = max(preceding_peaks, key=lambda x: x[0])
+                    stop_t = last_peak[0] + 1.0
+
+                # Verify if this window contains clash peaks
+                window_peaks = [p for p in peaks if p[0] >= start_time + 1.2 and p[0] <= stop_t]
+                if not window_peaks:
+                    continue
+
+                selected_stop = cand
+                final_stop_t = stop_t
+                break
+
+        if selected_stop and final_stop_t:
+            bout_start = max(0.0, final_stop_t - 2.0)
+            bout_end = final_stop_t + 1.0
+            covered_stop_times.add(round(selected_stop["start"], 2))
 
             exchanges.append({
                 "start_ms": int(bout_start * 1000),
@@ -147,7 +168,7 @@ def _extract_decision_tree_exchanges(segments):
                 "stop_word": selected_stop["word"]
             })
 
-    # Scenario 2: Process Orphaned Stops (Missing 'Бой')
+    # Process Orphaned Stops (Missing 'Бой')
     for s_st in explicit_stops:
         s_time = s_st["start"]
         if round(s_time, 2) in covered_stop_times:
@@ -156,7 +177,6 @@ def _extract_decision_tree_exchanges(segments):
         prec_word = next((w for w in reversed(all_words) if w["end"] <= s_time - 0.1), None)
         prec_gap = s_time - (prec_word["end"] if prec_word else 0.0)
 
-        # Scenario 6: Ignore isolated stops without preceding combat gap
         if prec_gap >= 1.5:
             bout_start = max(0.0, s_time - 2.0)
             bout_end = s_time + 1.0
@@ -171,6 +191,24 @@ def _extract_decision_tree_exchanges(segments):
 
 
 def _detect_exchanges(wav_path: str):
+    # 1. Read WAV and compute RMS peaks
+    try:
+        rate, data = _read_wav_mono(wav_path)
+        frame_len = int(rate * 0.05) # 50ms frames
+        num_frames = len(data) // frame_len
+        rms = np.array([np.sqrt(np.mean(data[i*frame_len : (i+1)*frame_len]**2)) for i in range(num_frames)])
+        times = np.arange(num_frames) * 0.05
+
+        peaks = []
+        threshold = 0.06
+        for i in range(1, num_frames - 1):
+            if rms[i] > threshold and rms[i] > rms[i-1] and rms[i] > rms[i+1]:
+                peaks.append((times[i], rms[i]))
+        print(f"  Loaded {len(peaks)} audio clash peaks (RMS > {threshold})", flush=True)
+    except Exception as e:
+        print(f"  Warning: Audio envelope analysis failed ({e}). Falling back to empty peaks.", flush=True)
+        peaks = []
+
     print(f"  Loading Whisper model '{WHISPER_MODEL_NAME}' on-demand...", flush=True)
     _device = "cpu"
     try:
@@ -191,7 +229,7 @@ def _detect_exchanges(wav_path: str):
             logprob_threshold=None,
             no_speech_threshold=None
         )
-        exchanges = _extract_decision_tree_exchanges(result.get("segments", []))
+        exchanges = _extract_decision_tree_exchanges(result.get("segments", []), peaks)
 
         for idx, ex in enumerate(exchanges):
             print(f"  Exchange {idx+1}: {ex['start_ms']}ms – {ex['end_ms']}ms ('{ex.get('stop_word', '')}')", flush=True)
