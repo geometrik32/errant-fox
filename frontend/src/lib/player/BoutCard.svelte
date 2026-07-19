@@ -929,8 +929,9 @@
 
   .card-actions {
     display: flex;
+    align-items: center;
     flex-wrap: nowrap;
-    gap: 4px;
+    gap: 6px;
     padding: 8px;
     border-top: 1px solid var(--border-color);
   }
@@ -941,48 +942,27 @@
     white-space: nowrap;
   }
 
-  .btn-delete {
+  .btn-delete,
+  .btn-download,
+  .btn-share {
     flex-shrink: 0;
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     padding: 0;
+    margin: 0;
     border-radius: var(--radius-sm);
-    background: rgba(239, 68, 68, 0.08);
-    border: 1px solid rgba(239, 68, 68, 0.2);
-    color: #dc2626;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: var(--transition);
-  }
-
-  .btn-delete:hover:not(:disabled) {
-    background: rgba(239, 68, 68, 0.2);
-    border-color: rgba(239, 68, 68, 0.4);
-    color: #ef4444;
-  }
-
-  .btn-delete:disabled {
-    opacity: 0.4;
-    cursor: default;
   }
 
   .btn-download {
-    flex-shrink: 0;
-    width: 24px;
-    height: 24px;
-    padding: 0;
     margin-left: auto;
-    border-radius: var(--radius-sm);
     background: rgba(31, 165, 216, 0.08);
     border: 1px solid rgba(31, 165, 216, 0.2);
     color: var(--accent-blue);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: var(--transition);
   }
 
   .btn-download:hover:not(:disabled) {
@@ -997,20 +977,9 @@
   }
 
   .btn-share {
-    flex-shrink: 0;
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    margin-left: 8px;
-    border-radius: var(--radius-sm);
     background: rgba(16, 185, 129, 0.08);
     border: 1px solid rgba(16, 185, 129, 0.2);
     color: var(--accent-green);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: var(--transition);
   }
 
   .btn-share:hover:not(:disabled) {
@@ -1020,6 +989,23 @@
   }
 
   .btn-share:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .btn-delete {
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+  }
+
+  .btn-delete:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #f87171;
+  }
+
+  .btn-delete:disabled {
     opacity: 0.4;
     cursor: default;
   }

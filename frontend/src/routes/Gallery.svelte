@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getVideos } from '../lib/api/videos';
+  import { getVideos, getVideo } from '../lib/api/videos';
   import { gallerySidebarOpen } from '../stores';
   import Sidebar from '../lib/gallery/Sidebar.svelte';
   import VideoGrid from '../lib/gallery/VideoGrid.svelte';
-  import type { Video } from '../lib/api/types';
+  import type { Video, VideoFull } from '../lib/api/types';
 
   let allVideos = $state<Video[]>([]);
   let filteredVideos = $state<Video[]>([]);
@@ -158,7 +158,7 @@
           });
           applyFilter();
           if (!msg.is_analyzing) {
-            getVideo(msg.video_id).then(updated => {
+            getVideo(msg.video_id).then((updated: VideoFull) => {
               allVideos = allVideos.map(v => v.id === msg.video_id ? { ...v, ...updated, is_analyzing: false } : v);
               applyFilter();
             }).catch(() => {});
