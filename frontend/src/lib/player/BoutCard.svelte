@@ -337,12 +337,13 @@
 
 {:else}
   <!-- ── Expanded ── -->
-  <div class="card card--expanded" class:is-ai={bout.is_ai}>
+  <div class="card card--expanded">
 
     <!-- Header (click to collapse) -->
     <!-- svelte-ignore a11y_interactive_supports_focus -->
     <div
       class="card-header"
+      class:is-ai={bout.is_ai}
       role="button"
       tabindex="0"
       style={winnerColor ? `background: color-mix(in srgb, ${winnerColor} 15%, var(--surface-solid)); border-bottom-color: color-mix(in srgb, ${winnerColor} 30%, var(--border-color))` : ''}
@@ -1046,7 +1047,7 @@
     to { --ai-angle: 360deg; }
   }
 
-  :global(.card.is-ai) {
+  :global(.card.is-ai), :global(.card-header.is-ai) {
     position: relative;
     border: none !important;
     z-index: 0;
@@ -1054,7 +1055,7 @@
     margin: 2px 0; 
   }
 
-  :global(.card.is-ai::before) {
+  :global(.card.is-ai::before), :global(.card-header.is-ai::before) {
     content: '';
     position: absolute;
     top: -2px;
@@ -1062,7 +1063,7 @@
     right: -2px;
     bottom: -2px;
     background: conic-gradient(
-      from var(--ai-angle),
+      from var(--ai-angle) at -20% -20%,
       #7c3aed 0%,
       #2563eb 25%,
       #06b6d4 50%,
@@ -1075,14 +1076,14 @@
     box-shadow: 0 0 10px rgba(124, 58, 237, 0.45);
   }
 
-  :global(.card.is-ai::after) {
+  :global(.card.is-ai::after), :global(.card-header.is-ai::after) {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background: var(--surface) !important;
+    background: color-mix(in srgb, #7c3aed 1.5%, var(--surface-hover)) !important;
     border-radius: 6px;
     z-index: -1;
   }

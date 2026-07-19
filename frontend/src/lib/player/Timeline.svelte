@@ -460,14 +460,14 @@
   .bout-seg.is-ai {
     background: linear-gradient(
       90deg,
-      #7c3aed 0%,
-      #2563eb 50%,
-      #06b6d4 100%
+      rgba(124, 58, 237, 0.25) 0%,
+      rgba(37, 99, 235, 0.25) 50%,
+      rgba(6, 182, 212, 0.25) 100%
     ) !important;
     background-size: 200% 100%;
     animation: timeline-glow 3s linear infinite;
-    opacity: 0.95 !important;
-    box-shadow: 0 0 8px rgba(124, 58, 237, 0.7);
+    opacity: 0.8 !important;
+    box-shadow: 0 0 4px rgba(124, 58, 237, 0.3);
   }
 
   @keyframes timeline-glow {
