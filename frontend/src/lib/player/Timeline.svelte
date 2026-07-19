@@ -155,9 +155,9 @@
   }
 
   let pct = $derived.by(() => {
-    const val = duration > 0 ? (currentTime / duration) * 100 : 0;
-    console.log("[Timeline] pct:", val, "currentTime:", currentTime, "duration:", duration);
-    return val;
+    if (!duration || duration <= 0) return 0;
+    const val = (currentTime / duration) * 100;
+    return Math.max(0, Math.min(100, val));
   });
 
   const isInsideBout = $derived(
@@ -405,8 +405,8 @@
   }
 
   .track--progress:hover .prog-thumb {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
+    transform: translate(-50%, -50%) scale(1.25);
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.9), 0 2px 5px rgba(0, 0, 0, 0.6);
   }
 
   .prog-fill {
@@ -421,15 +421,17 @@
   .prog-thumb {
     position: absolute;
     top: 50%;
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
-    background: #fff;
+    background: #ffffff;
     border: 2px solid var(--accent-yellow);
-    transform: translate(-50%, -50%) scale(0.6);
-    opacity: 0;
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.6), 0 1px 3px rgba(0, 0, 0, 0.5);
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
     pointer-events: none;
-    transition: transform 0.1s, opacity 0.1s;
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
+    z-index: 5;
   }
 
   /* ── Row 3: Bout track ── */
@@ -458,22 +460,21 @@
   }
 
   .bout-seg.is-ai {
-    background: linear-gradient(
-      90deg,
-      rgba(124, 58, 237, 0.25) 0%,
-      rgba(37, 99, 235, 0.25) 50%,
-      rgba(6, 182, 212, 0.25) 100%
-    ) !important;
-    background-size: 200% 100%;
-    animation: timeline-glow 3s linear infinite;
-    opacity: 0.8 !important;
-    box-shadow: 0 0 4px rgba(124, 58, 237, 0.3);
+    background-color: #8b5cf6 !important;
+    animation: ai-timeline-pulse 4s ease-in-out infinite alternate;
+    opacity: 0.9 !important;
+    box-shadow: 0 0 6px rgba(139, 92, 246, 0.4);
   }
 
-  @keyframes timeline-glow {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
+  @keyframes ai-timeline-pulse {
+    0% {
+      background-color: #8b5cf6 !important;
+      box-shadow: 0 0 6px rgba(139, 92, 246, 0.4);
+    }
+    100% {
+      background-color: #10b981 !important;
+      box-shadow: 0 0 6px rgba(16, 185, 129, 0.4);
+    }
   }
 
   /* ── Row 4: Controls ── */
