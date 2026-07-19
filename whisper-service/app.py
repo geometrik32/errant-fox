@@ -187,7 +187,8 @@ def _extract_decision_tree_exchanges(segments, peaks):
             })
 
     exchanges.sort(key=lambda x: x["start_ms"])
-    return _filter_overlapping_bouts(exchanges, min_gap_sec=3.0)
+    filtered_exchanges = _filter_overlapping_bouts(exchanges, min_gap_sec=3.0)
+    return filtered_exchanges, all_words
 
 
 def _detect_exchanges(wav_path: str):
@@ -229,12 +230,12 @@ def _detect_exchanges(wav_path: str):
             logprob_threshold=None,
             no_speech_threshold=None
         )
-        exchanges = _extract_decision_tree_exchanges(result.get("segments", []), peaks)
+        exchanges, all_words = _extract_decision_tree_exchanges(result.get("segments", []), peaks)
 
         for idx, ex in enumerate(exchanges):
             print(f"  Exchange {idx+1}: {ex['start_ms']}ms – {ex['end_ms']}ms ('{ex.get('stop_word', '')}')", flush=True)
 
-        return exchanges
+        return exchanges, all_words
     finally:
         print("  Unloading Whisper model to free server RAM...", flush=True)
         del model
@@ -300,9 +301,9 @@ def _process_analyze_sync(body: AnalyzeRequest):
 
             # 3. Run Whisper detection
             print("  Running Whisper detection...", flush=True)
-            exchanges = _detect_exchanges(wav_path)
+            exchanges, all_words = _detect_exchanges(wav_path)
 
-        return {"video_id": body.video_id, "exchanges": exchanges}
+        return {"video_id": body.video_id, "exchanges": exchanges, "words": all_words}
 
     except Exception as exc:
         traceback.print_exc(file=sys.stderr)
