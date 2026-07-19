@@ -590,8 +590,19 @@
     reader.onload = e => {
       try {
         const data = JSON.parse(e.target.result);
-        loadExchanges(data);
-        statusBar.innerHTML = `Разметка загружена: <span>${file.name}</span> (${data.length} сходов)`;
+        if (Array.isArray(data)) {
+          loadExchanges(data);
+          statusBar.innerHTML = `Разметка загружена: <span>${file.name}</span> (${data.length} сходов)`;
+        } else {
+          const ex = data.exchanges || data.bouts || [];
+          const wrd = data.words || data.allWords || [];
+          loadExchanges(ex);
+          if (wrd && wrd.length) {
+            allWords = wrd;
+            renderWords(allWords);
+          }
+          statusBar.innerHTML = `Разметка загружена: <span>${file.name}</span> (${ex.length} сходов, ${wrd.length} слов)`;
+        }
       } catch(err) {
         statusBar.textContent = 'Ошибка: неверный формат JSON';
       }
@@ -798,21 +809,30 @@
 
   function renderWords(words) {
     wordsContainer.innerHTML = '';
+    if (!words || !words.length) {
+      wordsContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 12px; padding: 8px;">Слова не найдены или видео размечалось в старой версии сервиса. Перезапустите анализ ИИ.</div>';
+      return;
+    }
     words.forEach(w => {
       const btn = document.createElement('button');
       btn.className = 'word-btn';
       
-      const txt = w.word.replace(/[.,\/#!$%^&*;:{}=\-_`~()?]/g,"").toLowerCase().trim();
+      const wordStr = w.word || '';
+      const txt = wordStr.replace(/[.,\/#!$%^&*;:{}=\-_`~()?]/g,"").toLowerCase().trim();
       if (txt === 'стоп') btn.className += ' is-trigger';
-      if (txt === 'оп' || txt === 'топ') btn.className += ' is-trigger-opt';
+      if (txt === 'оп' || txt === 'топ' || txt === 'гоп' || txt === 'хоп') btn.className += ' is-trigger-opt';
       
-      btn.dataset.start = w.start;
-      btn.dataset.end = w.end;
-      btn.title = `[${w.start.toFixed(2)}s - ${w.end.toFixed(2)}s] Confidence: ${Math.round(w.probability * 100)}%`;
-      btn.innerHTML = `${w.word} <span style="font-size:9px; opacity:0.5;">${w.start.toFixed(1)}</span>`;
+      const startSec = typeof w.start === 'number' ? w.start : parseFloat(w.start || 0);
+      const endSec = typeof w.end === 'number' ? w.end : parseFloat(w.end || 0);
+      const prob = typeof w.prob === 'number' ? w.prob : (typeof w.probability === 'number' ? w.probability : 1.0);
+      
+      btn.dataset.start = startSec;
+      btn.dataset.end = endSec;
+      btn.title = `[${startSec.toFixed(2)}s - ${endSec.toFixed(2)}s] Confidence: ${Math.round(prob * 100)}%`;
+      btn.innerHTML = `${wordStr} <span style="font-size:9px; opacity:0.5;">${startSec.toFixed(1)}</span>`;
       
       btn.addEventListener('click', () => {
-        vid.currentTime = w.start;
+        vid.currentTime = startSec;
         vid.play();
       });
       wordsContainer.appendChild(btn);
