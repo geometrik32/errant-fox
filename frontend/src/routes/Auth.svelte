@@ -44,7 +44,7 @@
       const state = Math.random().toString(36).substring(2, 15);
       sessionStorage.setItem('vk_state', state);
       
-      window.location.href = `https://id.vk.com/authorize?response_type=code&client_id=${vkAppId}&redirect_uri=${encodeURIComponent(redirectUri)}&code_challenge=${codeChallenge}&code_challenge_method=S256&state=${state}`;
+      window.location.href = `https://id.vk.com/authorize?response_type=code&client_id=${vkAppId}&redirect_uri=${encodeURIComponent(redirectUri)}&code_challenge=${codeChallenge}&code_challenge_method=S256&state=${state}&prompt=none`;
     } catch (e) {
       console.error('Ошибка подготовки PKCE для VK ID:', e);
       error = 'Не удалось запустить авторизацию VK ID';

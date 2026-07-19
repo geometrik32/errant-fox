@@ -52,11 +52,14 @@
   let liveBouts = $state<Bout[]>([]);
   let liveComments = $state<Comment[]>([]);
   let onlineUsers = $state<any[]>([]);
+  let myWsId = $state<string | null>(null);
+
   let activeViewers = $derived.by(() => {
     const currentViewers = onlineUsers.filter(u => u.watching === videoId);
     const seen = new Set<string>();
     return currentViewers.filter(u => {
       if (u.id === $currentUser?.id) return false;
+      if (myWsId && u.id === myWsId) return false;
       if (seen.has(u.id)) return false;
       seen.add(u.id);
       return true;
@@ -66,6 +69,7 @@
   // Panel visibility
   let showJudging = $state(true);
   let showChat = $state(true);
+  let chatComponent = $state<any>(null);
 
   // Marking state for video outline feedback
   let markingActive = $state(false);
@@ -89,7 +93,9 @@
     ws.onmessage = async (e) => {
       try {
         const msg = JSON.parse(e.data as string);
-        if (msg.type === 'update_video_ai_labeled' && msg.video_id === videoId) {
+        if (msg.type === 'init') {
+          myWsId = msg.user_id;
+        } else if (msg.type === 'update_video_ai_labeled' && msg.video_id === videoId) {
           if (video) {
             video.is_ai_labeled = msg.is_ai_labeled;
             video.is_analyzing = msg.is_analyzing;
@@ -105,6 +111,9 @@
         } else if (msg.type === 'presence_update') {
           onlineUsers = msg.users as any[];
         }
+
+        judgingPanel?.handleWsMessage(msg);
+        chatComponent?.handleWsMessage(msg);
       } catch {
         // ignore
       }
@@ -194,7 +203,7 @@
 {:else if loadError}
   <div class="state-msg error">{loadError}</div>
 {:else if video}
-  <div class="layout" bind:this={layoutEl}>
+  <div class="layout" class:no-header={!!shareToken} bind:this={layoutEl}>
 
     <div class="cols">
 
@@ -250,6 +259,7 @@
       {#if showChat}
         <div class="col col-right">
           <Chat
+            bind:this={chatComponent}
             {videoId}
             comments={video.comments}
             {currentTime}
@@ -308,6 +318,10 @@
     background: transparent;
     padding: 16px;
     gap: 16px;
+  }
+
+  .layout.no-header {
+    height: 100vh;
   }
 
   .cols {
