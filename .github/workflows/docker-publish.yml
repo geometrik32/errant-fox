@@ -78,3 +78,27 @@ jobs:
           labels: ${{ steps.meta-frontend.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # --- Build Whisper Service ---
+      - name: Extract metadata for Whisper Service
+        id: meta-whisper
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-whisper-service
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Whisper Service image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./whisper-service
+          file: ./whisper-service/Dockerfile
+          push: true
+          tags: ${{ steps.meta-whisper.outputs.tags }}
+          labels: ${{ steps.meta-whisper.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
