@@ -1036,8 +1036,54 @@
     to { transform: rotate(360deg); }
   }
 
+  @property --ai-angle {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
+  }
+
+  @keyframes ai-spin {
+    to { --ai-angle: 360deg; }
+  }
+
   :global(.card.is-ai) {
-    border: 1.5px solid #7c3aed !important;
-    box-shadow: 0 0 12px rgba(124, 58, 237, 0.45) !important;
+    position: relative;
+    border: none !important;
+    z-index: 0;
+    /* Add a bit of margin so the border glow isn't clipped */
+    margin: 2px 0; 
+  }
+
+  :global(.card.is-ai::before) {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    background: conic-gradient(
+      from var(--ai-angle),
+      #7c3aed 0%,
+      #2563eb 25%,
+      #06b6d4 50%,
+      #7c3aed 75%,
+      #7c3aed 100%
+    );
+    border-radius: 8px; /* Match native card border-radius */
+    z-index: -2;
+    animation: ai-spin 3s linear infinite;
+    box-shadow: 0 0 10px rgba(124, 58, 237, 0.45);
+  }
+
+  :global(.card.is-ai::after) {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--surface) !important;
+    border-radius: 6px;
+    z-index: -1;
   }
 </style>

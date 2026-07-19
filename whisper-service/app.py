@@ -261,10 +261,12 @@ def health():
     return {"status": "ok"}
 
 
-@app.post("/analyze")
-def analyze(body: AnalyzeRequest):
-    print(f"[analyze] video_id={body.video_id}  url={body.audio_url[:80]}...", flush=True)
+import asyncio
 
+analyze_lock = asyncio.Lock()
+
+
+def _process_analyze_sync(body: AnalyzeRequest):
     try:
         # 1. Download audio to a temp file
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -305,3 +307,14 @@ def analyze(body: AnalyzeRequest):
     except Exception as exc:
         traceback.print_exc(file=sys.stderr)
         return {"error": str(exc)}
+
+
+@app.post("/analyze")
+async def analyze(body: AnalyzeRequest):
+    print(f"[analyze] video_id={body.video_id} queued in request lock.", flush=True)
+    async with analyze_lock:
+        print(f"[analyze] video_id={body.video_id} processing started.", flush=True)
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, _process_analyze_sync, body)
+        print(f"[analyze] video_id={body.video_id} processing finished.", flush=True)
+        return result

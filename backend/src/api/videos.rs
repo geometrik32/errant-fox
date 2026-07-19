@@ -1652,7 +1652,12 @@ pub async fn get_video_transcript(
 }
 
 async fn render_transcript_html(video_id: &str, token: &str, raw_json: &str) -> String {
-    let template_paths = ["scratch/exchange_viewer_target.html", "data/exchange_viewer_target.html"];
+    let template_paths = [
+        "scratch/exchange_viewer_target.html",
+        "data/exchange_viewer_target.html",
+        "backend/exchange_viewer_target.html",
+        "exchange_viewer_target.html"
+    ];
     let mut template = String::new();
     for p in template_paths {
         if let Ok(t) = tokio::fs::read_to_string(p).await {
