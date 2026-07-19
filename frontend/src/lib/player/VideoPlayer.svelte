@@ -169,7 +169,11 @@
     if (stepFrameTarget === null)
       stepFrameTarget = Math.round(videoEl.currentTime * effectiveFps);
     stepFrameTarget++;
-    const t = Math.min(videoEl.duration || 0, stepFrameTarget / effectiveFps);
+    let t = Math.min(videoEl.duration || 0, stepFrameTarget / effectiveFps);
+    if (looping && loopRange && t * 1000 > loopRange.end) {
+      t = loopRange.start / 1000;
+      stepFrameTarget = Math.round(t * effectiveFps);
+    }
     videoEl.currentTime = t;
     ontimeupdate?.(t);
     stepRetries = 0;
@@ -182,7 +186,11 @@
     if (stepFrameTarget === null)
       stepFrameTarget = Math.round(videoEl.currentTime * effectiveFps);
     stepFrameTarget = Math.max(0, stepFrameTarget - 1);
-    const t = stepFrameTarget / effectiveFps;
+    let t = stepFrameTarget / effectiveFps;
+    if (looping && loopRange && t * 1000 < loopRange.start) {
+      t = loopRange.end / 1000;
+      stepFrameTarget = Math.round(t * effectiveFps);
+    }
     videoEl.currentTime = t;
     ontimeupdate?.(t);
     stepRetries = 0;

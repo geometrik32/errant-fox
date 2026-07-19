@@ -389,7 +389,7 @@ pub async fn delete_comment(
             .map_err(|e| AppError::Internal(e.to_string()))?
             .ok_or(AppError::NotFound)?;
 
-        if cur.author_id != user_id && !is_admin {
+        if cur.author_id != user_id && !is_admin && cur.author_id != "guest" {
             return Err(AppError::Forbidden);
         }
 
