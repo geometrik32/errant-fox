@@ -14,7 +14,7 @@ app = FastAPI(title="Whisper Exchange Detection Service")
 
 import gc
 
-WHISPER_MODEL_NAME = os.environ.get("WHISPER_MODEL", "small")
+WHISPER_MODEL_NAME = os.environ.get("WHISPER_MODEL", "medium")
 
 # ── Stop-word detection helpers ───────────────────────────────────────────────
 
@@ -226,6 +226,7 @@ def _detect_exchanges(wav_path: str):
             wav_path,
             language="ru",
             word_timestamps=True,
+            initial_prompt="Бой! Стоп! Удар! Разметка сходов фехтовального поединка.",
             condition_on_previous_text=False,
             logprob_threshold=None,
             no_speech_threshold=None
