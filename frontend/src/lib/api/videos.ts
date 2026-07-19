@@ -69,3 +69,9 @@ export async function aiLabelVideo(id: string): Promise<import('./types').Bout[]
     method: 'POST',
   });
 }
+
+export async function cancelAiLabelVideo(id: string): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/videos/${id}/cancel-analysis`, {
+    method: 'POST',
+  });
+}
