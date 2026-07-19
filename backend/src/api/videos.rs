@@ -908,6 +908,7 @@ pub async fn get_preview_frame(
         let db = state.db.clone();
         let vid_id = video_id.clone();
         let server_port = state.server_port;
+        let ws_hub = state.ws_hub.clone();
 
         tokio::spawn(async move {
             if let Err(e) = crate::services::previews::generate_previews(
@@ -921,6 +922,11 @@ pub async fn get_preview_frame(
             .await
             {
                 tracing::error!("generate_previews failed for {vid_id}: {e:?}");
+            } else {
+                let _ = ws_hub.send(crate::services::ws::WsEvent::UpdateVideoPreview {
+                    video_id: vid_id.clone(),
+                    preview_url: format!("/api/videos/{}/previews/0", vid_id),
+                });
             }
         });
 
@@ -1178,6 +1184,7 @@ pub async fn regenerate_preview(
     let db = state.db.clone();
     let server_port = state.server_port;
 
+    let ws_hub = state.ws_hub.clone();
     tokio::spawn(async move {
         if let Err(e) = crate::services::previews::generate_previews(
             &video_id,
@@ -1190,6 +1197,11 @@ pub async fn regenerate_preview(
         .await
         {
             tracing::error!("generate_previews failed for {video_id}: {e:?}");
+        } else {
+            let _ = ws_hub.send(crate::services::ws::WsEvent::UpdateVideoPreview {
+                video_id: video_id.clone(),
+                preview_url: format!("/api/videos/{}/previews/0", video_id),
+            });
         }
     });
 
@@ -1679,7 +1691,12 @@ async fn render_transcript_html(video_id: &str, token: &str, raw_json: &str) -> 
                 .or_else(|| ex.get("start_time_sec").and_then(|v| v.as_f64())).unwrap_or(0.0);
             let end_sec = ex.get("end_ms").and_then(|v| v.as_f64()).map(|m| m / 1000.0)
                 .or_else(|| ex.get("end_time_sec").and_then(|v| v.as_f64())).unwrap_or(0.0);
-            let text = ex.get("text").or_else(|| ex.get("stop_word_detected")).and_then(|v| v.as_str()).unwrap_or("—").to_string();
+            let text = ex.get("text")
+                .or_else(|| ex.get("stop_word_detected"))
+                .or_else(|| ex.get("stop_word"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("—")
+                .to_string();
             let conf = ex.get("confidence").and_then(|v| v.as_f64()).unwrap_or(0.8);
             let peak_sec = ex.get("peak_time_sec").and_then(|v| v.as_f64()).unwrap_or(start_sec + 2.0);
             let ratio = ex.get("peak_ratio").and_then(|v| v.as_f64()).unwrap_or(1.0);

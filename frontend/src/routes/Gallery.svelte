@@ -141,6 +141,14 @@
             return v;
           });
           applyFilter();
+        } else if (msg.type === 'update_video_preview') {
+          allVideos = allVideos.map(v => {
+            if (v.id === msg.video_id) {
+              return { ...v, preview_url: msg.preview_url ?? v.preview_url, preview_count: 1 };
+            }
+            return v;
+          });
+          applyFilter();
         } else if (msg.type === 'update_video_ai_labeled') {
           allVideos = allVideos.map(v => {
             if (v.id === msg.video_id) {
@@ -149,6 +157,12 @@
             return v;
           });
           applyFilter();
+          if (!msg.is_analyzing) {
+            getVideo(msg.video_id).then(updated => {
+              allVideos = allVideos.map(v => v.id === msg.video_id ? { ...v, ...updated, is_analyzing: false } : v);
+              applyFilter();
+            }).catch(() => {});
+          }
         }
       } catch {
         // ignore malformed messages
