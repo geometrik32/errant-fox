@@ -17,6 +17,9 @@ pub async fn list_techniques(
     State(state): State<AppState>,
     _user: CurrentUser,
 ) -> Result<Json<Vec<Technique>>, AppError> {
+    if _user.0.role == "guest" {
+        return Err(AppError::Forbidden);
+    }
     let db = state.db.clone();
     let techniques = tokio::task::spawn_blocking(move || {
         use crate::db::schema::techniques::dsl::techniques;

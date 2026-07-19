@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, State, Query},
     http::{header, StatusCode},
     response::IntoResponse,
     Json,
@@ -65,6 +65,7 @@ fn to_ws_bout(b: &Bout) -> WsBout {
         hit_zone_b: b.hit_zone_b.clone(),
         result_a: b.result_a.clone(),
         result_b: b.result_b.clone(),
+        deleted: None,
     }
 }
 
@@ -107,6 +108,33 @@ pub struct PatchBoutRequest {
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
+
+async fn broadcast_video_score(
+    db: crate::db::DbPool,
+    ws_hub: crate::services::ws::WsHub,
+    video_id: String,
+) {
+    let video_id_for_db = video_id.clone();
+    let res = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::bouts;
+        let mut conn = db.get()?;
+        let list = bouts::table
+            .filter(bouts::video_id.eq(&video_id_for_db))
+            .load::<Bout>(&mut conn)?;
+        let sa: i32 = list.iter().map(|b| b.score_a).sum();
+        let sb: i32 = list.iter().map(|b| b.score_b).sum();
+        Ok::<_, anyhow::Error>((sa, sb))
+    })
+    .await;
+
+    if let Ok(Ok((score_a, score_b))) = res {
+        let _ = ws_hub.send(WsEvent::UpdateVideoScore {
+            video_id,
+            total_score_a: score_a,
+            total_score_b: score_b,
+        });
+    }
+}
 
 pub async fn post_bout(
     State(state): State<AppState>,
@@ -184,6 +212,12 @@ pub async fn post_bout(
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
+        // Clear AI label — a human is now editing this video's bouts
+        diesel::update(videos::table.filter(videos::id.eq(&bout.video_id)))
+            .set(videos::is_ai_labeled.eq(false))
+            .execute(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
         let mut notifications = Vec::new();
 
         let video = videos::table
@@ -248,6 +282,7 @@ pub async fn post_bout(
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
     let _ = state.ws_hub.send(WsEvent::UpdateBout(to_ws_bout(&bout)));
+    tokio::spawn(broadcast_video_score(state.db.clone(), state.ws_hub.clone(), bout.video_id.clone()));
 
     // Spawn VK notification tasks if not throttled
     let vk_notifier = state.vk_notifier.clone();
@@ -403,6 +438,15 @@ pub async fn patch_bout(
                 .map_err(|e| AppError::Internal(e.to_string()))?;
         }
 
+        // Clear AI label — human edited this bout
+        {
+            use crate::db::schema::videos;
+            diesel::update(videos::table.filter(videos::id.eq(&cur.video_id)))
+                .set(videos::is_ai_labeled.eq(false))
+                .execute(&mut conn)
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+        }
+
         bouts::table
             .filter(bouts::id.eq(id))
             .first::<Bout>(&mut conn)
@@ -412,6 +456,7 @@ pub async fn patch_bout(
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
     let _ = state.ws_hub.send(WsEvent::UpdateBout(to_ws_bout(&bout)));
+    tokio::spawn(broadcast_video_score(state.db.clone(), state.ws_hub.clone(), bout.video_id.clone()));
 
     Ok(Json(to_response(&bout)))
 }
@@ -423,10 +468,17 @@ pub async fn delete_bout(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let db = state.db.clone();
 
-    tokio::task::spawn_blocking(move || {
+    let bout = tokio::task::spawn_blocking(move || {
         use crate::db::schema::bouts;
-
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // Fetch bout before deletion to know its video_id and details
+        let bout = bouts::table
+            .filter(bouts::id.eq(id))
+            .first::<Bout>(&mut conn)
+            .optional()
+            .map_err(|e| AppError::Internal(e.to_string()))?
+            .ok_or(AppError::NotFound)?;
 
         let deleted = diesel::delete(bouts::table.filter(bouts::id.eq(id)))
             .execute(&mut conn)
@@ -436,10 +488,27 @@ pub async fn delete_bout(
             return Err(AppError::NotFound);
         }
 
-        Ok(())
+        // Clear AI label — human deleted a bout
+        {
+            use crate::db::schema::videos;
+            diesel::update(videos::table.filter(videos::id.eq(&bout.video_id)))
+                .set(videos::is_ai_labeled.eq(false))
+                .execute(&mut conn)
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+        }
+
+        Ok::<Bout, AppError>(bout)
     })
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    // Send WebSocket notification that bout is deleted
+    let mut ws_bout = to_ws_bout(&bout);
+    ws_bout.deleted = Some(true);
+    let _ = state.ws_hub.send(WsEvent::UpdateBout(ws_bout));
+
+    // Broadcast updated video score
+    tokio::spawn(broadcast_video_score(state.db.clone(), state.ws_hub.clone(), bout.video_id.clone()));
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -508,10 +577,9 @@ pub async fn get_bout_history(
 }
 
 
-pub async fn download_bout(
-    State(state): State<AppState>,
-    _user: CurrentUser,
-    Path(id): Path<i32>,
+pub async fn download_bout_impl(
+    state: &AppState,
+    id: i32,
 ) -> Result<axum::response::Response, AppError> {
     let db = state.db.clone();
 
@@ -622,6 +690,64 @@ pub async fn download_bout(
     Ok((headers, bytes).into_response())
 }
 
+pub async fn download_bout(
+    State(state): State<AppState>,
+    _user: CurrentUser,
+    Path(id): Path<i32>,
+) -> Result<axum::response::Response, AppError> {
+    download_bout_impl(&state, id).await
+}
+
+#[derive(Deserialize)]
+pub struct SharedBoutQuery {
+    pub token: String,
+}
+
+pub async fn download_shared_bout(
+    State(state): State<AppState>,
+    Path(bout_id): Path<i32>,
+    Query(query): Query<SharedBoutQuery>,
+) -> Result<axum::response::Response, AppError> {
+    use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+    let claims: crate::api::auth::ShareClaims = decode::<crate::api::auth::ShareClaims>(
+        &query.token,
+        &DecodingKey::from_secret(state.jwt_secret.as_bytes()),
+        &Validation::new(Algorithm::HS256),
+    )
+    .map(|d| d.claims)
+    .map_err(|e| AppError::Unauthorized(format!("Invalid share token: {}", e)))?;
+
+    // We must query the bout to verify its video_id matches claims.video_id
+    let db = state.db.clone();
+    let bout_id_clone = bout_id;
+    let bout_video_id = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::bouts;
+        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+        let bout = bouts::table
+            .filter(bouts::id.eq(bout_id_clone))
+            .first::<Bout>(&mut conn)
+            .optional()
+            .map_err(|e| AppError::Internal(e.to_string()))?
+            .ok_or(AppError::NotFound)?;
+        Ok::<String, AppError>(bout.video_id)
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    if claims.video_id != bout_video_id {
+        return Err(AppError::Unauthorized("Invalid share token for this bout's video".to_string()));
+    }
+
+    if let Some(tok_bout_id) = claims.bout_id {
+        if tok_bout_id != bout_id {
+            return Err(AppError::Unauthorized("Invalid share token for this fragment".to_string()));
+        }
+    }
+
+    download_bout_impl(&state, bout_id).await
+}
+
+
 pub fn transliterate(s: &str) -> String {
     let mut res = String::new();
     for c in s.chars() {
@@ -651,7 +777,7 @@ pub fn transliterate(s: &str) -> String {
     res.trim_matches('_').to_string()
 }
 
-fn format_ms(ms: i32) -> String {
+pub fn format_ms(ms: i32) -> String {
     let total_secs = ms / 1000;
     let mins = total_secs / 60;
     let secs = total_secs % 60;

@@ -14,10 +14,11 @@
 <script lang="ts">
   interface Props {
     value: string;
+    readonly?: boolean;
     onchange?: (value: string) => void;
   }
 
-  let { value, onchange }: Props = $props();
+  let { value, readonly = false, onchange }: Props = $props();
 
   let svgEl: SVGElement;
 
@@ -36,6 +37,7 @@
   }
 
   function handleZoneClick(e: MouseEvent, zone: string) {
+    if (readonly) return;
     if (currentZone() === zone) {
       onchange?.('');
       return;
@@ -56,7 +58,7 @@
 </script>
 
 <div class="picker">
-  <svg bind:this={svgEl} viewBox="0 0 350 1055" xmlns="http://www.w3.org/2000/svg" class="svg" aria-label="Зона поражения">
+  <svg bind:this={svgEl} viewBox="0 0 350 1055" xmlns="http://www.w3.org/2000/svg" class="svg" class:readonly={readonly} aria-label="Зона поражения">
 
     <!-- 1. Голова -->
     <rect x="113" y="0" width="125" height="125" rx="20"
@@ -223,6 +225,15 @@
     width: 120px;
     flex-shrink: 0;
     overflow: visible;
+  }
+
+  .svg.readonly .zone {
+    cursor: default;
+    pointer-events: none;
+  }
+
+  .svg.readonly .zone:hover {
+    filter: none;
   }
 
   .zone {

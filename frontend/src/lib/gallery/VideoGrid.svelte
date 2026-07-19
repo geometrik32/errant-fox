@@ -6,9 +6,10 @@
     videos: Video[];
     videoWatchers?: Record<string, any[]>;
     onopen?: (id: string) => void;
+    onreload?: () => void;
   }
 
-  let { videos, videoWatchers = {}, onopen }: Props = $props();
+  let { videos, videoWatchers = {}, onopen, onreload }: Props = $props();
 
   interface DateGroup {
     date: string;
@@ -45,7 +46,7 @@
       <h3 class="date-label">{group.label}</h3>
       <div class="grid">
         {#each group.videos as video (video.id)}
-          <VideoCard {video} watchers={videoWatchers[video.id] ?? []} {onopen} />
+          <VideoCard {video} watchers={videoWatchers[video.id] ?? []} {onopen} {onreload} />
         {/each}
       </div>
     </div>

@@ -11,9 +11,20 @@ services:
       PREVIEWS_DIR: /data/previews
       AVATARS_DIR: /data/avatars
       SQLITE_JOURNAL_MODE: DELETE
+      WHISPER_URL: http://whisper-service:8000
     networks:
       - default
       - proxy
+
+  whisper-service:
+    build: ./whisper-service
+    restart: unless-stopped
+    environment:
+      WHISPER_MODEL: medium
+    volumes:
+      - whisper_cache:/root/.cache/whisper
+    networks:
+      - default
 
   frontend:
     image: ghcr.io/geometrik32/errant-fox-frontend:latest
@@ -51,3 +62,6 @@ services:
 networks:
   proxy:
     external: true
+
+volumes:
+  whisper_cache:

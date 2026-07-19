@@ -117,10 +117,8 @@
 
   .kpi-card {
     background: var(--surface);
-    backdrop-filter: blur(var(--blur-amount));
-    -webkit-backdrop-filter: blur(var(--blur-amount));
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-2xl);
+    border-radius: var(--radius-md);
     box-shadow: var(--shadow-md);
     padding: 24px;
     position: relative;

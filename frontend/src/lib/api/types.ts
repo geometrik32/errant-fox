@@ -6,6 +6,7 @@ export interface User {
   avatar_url: string;
   color: string | null;
   vk_id?: string | null;
+  role: 'fighter' | 'guest';
 }
 
 export interface Fighter {
@@ -16,6 +17,7 @@ export interface Fighter {
   color: string | null;
   is_admin: boolean;
   vk_id?: string | null;
+  role: 'fighter' | 'guest';
 }
 
 export function resolveColor(id: string, color: string | null | undefined): string {
@@ -44,6 +46,7 @@ export interface FighterBout {
   opponent_technique_name: string | null;
   opponent_hit_zone: string | null;
   opponent_result: 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | 'disqualification' | 'afterblow' | null;
+  is_unmarked?: boolean;
 }
 
 export interface VideoFighter {
@@ -61,8 +64,12 @@ export interface Video {
   total_score_a?: number;
   total_score_b?: number;
   is_tagged: boolean;
+  is_ai_labeled: boolean;
+  is_analyzing?: boolean;
   preview_url: string;
   preview_count: number;
+  seafile_path?: string;
+  seafile_web_url?: string;
 }
 
 export interface Bout {
@@ -78,6 +85,7 @@ export interface Bout {
   technique_b_id: number | null;
   hit_zone_b: string | null;
   result_b: 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | 'disqualification' | 'afterblow' | null;
+  is_ai?: boolean;
 }
 
 export interface Comment {
@@ -101,6 +109,7 @@ export interface VideoFull {
   stream_url: string;
   duration_ms: number;
   fps?: number | null;
+  is_ai_labeled: boolean;
   bouts: Bout[];
   comments: Comment[];
 }

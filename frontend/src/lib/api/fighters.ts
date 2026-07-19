@@ -9,12 +9,17 @@ export async function getFighterBouts(id: string): Promise<FighterBout[]> {
   return apiFetch<FighterBout[]>(`/fighters/${id}/bouts`);
 }
 
+export async function getAdminUsers(): Promise<User[]> {
+  return apiFetch<User[]>('/admin/users');
+}
+
 export async function createUser(data: {
   username: string;
   display_name: string;
   password: string;
   is_admin: boolean;
   color?: string;
+  role?: string;
 }): Promise<User> {
   return apiFetch<User>('/admin/users', {
     method: 'POST',
@@ -28,6 +33,7 @@ export async function patchUser(id: string, data: {
   color?: string;
   is_admin?: boolean;
   vk_id?: string;
+  role?: string;
 }): Promise<User> {
   return apiFetch<User>(`/admin/users/${id}`, {
     method: 'PATCH',

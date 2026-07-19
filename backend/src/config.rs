@@ -11,6 +11,8 @@ pub struct Config {
     pub frontend_origin: String,
     pub frontend_url: String,
     pub vk_group_token: Option<String>,
+    pub vk_app_id: Option<String>,
+    pub vk_app_secret: Option<String>,
 }
 
 impl Config {
@@ -31,6 +33,8 @@ impl Config {
             frontend_origin: origin,
             frontend_url: url,
             vk_group_token: env::var("VK_GROUP_TOKEN").ok(),
+            vk_app_id: env::var("VK_APP_ID").ok(),
+            vk_app_secret: env::var("VK_APP_SECRET").ok(),
         }
     }
 }

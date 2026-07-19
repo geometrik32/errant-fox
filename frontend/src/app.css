@@ -70,10 +70,8 @@ p {
 /* Glass Card Utility */
 .glass-card {
   background: var(--surface);
-  backdrop-filter: blur(var(--blur-amount));
-  -webkit-backdrop-filter: blur(var(--blur-amount));
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-2xl);
+  border-radius: var(--radius-lg);
   box-shadow: none;
   transition: var(--transition);
   padding: 24px;
@@ -89,7 +87,7 @@ p {
   align-items: center;
   justify-content: center;
   padding: 0.5rem 1.2rem;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-md);
   font-weight: 500;
   font-size: 0.9rem;
   cursor: pointer;
@@ -133,8 +131,6 @@ p {
 /* Inputs Utilities */
 .input-glass {
   background: rgba(0, 0, 0, 0.2);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   padding: 0.75rem 1.2rem;
@@ -164,9 +160,8 @@ select.input-glass option, select.filter-input option {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--text-secondary);
+  background: rgba(156, 163, 175, 0.5);
   border-radius: 4px;
-  opacity: 0.5;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-primary);

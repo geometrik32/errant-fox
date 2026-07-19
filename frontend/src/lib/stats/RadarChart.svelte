@@ -190,9 +190,8 @@
     width: 100%;
     height: 100%;
     background: var(--surface);
-    backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-2xl);
+    border-radius: var(--radius-lg);
     padding: 16px;
     display: flex;
     align-items: center;
@@ -234,13 +233,12 @@
     position: absolute;
     inset: 0;
     background: rgba(15, 23, 42, 0.85);
-    backdrop-filter: blur(8px);
     z-index: 100;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 20px;
-    border-radius: var(--radius-2xl);
+    border-radius: var(--radius-lg);
   }
 
   .info-card {

@@ -12,6 +12,7 @@ export const token: Writable<string | null> = writable(
 export const currentUser: Writable<User | null> = writable(null);
 export const techniques: Writable<Technique[]> = writable([]);
 export const fighters: Writable<Fighter[]> = writable([]);
+export const gallerySidebarOpen: Writable<boolean> = writable(false);
 
 token.subscribe((value) => {
   if (typeof localStorage === 'undefined') return;

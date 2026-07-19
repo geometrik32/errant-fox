@@ -87,7 +87,7 @@
   .top-techniques {
     background: var(--surface);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-2xl);
+    border-radius: var(--radius-lg);
     padding: 24px;
     box-shadow: var(--shadow-sm);
     height: 100%;

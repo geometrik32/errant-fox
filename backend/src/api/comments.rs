@@ -42,13 +42,19 @@ pub struct CommentResponse {
 }
 
 fn to_response(c: &Comment, author: &User, likes: i32, dislikes: i32, my_reaction: Option<String>) -> CommentResponse {
+    let (display_name, color) = if let Some(ref nick) = c.guest_nickname {
+        (nick.clone(), Some(crate::api::auth::generate_color(nick)))
+    } else {
+        (author.display_name.clone(), author.color.clone())
+    };
+
     CommentResponse {
         id: c.id,
         author: CommentAuthorResponse {
             id: author.id.clone(),
-            display_name: author.display_name.clone(),
+            display_name,
             avatar_url: format!("/api/users/{}/avatar", author.id),
-            color: author.color.clone(),
+            color,
         },
         timestamp_ms: c.timestamp_ms,
         text: c.text.clone(),
@@ -81,14 +87,20 @@ fn load_reactions(comment_id: i32, user_id: &str, conn: &mut diesel::SqliteConne
 }
 
 fn to_ws_comment(c: &Comment, author: &User) -> WsComment {
+    let (display_name, color) = if let Some(ref nick) = c.guest_nickname {
+        (nick.clone(), Some(crate::api::auth::generate_color(nick)))
+    } else {
+        (author.display_name.clone(), author.color.clone())
+    };
+
     WsComment {
         id: c.id,
         video_id: c.video_id.clone(),
         author: WsCommentAuthor {
             id: author.id.clone(),
-            display_name: author.display_name.clone(),
+            display_name,
             avatar_url: format!("/api/users/{}/avatar", author.id),
-            color: author.color.clone(),
+            color,
         },
         timestamp_ms: c.timestamp_ms,
         text: c.text.clone(),
@@ -126,6 +138,9 @@ pub async fn post_comment(
     CurrentUser(user): CurrentUser,
     Json(body): Json<CreateCommentRequest>,
 ) -> Result<(StatusCode, Json<CommentResponse>), AppError> {
+    if user.role == "guest" {
+        return Err(AppError::Forbidden);
+    }
     let db = state.db.clone();
     let user_id = user.id.clone();
     let frontend_origin = state.frontend_url.clone();
@@ -167,6 +182,7 @@ pub async fn post_comment(
                 text: body.text.clone(),
                 reply_to_id: body.reply_to_id,
                 bout_id,
+                guest_nickname: None,
             })
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -347,6 +363,8 @@ pub async fn patch_comment(
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
+    let _ = state.ws_hub.send(WsEvent::UpdateComment(to_ws_comment(&comment, &user)));
+
     Ok(Json(to_response(&comment, &user, likes, dislikes, my_reaction)))
 }
 
@@ -359,7 +377,7 @@ pub async fn delete_comment(
     let user_id = user.id.clone();
     let is_admin = user.is_admin;
 
-    tokio::task::spawn_blocking(move || {
+    let video_id = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{comment_reactions, comments};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
@@ -374,6 +392,8 @@ pub async fn delete_comment(
         if cur.author_id != user_id && !is_admin {
             return Err(AppError::Forbidden);
         }
+
+        let video_id = cur.video_id.clone();
 
         // Collect IDs of all replies to this comment
         let reply_ids: Vec<i32> = comments::table
@@ -408,10 +428,15 @@ pub async fn delete_comment(
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        Ok(())
+        Ok::<String, AppError>(video_id)
     })
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    let _ = state.ws_hub.send(WsEvent::DeleteComment {
+        id,
+        video_id,
+    });
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

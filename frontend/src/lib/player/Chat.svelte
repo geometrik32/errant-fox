@@ -1,19 +1,35 @@
 <script lang="ts">
   import { onMount, onDestroy, untrack } from 'svelte';
   import { currentUser } from '../../stores';
-  import type { Comment } from '../api/types';
-  import { createComment, updateComment, deleteComment, reactComment, deleteReact } from '../api/comments';
+  import type { Comment, Bout } from '../api/types';
+  import { createComment, updateComment, deleteComment, reactComment, deleteReact, createSharedComment } from '../api/comments';
 
   interface Props {
     videoId: string;
     comments?: Comment[];
     currentTime?: number;
     highlightedId?: number | null;
+    readonly?: boolean;
+    shareToken?: string;
+    sharedBoutId?: number | null;
     onseek?: (timestamp_ms: number) => void;
     oncommentschange?: (comments: Comment[]) => void;
+    bouts?: Bout[];
   }
 
-  let { videoId, comments: initComments = [], currentTime = 0, highlightedId = null, onseek, oncommentschange }: Props = $props();
+  let props: Props = $props();
+
+  let videoId = $derived(props.videoId);
+  let initComments: Comment[] = $derived(props.comments ?? []);
+  let currentTime = $derived(props.currentTime ?? 0);
+  let highlightedId = $derived(props.highlightedId ?? null);
+  let readonly = $derived(props.readonly ?? false);
+  let shareToken = $derived(props.shareToken ?? '');
+  let sharedBoutId = $derived(props.sharedBoutId ?? null);
+  let bouts = $derived(props.bouts ?? []);
+
+  const onseek = $derived(props.onseek);
+  const oncommentschange = $derived(props.oncommentschange);
 
   let comments = $state<Comment[]>([...untrack(() => initComments)]);
   let text = $state('');
@@ -21,12 +37,39 @@
   let sending = $state(false);
   let listEl: HTMLDivElement;
 
+  let filterByActiveBout = $state(false);
+
+  let currentTimeMs = $derived(currentTime * 1000);
+
+  let sortedBouts = $derived(
+    [...bouts].sort((a, b) => a.time_start_ms - b.time_start_ms)
+  );
+
+  let currentBout = $derived(
+    sortedBouts.find(b => currentTimeMs >= b.time_start_ms && currentTimeMs <= b.time_end_ms)
+  );
+
+  let currentBoutIndex = $derived(
+    currentBout ? sortedBouts.findIndex(b => b.id === currentBout.id) : -1
+  );
+
   let sortedComments = $derived.by(() => {
-    const topLevel = comments.filter(c => c.reply_to_id === null).sort((a, b) => a.id - b.id);
+    let filtered = comments;
+    if (filterByActiveBout) {
+      if (currentBout) {
+        filtered = comments.filter(c => {
+          return c.timestamp_ms >= currentBout.time_start_ms && c.timestamp_ms <= currentBout.time_end_ms;
+        });
+      } else {
+        filtered = [];
+      }
+    }
+
+    const topLevel = filtered.filter(c => c.reply_to_id === null).sort((a, b) => a.id - b.id);
     const result: Comment[] = [];
     for (const c of topLevel) {
       result.push(c);
-      const replies = comments.filter(r => r.reply_to_id === c.id).sort((a, b) => a.id - b.id);
+      const replies = filtered.filter(r => r.reply_to_id === c.id).sort((a, b) => a.id - b.id);
       result.push(...replies);
     }
     return result;
@@ -191,6 +234,27 @@
 
 <div class="chat">
 
+  <!-- Chat Header -->
+  <div class="chat-header">
+    <span class="chat-title">Комментарии</span>
+    <label class="filter-switch" title="Показывать только комментарии внутри текущего схода">
+      <div class="switch-container">
+        <input 
+          type="checkbox" 
+          bind:checked={filterByActiveBout} 
+        />
+        <span class="slider"></span>
+      </div>
+      <span class="switch-label">
+        {#if currentBoutIndex !== -1}
+          По сходу №{currentBoutIndex + 1}
+        {:else}
+          По сходу
+        {/if}
+      </span>
+    </label>
+  </div>
+
   <!-- Message list -->
   <div class="list" bind:this={listEl}>
     {#each sortedComments as c (c.id)}
@@ -291,6 +355,95 @@
     height: 100%;
     background: transparent;
     overflow: hidden;
+  }
+
+  /* ── Header ── */
+  .chat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    background: rgba(0, 0, 0, 0.15);
+    flex-shrink: 0;
+  }
+
+  .chat-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* ── Switch Slider ── */
+  .filter-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    user-select: none;
+    transition: var(--transition);
+  }
+
+  .switch-container {
+    position: relative;
+    display: inline-block;
+    width: 28px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+
+  .switch-container input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--border-color);
+    transition: .2s;
+    border-radius: var(--radius-pill);
+  }
+
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 10px;
+    width: 10px;
+    left: 2px;
+    bottom: 2px;
+    background-color: var(--text-secondary);
+    transition: .2s;
+    border-radius: 50%;
+  }
+
+  .switch-container input:checked + .slider {
+    background-color: var(--accent-yellow);
+    border-color: var(--accent-yellow);
+  }
+
+  .switch-container input:checked + .slider:before {
+    transform: translateX(12px);
+    background-color: #000;
+  }
+
+  .switch-label {
+    font-weight: 500;
+    transition: var(--transition);
+  }
+
+  .filter-switch:hover .switch-label {
+    color: var(--text-primary);
   }
 
   /* ── List ── */

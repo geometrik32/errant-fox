@@ -50,7 +50,8 @@
   let isGrouped = $state(true); // Grouped by default
   let expandedFights = $state<Set<string>>(new Set());
 
-  function toggleFight(videoId: string) {
+  function toggleFight(videoId: string, isUnmarked?: boolean) {
+    if (isUnmarked) return;
     const next = new Set(expandedFights);
     if (next.has(videoId)) {
       next.delete(videoId);
@@ -76,6 +77,7 @@
     my_score: number;
     opponent_score: number;
     bouts: FighterBout[];
+    is_unmarked?: boolean;
   }
 
   let groups = $derived.by(() => {
@@ -91,14 +93,17 @@
           opponent_name: b.opponent_name,
           my_score: 0,
           opponent_score: 0,
-          bouts: []
+          bouts: [],
+          is_unmarked: b.is_unmarked
         };
         map.set(b.video_id, g);
         list.push(g);
       }
-      g.my_score += b.my_score;
-      g.opponent_score += b.opponent_score;
-      g.bouts.push(b);
+      if (!b.is_unmarked) {
+        g.my_score += b.my_score;
+        g.opponent_score += b.opponent_score;
+        g.bouts.push(b);
+      }
     }
     return list;
   });
@@ -308,10 +313,10 @@
           <!-- Group header row -->
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-          <tr class="body-row group-header-row" onclick={() => toggleFight(group.video_id)}>
+          <tr class="body-row group-header-row" class:unclickable={group.is_unmarked} onclick={() => toggleFight(group.video_id, group.is_unmarked)}>
             {#if visibleCols.has('date')}
               <td class="td date-cell group-video-cell">
-                <span class="chevron-icon" class:expanded={expandedFights.has(group.video_id)}>
+                <span class="chevron-icon" class:expanded={expandedFights.has(group.video_id)} style:visibility={group.is_unmarked ? 'hidden' : 'visible'}>
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M9 18l6-6-6-6"/>
                   </svg>
@@ -338,19 +343,27 @@
             {/if}
             {#if visibleCols.has('score')}
               <td class="td score">
-                <span class="group-score">
-                  <span class:win={group.my_score > group.opponent_score} class:loss={group.my_score < group.opponent_score}>{group.my_score}</span>
-                  <span class="sep">:</span>
-                  <span class:win={group.my_score > group.opponent_score} class:loss={group.my_score < group.opponent_score}>{group.opponent_score}</span>
-                </span>
+                {#if group.is_unmarked}
+                  —
+                {:else}
+                  <span class="group-score">
+                    <span class:win={group.my_score > group.opponent_score} class:loss={group.my_score < group.opponent_score}>{group.my_score}</span>
+                    <span class="sep">:</span>
+                    <span class:win={group.my_score > group.opponent_score} class:loss={group.my_score < group.opponent_score}>{group.opponent_score}</span>
+                  </span>
+                {/if}
               </td>
             {/if}
             {#if visibleCols.has('my_tech')}<td class="td">—</td>{/if}
             {#if visibleCols.has('my_result')}
               <td class="td">
-                <span class="group-result-badge" class:win={group.my_score > group.opponent_score} class:loss={group.my_score < group.opponent_score} class:draw={group.my_score === group.opponent_score}>
-                  {group.my_score > group.opponent_score ? 'Победа' : group.my_score < group.opponent_score ? 'Поражение' : 'Ничья'}
-                </span>
+                {#if group.is_unmarked}
+                  <span class="group-result-badge unmarked">Неразмечено</span>
+                {:else}
+                  <span class="group-result-badge" class:win={group.my_score > group.opponent_score} class:loss={group.my_score < group.opponent_score} class:draw={group.my_score === group.opponent_score}>
+                    {group.my_score > group.opponent_score ? 'Победа' : group.my_score < group.opponent_score ? 'Поражение' : 'Ничья'}
+                  </span>
+                {/if}
               </td>
             {/if}
             {#if visibleCols.has('my_zone')}<td class="td">—</td>{/if}
@@ -419,38 +432,50 @@
             {#if visibleCols.has('opponent')}<td class="td">{bout.opponent_name}</td>{/if}
             {#if visibleCols.has('score')}
               <td class="td score">
-                <span class:win={bout.my_score > bout.opponent_score} class:loss={bout.my_score < bout.opponent_score}>{bout.my_score}</span>
-                <span class="sep">:</span>
-                <span class:win={bout.my_score > bout.opponent_score} class:loss={bout.my_score < bout.opponent_score}>{bout.opponent_score}</span>
+                {#if bout.is_unmarked}
+                  —
+                {:else}
+                  <span class:win={bout.my_score > bout.opponent_score} class:loss={bout.my_score < bout.opponent_score}>{bout.my_score}</span>
+                  <span class="sep">:</span>
+                  <span class:win={bout.my_score > bout.opponent_score} class:loss={bout.my_score < bout.opponent_score}>{bout.opponent_score}</span>
+                {/if}
               </td>
             {/if}
             {#if visibleCols.has('my_tech')}<td class="td">{bout.my_technique_name ?? '—'}</td>{/if}
             {#if visibleCols.has('my_result')}
               <td class="td">
-                <span class="result-badge"
-                  class:hit={bout.my_result === 'hit'}
-                  class:miss={bout.my_result === 'miss'}
-                  class:blocked={bout.my_result === 'blocked'}
-                  class:late={bout.my_result === 'late'}
-                  class:no-strike={bout.my_result === 'no_strike'}
-                  class:disqualification={bout.my_result === 'disqualification'}
-                  class:afterblow={bout.my_result === 'afterblow'}
-                >{resultLabel(bout.my_result)}</span>
+                {#if bout.is_unmarked}
+                  <span class="result-badge unmarked">Неразмечено</span>
+                {:else}
+                  <span class="result-badge"
+                    class:hit={bout.my_result === 'hit'}
+                    class:miss={bout.my_result === 'miss'}
+                    class:blocked={bout.my_result === 'blocked'}
+                    class:late={bout.my_result === 'late'}
+                    class:no-strike={bout.my_result === 'no_strike'}
+                    class:disqualification={bout.my_result === 'disqualification'}
+                    class:afterblow={bout.my_result === 'afterblow'}
+                  >{resultLabel(bout.my_result)}</span>
+                {/if}
               </td>
             {/if}
             {#if visibleCols.has('my_zone')}<td class="td zone-cell">{(bout.my_hit_zone ?? '').split(':')[0] || '—'}</td>{/if}
             {#if visibleCols.has('opp_tech')}<td class="td">{bout.opponent_technique_name ?? '—'}</td>{/if}
             {#if visibleCols.has('opp_result')}
               <td class="td">
-                <span class="result-badge"
-                  class:hit={bout.opponent_result === 'hit'}
-                  class:miss={bout.opponent_result === 'miss'}
-                  class:blocked={bout.opponent_result === 'blocked'}
-                  class:late={bout.opponent_result === 'late'}
-                  class:no-strike={bout.opponent_result === 'no_strike'}
-                  class:disqualification={bout.opponent_result === 'disqualification'}
-                  class:afterblow={bout.opponent_result === 'afterblow'}
-                >{resultLabel(bout.opponent_result)}</span>
+                {#if bout.is_unmarked}
+                  —
+                {:else}
+                  <span class="result-badge"
+                    class:hit={bout.opponent_result === 'hit'}
+                    class:miss={bout.opponent_result === 'miss'}
+                    class:blocked={bout.opponent_result === 'blocked'}
+                    class:late={bout.opponent_result === 'late'}
+                    class:no-strike={bout.opponent_result === 'no_strike'}
+                    class:disqualification={bout.opponent_result === 'disqualification'}
+                    class:afterblow={bout.opponent_result === 'afterblow'}
+                  >{resultLabel(bout.opponent_result)}</span>
+                {/if}
               </td>
             {/if}
             {#if visibleCols.has('opp_zone')}<td class="td zone-cell">{(bout.opponent_hit_zone ?? '').split(':')[0] || '—'}</td>{/if}
@@ -475,7 +500,7 @@
     overflow-y: auto;
     background: var(--surface-solid);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-2xl);
+    border-radius: var(--radius-lg);
     box-shadow: none;
     height: 677px;
     box-sizing: border-box;
@@ -808,5 +833,15 @@
 
   .opp-name {
     font-weight: 500;
+  }
+
+  .unclickable {
+    cursor: default !important;
+  }
+
+  .group-result-badge.unmarked,
+  .result-badge.unmarked {
+    background: rgba(156, 163, 175, 0.15) !important;
+    color: #9ca3af !important;
   }
 </style>

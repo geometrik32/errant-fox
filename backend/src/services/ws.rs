@@ -51,6 +51,8 @@ pub struct WsBout {
     pub hit_zone_b: Option<String>,
     pub result_a: Option<String>,
     pub result_b: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deleted: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -69,13 +71,36 @@ pub struct PresenceRegistry {
     pub next_id: u64,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct WsFighter {
+    pub id: String,
+    pub display_name: String,
+    pub avatar_url: String,
+    pub color: Option<String>,
+}
+
 // ── WsEvent ───────────────────────────────────────────────────────────────────
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum WsEvent {
     NewComment(WsComment),
+    UpdateComment(WsComment),
+    DeleteComment {
+        id: i32,
+        video_id: String,
+    },
     UpdateBout(WsBout),
+    UpdateVideoScore {
+        video_id: String,
+        total_score_a: i32,
+        total_score_b: i32,
+    },
+    UpdateVideoFighters {
+        video_id: String,
+        fighter_a: Option<WsFighter>,
+        fighter_b: Option<WsFighter>,
+    },
     NewVideo {
         id: String,
         date: String,
@@ -87,13 +112,23 @@ pub enum WsEvent {
     PresenceUpdate {
         users: Vec<OnlineUser>,
     },
+    UpdateVideoAiLabeled {
+        video_id: String,
+        is_ai_labeled: bool,
+        is_analyzing: bool,
+    },
 }
 
 impl WsEvent {
     pub fn video_id(&self) -> Option<&str> {
         match self {
             WsEvent::NewComment(c) => Some(&c.video_id),
+            WsEvent::UpdateComment(c) => Some(&c.video_id),
+            WsEvent::DeleteComment { video_id, .. } => Some(video_id),
             WsEvent::UpdateBout(b) => Some(&b.video_id),
+            WsEvent::UpdateVideoScore { video_id, .. } => Some(video_id),
+            WsEvent::UpdateVideoFighters { video_id, .. } => Some(video_id),
+            WsEvent::UpdateVideoAiLabeled { video_id, .. } => Some(video_id),
             WsEvent::NewVideo { .. } => None,
             WsEvent::VideoRemoved { .. } => None,
             WsEvent::PresenceUpdate { .. } => None,

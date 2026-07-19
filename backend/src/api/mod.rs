@@ -16,6 +16,9 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         // Auth
         .route("/api/auth/login", post(auth::login))
+        .route("/api/auth/vk/config", get(auth::vk_config))
+        .route("/api/auth/vk", post(auth::vk_login))
+        .route("/api/auth/vk/unlink", post(auth::vk_unlink))
         // Current user profile
         .route("/api/users/me", get(auth::get_me).patch(users::patch_me))
         .route("/api/users/me/avatar", post(users::upload_avatar))
@@ -24,7 +27,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/fighters", get(users::list_fighters))
         .route("/api/fighters/{id}/bouts", get(users::fighter_bouts))
         // Admin — user management
-        .route("/api/admin/users", post(users::create_user))
+        .route("/api/admin/users", get(users::list_admin_users).post(users::create_user))
         .route(
             "/api/admin/users/{id}",
             patch(users::patch_admin_user).delete(users::delete_user),
@@ -45,6 +48,11 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/videos/{id}/stream", get(videos::stream_video))
         .route("/api/videos/{id}/download", get(videos::download_video))
+        .route("/api/videos/{id}/share", post(videos::create_share_token))
+        .route("/api/shared/videos/{id}", get(videos::get_shared_video))
+        .route("/api/shared/videos/{id}/comments", post(videos::create_shared_comment))
+        .route("/api/shared/videos/{id}/download", get(videos::download_shared_video))
+        .route("/api/shared/bouts/{id}/download", get(bouts::download_shared_bout))
         .route(
             "/api/videos/{id}/previews/{frame}",
             get(videos::get_preview_frame),
@@ -52,6 +60,23 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/videos/{id}/previews/regenerate",
             post(videos::regenerate_preview),
+        )
+        .route(
+            "/api/videos/{id}/ai-label",
+            post(videos::ai_label_video),
+        )
+        // Admin Videos Sync
+        .route(
+            "/api/admin/videos/sync-check",
+            get(videos::admin_sync_check),
+        )
+        .route(
+            "/api/admin/videos/sync-clean",
+            post(videos::admin_sync_clean),
+        )
+        .route(
+            "/api/admin/videos/import",
+            post(videos::admin_import_videos),
         )
         // Bouts
         .route("/api/bouts", post(bouts::post_bout))

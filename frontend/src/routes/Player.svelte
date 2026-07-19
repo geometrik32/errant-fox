@@ -194,6 +194,7 @@
             comments={video.comments}
             {currentTime}
             highlightedId={highlightedCommentId}
+            bouts={liveBouts}
             onseek={(ms) => { player?.seekTo(ms); player?.pause(); }}
             oncommentschange={(c) => { liveComments = c; }}
           />
@@ -261,8 +262,6 @@
     flex-direction: column;
     overflow: hidden;
     background: var(--surface);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     box-shadow: none;
@@ -291,8 +290,6 @@
   .timeline-row {
     flex-shrink: 0;
     background: var(--surface);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     box-shadow: none;

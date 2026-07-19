@@ -18,6 +18,7 @@ pub struct User {
     pub color: Option<String>,
     pub created_at: NaiveDateTime,
     pub vk_id: Option<String>,
+    pub role: String,
 }
 
 #[derive(Insertable, Deserialize, Debug)]
@@ -31,6 +32,7 @@ pub struct NewUser {
     pub avatar_path: Option<String>,
     pub color: Option<String>,
     pub vk_id: Option<String>,
+    pub role: String,
 }
 
 // ── videos ────────────────────────────────────────────────────────────────────
@@ -47,6 +49,8 @@ pub struct Video {
     pub preview_count: i32,
     pub fps: Option<f32>,
     pub created_at: NaiveDateTime,
+    pub is_ai_labeled: bool,
+    pub is_analyzing: bool,
 }
 
 #[derive(Insertable, Deserialize, Debug)]
@@ -130,6 +134,7 @@ pub struct Comment {
     pub created_at: NaiveDateTime,
     pub edited_at: Option<NaiveDateTime>,
     pub bout_id: Option<i32>,
+    pub guest_nickname: Option<String>,
 }
 
 #[derive(Insertable, Deserialize, Debug)]
@@ -141,6 +146,7 @@ pub struct NewComment {
     pub text: String,
     pub reply_to_id: Option<i32>,
     pub bout_id: Option<i32>,
+    pub guest_nickname: Option<String>,
 }
 
 // ── comment_reactions ─────────────────────────────────────────────────────────

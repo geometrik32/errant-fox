@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+ffmpeg-python
+requests
+numpy<2.0.0
+tiktoken
+more-itertools
+tqdm
+regex
+numba
