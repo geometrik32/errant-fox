@@ -32,36 +32,35 @@
     readonly?: boolean;
   }
 
-  let props: Props = $props();
-
-  let currentTime = $derived(props.currentTime);
-  let duration = $derived(props.duration);
-  let bouts: Bout[] = $derived(props.bouts ?? []);
-  let comments: Comment[] = $derived(props.comments ?? []);
-  let fighterA: VideoFighter | null = $derived(props.fighterA ?? null);
-  let fighterB: VideoFighter | null = $derived(props.fighterB ?? null);
-  let playing = $derived(props.playing ?? false);
-  let looping = $derived(props.looping ?? false);
-  let speed = $derived(props.speed ?? 1);
-  let volume = $derived(props.volume ?? 1);
-  let fps = $derived(props.fps ?? 25);
-  let startTime = $derived(props.startTime ?? null);
-  let finishing = $derived(props.finishing ?? false);
-  let readonly = $derived(props.readonly ?? false);
-
-  const onseek = $derived(props.onseek);
-  const onloop = $derived(props.onloop);
-  const onboutclick = $derived(props.onboutclick);
-  const oncommentclick = $derived(props.oncommentclick);
-  const onplay = $derived(props.onplay);
-  const onstepback = $derived(props.onstepback);
-  const onstepforward = $derived(props.onstepforward);
-  const onspeedchange = $derived(props.onspeedchange);
-  const onvolumechange = $derived(props.onvolumechange);
-  const onlooptoggle = $derived(props.onlooptoggle);
-  const onstartclick = $derived(props.onstartclick);
-  const onfinishclick = $derived(props.onfinishclick);
-  const onshare = $derived(props.onshare);
+  let {
+    currentTime = 0,
+    duration = 0,
+    bouts = [],
+    comments = [],
+    fighterA = null,
+    fighterB = null,
+    playing = false,
+    looping = false,
+    speed = 1,
+    volume = 1,
+    fps = 25,
+    startTime = null,
+    finishing = false,
+    readonly = false,
+    onseek,
+    onloop,
+    onboutclick,
+    oncommentclick,
+    onplay,
+    onstepback,
+    onstepforward,
+    onspeedchange,
+    onvolumechange,
+    onlooptoggle,
+    onstartclick,
+    onfinishclick,
+    onshare,
+  }: Props = $props();
 
   const SPEEDS = [0.15, 0.2, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5];
 
