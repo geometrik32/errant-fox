@@ -313,6 +313,7 @@
         {fps}
         {startTime}
         {finishing}
+        readonly={!!shareToken}
         onseek={(ms) => {
           const targetMs = sharedBout ? ms + sharedBout.time_start_ms : ms;
           player?.seekTo(targetMs);
