@@ -1,0 +1,7 @@
+Id: c488347c-21a4-4f81-a67b-bfeb21e0589a
+Name: Self-Hosted Cloud Sync
+Author: Danii
+Version: 1.0.0
+Module: SelfHostedLauncher.dll
+Type: Generic
+Description: Синхронизация сохранений, времени, ачивок и облачная установка сборок игр на собственный сервер.

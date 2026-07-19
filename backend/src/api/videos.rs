@@ -73,6 +73,7 @@ pub struct BoutDto {
     pub technique_b_id: Option<i32>,
     pub hit_zone_b: Option<String>,
     pub result_b: Option<String>,
+    pub is_ai: bool,
 }
 
 #[derive(Serialize)]
@@ -151,6 +152,7 @@ fn bout_dto(b: &Bout) -> BoutDto {
         technique_b_id: b.technique_b_id,
         hit_zone_b: b.hit_zone_b.clone(),
         result_b: b.result_b.clone(),
+        is_ai: b.is_ai,
     }
 }
 
@@ -1360,26 +1362,27 @@ pub async fn ai_label_video(
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
-    // Check if video is human-labeled (has human bouts)
-    let db_check = state.db.clone();
-    let video_id_check = video_id.clone();
-    let video_is_ai_labeled = video.is_ai_labeled;
-    let is_human_labeled = tokio::task::spawn_blocking(move || {
-        use crate::db::schema::bouts;
-        let mut conn = db_check.get().map_err(|e| AppError::Internal(e.to_string()))?;
-        let human_bouts_count: i64 = bouts::table
-            .filter(bouts::video_id.eq(&video_id_check))
-            .filter(bouts::is_ai.eq(false))
-            .count()
-            .get_result(&mut conn)
-            .map_err(|e| AppError::Internal(e.to_string()))?;
-        Ok::<bool, AppError>(human_bouts_count > 0)
-    })
-    .await
-    .map_err(|e| AppError::Internal(e.to_string()))??;
+    // Check if video is human-labeled (only if NOT already AI labeled)
+    if !video.is_ai_labeled {
+        let db_check = state.db.clone();
+        let video_id_check = video_id.clone();
+        let is_human_labeled = tokio::task::spawn_blocking(move || {
+            use crate::db::schema::bouts;
+            let mut conn = db_check.get().map_err(|e| AppError::Internal(e.to_string()))?;
+            let human_bouts_count: i64 = bouts::table
+                .filter(bouts::video_id.eq(&video_id_check))
+                .filter(bouts::is_ai.eq(false))
+                .count()
+                .get_result(&mut conn)
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+            Ok::<bool, AppError>(human_bouts_count > 0)
+        })
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))??;
 
-    if is_human_labeled {
-        return Err(AppError::BadRequest("Нельзя размечать с помощью ИИ видео, размеченное человеком".to_string()));
+        if is_human_labeled {
+            return Err(AppError::BadRequest("Нельзя размечать с помощью ИИ видео, размеченное человеком".to_string()));
+        }
     }
 
     // Set is_analyzing = true in DB
@@ -1615,7 +1618,7 @@ pub async fn get_video_transcript(
 
     let json_path = format!("data/transcripts/{}.json", video_id);
     let html_content = match tokio::fs::read_to_string(&json_path).await {
-        Ok(raw_json) => render_transcript_html(&video_id, &raw_json),
+        Ok(raw_json) => render_transcript_html(&video_id, &token, &raw_json).await,
         Err(_) => format!(
             r#"<!DOCTYPE html>
 <html lang="ru">
@@ -1648,208 +1651,87 @@ pub async fn get_video_transcript(
     Ok(response)
 }
 
-fn render_transcript_html(video_id: &str, raw_json: &str) -> String {
-    let parsed: serde_json::Value = serde_json::from_str(raw_json).unwrap_or(serde_json::Value::Null);
-
-    let format_time = |ms: i64| -> String {
-        let total_sec = ms / 1000;
-        let mins = total_sec / 60;
-        let secs = total_sec % 60;
-        let millis = ms % 1000;
-        format!("{:02}:{:02}.{:03}", mins, secs, millis)
-    };
-
-    let mut rows_html = String::new();
-    if let Some(exchanges) = parsed.get("exchanges").and_then(|v| v.as_array()) {
-        for (idx, ex) in exchanges.iter().enumerate() {
-            let start = ex.get("start_ms").and_then(|v| v.as_i64()).unwrap_or(0);
-            let end = ex.get("end_ms").and_then(|v| v.as_i64()).unwrap_or(0);
-            let duration = (end - start) as f64 / 1000.0;
-            let text = ex.get("text").or_else(|| ex.get("transcript")).and_then(|v| v.as_str()).unwrap_or("—");
-            
-            let is_stop_detected = text.to_lowercase().contains("стоп") || text.to_lowercase().contains("stop");
-
-            rows_html.push_str(&format!(
-                r#"<tr class="{}">
-                    <td><strong>Сход #{}</strong></td>
-                    <td class="time">{}</td>
-                    <td class="time">{}</td>
-                    <td>{:.2} с</td>
-                    <td class="text-cell">{}</td>
-                    <td>{}</td>
-                </tr>"#,
-                if is_stop_detected { "stop-row" } else { "" },
-                idx + 1,
-                format_time(start),
-                format_time(end),
-                duration,
-                text,
-                if is_stop_detected { r#"<span class="badge stop">СТОП</span>"# } else { r#"<span class="badge">ИНТЕРВАЛ</span>"# }
-            ));
+async fn render_transcript_html(video_id: &str, token: &str, raw_json: &str) -> String {
+    let template_paths = ["scratch/exchange_viewer_target.html", "data/exchange_viewer_target.html"];
+    let mut template = String::new();
+    for p in template_paths {
+        if let Ok(t) = tokio::fs::read_to_string(p).await {
+            template = t;
+            break;
         }
     }
 
-    let pretty_json = serde_json::to_string_pretty(&parsed).unwrap_or_else(|_| raw_json.to_string());
+    if template.is_empty() {
+        return format!("<h1>Шаблон exchange_viewer_target.html не найден</h1>");
+    }
 
-    format!(
-        r#"<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Расшифровка ИИ: {}</title>
-    <style>
-        :root {{
-            --bg: #0b0f19;
-            --panel: #131b2e;
-            --border: rgba(255, 255, 255, 0.1);
-            --accent: #f59e0b;
-            --text: #f8fafc;
-            --text-muted: #94a3b8;
-        }}
-        body {{
-            background: var(--bg);
-            color: var(--text);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            margin: 0;
-            padding: 30px 20px;
-        }}
-        .container {{
-            max-width: 1100px;
-            margin: 0 auto;
-        }}
-        .header {{
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 24px;
-            padding-bottom: 16px;
-            border-bottom: 1px solid var(--border);
-        }}
-        h1 {{
-            font-size: 1.4rem;
-            margin: 0;
-            color: var(--accent);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }}
-        .video-id {{
-            font-size: 0.9rem;
-            color: var(--text-muted);
-            background: rgba(255, 255, 255, 0.05);
-            padding: 4px 10px;
-            border-radius: 6px;
-        }}
-        .table-wrap {{
-            background: var(--panel);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-            margin-bottom: 30px;
-        }}
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.9rem;
-        }}
-        th, td {{
-            padding: 12px 16px;
-            text-align: left;
-            border-bottom: 1px solid var(--border);
-        }}
-        th {{
-            background: rgba(255, 255, 255, 0.03);
-            color: var(--text-muted);
-            font-weight: 600;
-            text-transform: uppercase;
-            font-size: 0.75rem;
-            letter-spacing: 0.5px;
-        }}
-        tr:last-child td {{
-            border-bottom: none;
-        }}
-        tr.stop-row {{
-            background: rgba(239, 68, 68, 0.15);
-        }}
-        .time {{
-            font-family: monospace;
-            color: #38bdf8;
-        }}
-        .text-cell {{
-            font-size: 0.95rem;
-            line-height: 1.5;
-        }}
-        .badge {{
-            display: inline-block;
-            padding: 3px 8px;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            background: rgba(255, 255, 255, 0.1);
-            color: var(--text-muted);
-        }}
-        .badge.stop {{
-            background: #ef4444;
-            color: #fff;
-        }}
-        details {{
-            background: var(--panel);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 16px;
-        }}
-        summary {{
-            cursor: pointer;
-            font-weight: 600;
-            color: var(--text-muted);
-            outline: none;
-        }}
-        pre {{
-            margin-top: 16px;
-            padding: 16px;
-            background: #070a12;
-            border-radius: 8px;
-            overflow-x: auto;
-            font-size: 0.82rem;
-            color: #a7f3d0;
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🎙️ Расшифровка ИИ (Exchange Viewer)</h1>
-            <span class="video-id">ID: {}</span>
-        </div>
+    let parsed: serde_json::Value = serde_json::from_str(raw_json).unwrap_or(serde_json::Value::Null);
 
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Сход</th>
-                        <th>Начало</th>
-                        <th>Конец</th>
-                        <th>Длительность</th>
-                        <th>Распознанный текст / Контекст</th>
-                        <th>Статус</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {}
-                </tbody>
-            </table>
-        </div>
+    let exchanges_json = if let Some(ex_arr) = parsed.get("exchanges").and_then(|v| v.as_array()) {
+        let mut formatted = Vec::new();
+        for (idx, ex) in ex_arr.iter().enumerate() {
+            let start_sec = ex.get("start_ms").and_then(|v| v.as_f64()).map(|m| m / 1000.0)
+                .or_else(|| ex.get("start_time_sec").and_then(|v| v.as_f64())).unwrap_or(0.0);
+            let end_sec = ex.get("end_ms").and_then(|v| v.as_f64()).map(|m| m / 1000.0)
+                .or_else(|| ex.get("end_time_sec").and_then(|v| v.as_f64())).unwrap_or(0.0);
+            let text = ex.get("text").or_else(|| ex.get("stop_word_detected")).and_then(|v| v.as_str()).unwrap_or("—").to_string();
+            let conf = ex.get("confidence").and_then(|v| v.as_f64()).unwrap_or(0.8);
+            let peak_sec = ex.get("peak_time_sec").and_then(|v| v.as_f64()).unwrap_or(start_sec + 2.0);
+            let ratio = ex.get("peak_ratio").and_then(|v| v.as_f64()).unwrap_or(1.0);
+            let is_ai = ex.get("is_ai").and_then(|v| v.as_bool()).unwrap_or(true);
 
-        <details>
-            <summary>📄 Исходный сырой JSON-ответ (Whisper / Model)</summary>
-            <pre>{}</pre>
-        </details>
-    </div>
-</body>
-</html>"#,
-        video_id, video_id, rows_html, pretty_json
-    )
+            formatted.push(serde_json::json!({
+                "exchange_id": idx + 1,
+                "start_time_sec": start_sec,
+                "end_time_sec": end_sec,
+                "stop_word_detected": text,
+                "confidence": conf,
+                "peak_time_sec": peak_sec,
+                "peak_ratio": ratio,
+                "is_ai": is_ai
+            }));
+        }
+        serde_json::to_string(&formatted).unwrap_or_else(|_| "[]".to_string())
+    } else {
+        "[]".to_string()
+    };
+
+    let words_json = if let Some(w_arr) = parsed.get("words").or_else(|| parsed.get("allWords")).and_then(|v| v.as_array()) {
+        serde_json::to_string(w_arr).unwrap_or_else(|_| "[]".to_string())
+    } else {
+        "[]".to_string()
+    };
+
+    let stream_url = format!("/api/videos/{}/stream?token={}", video_id, token);
+
+    let html = template
+        .replace("<title>Errant Fox — Проверка разметки сходов</title>", &format!("<title>Errant Fox — Проверка разметки сходов: {}</title>", video_id));
+
+    let injection = format!(
+        r#"
+<script>
+  const EMBEDDED_EXCHANGES = {};
+  const allWords = {};
+  document.addEventListener('DOMContentLoaded', () => {{
+    const vid = document.getElementById('vid');
+    if (vid) {{
+      vid.src = "{}";
+      const dropOverlay = document.getElementById('dropOverlay');
+      if (dropOverlay) dropOverlay.classList.add('hidden');
+    }}
+  }});
+</script>
+"#,
+        exchanges_json, words_json, stream_url
+    );
+
+    if let Some(pos) = html.rfind("</body>") {
+        let mut res = html[..pos].to_string();
+        res.push_str(&injection);
+        res.push_str(&html[pos..]);
+        res
+    } else {
+        html + &injection
+    }
 }
 

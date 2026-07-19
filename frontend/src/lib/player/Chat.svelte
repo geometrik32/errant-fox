@@ -214,57 +214,32 @@
     el.classList.add('msg--flash');
   });
 
-  // WebSocket
-  let ws: WebSocket | null = null;
-
-  function connectWS() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-    ws.onopen = () => {
-      const token = shareToken || localStorage.getItem('ef_token');
-      if (!token) return;
-      ws!.send(JSON.stringify({ token }));
-      ws!.send(JSON.stringify({ watching: videoId }));
-    };
-    ws.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data as string) as Record<string, unknown>;
-        if (msg.type === 'new_comment' && msg.video_id === videoId) {
-          const { type: _t, video_id: _v, ...fields } = msg;
-          const incoming = fields as unknown as Comment;
-          const idx = comments.findIndex(c => c.id === incoming.id);
-          if (idx >= 0) {
-            comments = comments.map((c, i) => i === idx ? incoming : c);
-          } else {
-            comments = [...comments, incoming];
-            requestAnimationFrame(() => {
-              if (listEl) listEl.scrollTop = listEl.scrollHeight;
-            });
-          }
-          oncommentschange?.(comments);
-        } else if (msg.type === 'update_comment' && msg.video_id === videoId) {
-          const { type: _t, video_id: _v, ...fields } = msg;
-          const incoming = fields as unknown as Comment;
-          comments = comments.map(c => c.id === incoming.id ? incoming : c);
-          oncommentschange?.(comments);
-        } else if (msg.type === 'delete_comment' && msg.video_id === videoId) {
-          const id = msg.id as number;
-          comments = comments.filter(c => c.id !== id);
-          oncommentschange?.(comments);
-        }
-      } catch { /* ignore malformed */ }
-    };
-    ws.onclose = () => {
-      setTimeout(() => { if (ws !== null) connectWS(); }, 4000);
-    };
+  // WebSocket handler (called by parent Player)
+  export function handleWsMessage(msg: Record<string, unknown>) {
+    if (msg.type === 'new_comment' && msg.video_id === videoId) {
+      const { type: _t, video_id: _v, ...fields } = msg;
+      const incoming = fields as unknown as Comment;
+      const idx = comments.findIndex(c => c.id === incoming.id);
+      if (idx >= 0) {
+        comments = comments.map((c, i) => i === idx ? incoming : c);
+      } else {
+        comments = [...comments, incoming];
+        requestAnimationFrame(() => {
+          if (listEl) listEl.scrollTop = listEl.scrollHeight;
+        });
+      }
+      oncommentschange?.(comments);
+    } else if (msg.type === 'update_comment' && msg.video_id === videoId) {
+      const { type: _t, video_id: _v, ...fields } = msg;
+      const incoming = fields as unknown as Comment;
+      comments = comments.map(c => c.id === incoming.id ? incoming : c);
+      oncommentschange?.(comments);
+    } else if (msg.type === 'delete_comment' && msg.video_id === videoId) {
+      const id = msg.id as number;
+      comments = comments.filter(c => c.id !== id);
+      oncommentschange?.(comments);
+    }
   }
-
-  onMount(connectWS);
-  onDestroy(() => {
-    const w = ws;
-    ws = null;
-    w?.close();
-  });
 </script>
 
 <div class="chat">

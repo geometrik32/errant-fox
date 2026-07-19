@@ -252,10 +252,15 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
 
     println!("WS user connected: {} (conn_id: {})", online_user.display_name, conn_id);
 
+    let current_online_user_id = online_user.id.clone();
     {
         let mut reg = state.presence.write().await;
         reg.connections.insert(conn_id, online_user);
     }
+
+    // Send init event to client so it knows its socket's ID
+    let init_msg = serde_json::json!({ "type": "init", "conn_id": conn_id, "user_id": current_online_user_id });
+    let _ = socket.send(Message::Text(init_msg.to_string().into())).await;
 
     let mut rx = state.ws_hub.subscribe();
 

@@ -457,19 +457,7 @@ pub async fn vk_login(
                 .map_err(|e| AppError::Internal(e.to_string()))?;
 
             if let Some(u) = existing {
-                // Update display name if it changed
-                if u.display_name != display_name_val {
-                    diesel::update(users.filter(id.eq(&u.id)))
-                        .set(name_col.eq(&display_name_val))
-                        .execute(&mut conn)
-                        .map_err(|e| AppError::Internal(e.to_string()))?;
-                    Ok(User {
-                        display_name: display_name_val,
-                        ..u
-                    })
-                } else {
-                    Ok(u)
-                }
+                Ok(u)
             } else {
                 // Create a new guest user
                 let new_id = format!("vk_{}", user_id_for_avatar);

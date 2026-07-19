@@ -226,58 +226,27 @@
   let totalScoreA = $derived(bouts.reduce((s, b) => s + b.score_a, 0));
   let totalScoreB = $derived(bouts.reduce((s, b) => s + b.score_b, 0));
 
-  // ── WebSocket ────────────────────────────────────────────────────────────
+  // ── WebSocket handler (called by parent Player) ─────────────────────────
 
-  let ws: WebSocket | null = null;
+  export function handleWsMessage(msg: Record<string, unknown>) {
+    if (msg.type === 'update_bout') {
+      const { type: _t, video_id: _v, ...fields } = msg;
+      const id = fields.id as number;
 
-  function connectWS() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-
-    ws.onopen = () => {
-      const token = shareToken || localStorage.getItem('ef_token');
-      if (!token) return;
-      ws!.send(JSON.stringify({ token }));
-      ws!.send(JSON.stringify({ watching: video.id }));
-    };
-
-    ws.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data as string) as Record<string, unknown>;
-        if (msg.type === 'update_bout') {
-          const { type: _t, video_id: _v, ...fields } = msg;
-          const id = fields.id as number;
-
-          if (fields.deleted) {
-            bouts = bouts.filter(b => b.id !== id);
-            if (expandedBoutId === id) expandedBoutId = null;
-            onboutdelete?.();
-          } else {
-            const incoming = fields as unknown as Bout;
-            const idx = bouts.findIndex(b => b.id === id);
-            bouts = idx >= 0
-              ? bouts.map((b, i) => i === idx ? incoming : b)
-              : [...bouts, incoming];
-          }
-          onboutschange?.(bouts);
-        } else if (msg.type === 'presence_update') {
-          onpresenceupdate?.(msg.users as any[]);
-        }
-      } catch { /* ignore malformed */ }
-    };
-
-    ws.onclose = () => {
-      setTimeout(() => { if (ws !== null) connectWS(); }, 4000);
-    };
+      if (fields.deleted) {
+        bouts = bouts.filter(b => b.id !== id);
+        if (expandedBoutId === id) expandedBoutId = null;
+        onboutdelete?.();
+      } else {
+        const incoming = fields as unknown as Bout;
+        const idx = bouts.findIndex(b => b.id === id);
+        bouts = idx >= 0
+          ? bouts.map((b, i) => i === idx ? incoming : b)
+          : [...bouts, incoming];
+      }
+      onboutschange?.(bouts);
+    }
   }
-
-  onMount(connectWS);
-
-  onDestroy(() => {
-    const w = ws;
-    ws = null;
-    w?.close();
-  });
 
   // ── Custom fighter dropdowns ─────────────────────────────────────────────
 
@@ -337,6 +306,7 @@
       <div data-bout-id={bout.id}>
         <BoutCard
           {bout}
+          videoId={video.id}
           boutIndex={i + 1}
           fighters={[activeFighterA, activeFighterB]}
           {currentTime}
