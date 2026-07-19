@@ -1374,6 +1374,16 @@ pub async fn ai_label_video(
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
+    if video.is_analyzing {
+        return Ok((
+            axum::http::StatusCode::ACCEPTED,
+            Json(serde_json::json!({
+                "status": "already_processing",
+                "video_id": video_id
+            })),
+        ));
+    }
+
     // Check if video is human-labeled (only if NOT already AI labeled)
     if !video.is_ai_labeled {
         let db_check = state.db.clone();
