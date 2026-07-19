@@ -32,36 +32,35 @@
     readonly?: boolean;
   }
 
-  let props: Props = $props();
-
-  let currentTime = $derived(props.currentTime ?? 0);
-  let duration = $derived(props.duration ?? 0);
-  let bouts = $derived(props.bouts ?? []);
-  let comments = $derived(props.comments ?? []);
-  let fighterA = $derived(props.fighterA ?? null);
-  let fighterB = $derived(props.fighterB ?? null);
-  let playing = $derived(props.playing ?? false);
-  let looping = $derived(props.looping ?? false);
-  let speed = $derived(props.speed ?? 1);
-  let volume = $derived(props.volume ?? 1);
-  let fps = $derived(props.fps ?? 25);
-  let startTime = $derived(props.startTime ?? null);
-  let finishing = $derived(props.finishing ?? false);
-  let readonly = $derived(props.readonly ?? false);
-
-  let onseek = $derived(props.onseek);
-  let onloop = $derived(props.onloop);
-  let onboutclick = $derived(props.onboutclick);
-  let oncommentclick = $derived(props.oncommentclick);
-  let onplay = $derived(props.onplay);
-  let onstepback = $derived(props.onstepback);
-  let onstepforward = $derived(props.onstepforward);
-  let onspeedchange = $derived(props.onspeedchange);
-  let onvolumechange = $derived(props.onvolumechange);
-  let onlooptoggle = $derived(props.onlooptoggle);
-  let onstartclick = $derived(props.onstartclick);
-  let onfinishclick = $derived(props.onfinishclick);
-  let onshare = $derived(props.onshare);
+  let {
+    currentTime = 0,
+    duration = 0,
+    bouts = [],
+    comments = [],
+    fighterA = null,
+    fighterB = null,
+    playing = false,
+    looping = false,
+    speed = 1,
+    volume = 1,
+    fps = 25,
+    startTime = null,
+    finishing = false,
+    readonly = false,
+    onseek,
+    onloop,
+    onboutclick,
+    oncommentclick,
+    onplay,
+    onstepback,
+    onstepforward,
+    onspeedchange,
+    onvolumechange,
+    onlooptoggle,
+    onstartclick,
+    onfinishclick,
+    onshare,
+  }: Props = $props();
 
   const SPEEDS = [0.15, 0.2, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5];
 
