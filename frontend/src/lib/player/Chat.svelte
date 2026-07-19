@@ -17,19 +17,18 @@
     bouts?: Bout[];
   }
 
-  let props: Props = $props();
-
-  let videoId = $derived(props.videoId);
-  let initComments: Comment[] = $derived(props.comments ?? []);
-  let currentTime = $derived(props.currentTime ?? 0);
-  let highlightedId = $derived(props.highlightedId ?? null);
-  let readonly = $derived(props.readonly ?? false);
-  let shareToken = $derived(props.shareToken ?? '');
-  let sharedBoutId = $derived(props.sharedBoutId ?? null);
-  let bouts = $derived(props.bouts ?? []);
-
-  const onseek = $derived(props.onseek);
-  const oncommentschange = $derived(props.oncommentschange);
+  let {
+    videoId,
+    comments: initComments = [],
+    currentTime = 0,
+    highlightedId = null,
+    readonly = false,
+    shareToken = '',
+    sharedBoutId = null,
+    bouts = [],
+    onseek,
+    oncommentschange,
+  }: Props = $props();
 
   let comments = $state<Comment[]>([...untrack(() => initComments)]);
   $effect(() => {
