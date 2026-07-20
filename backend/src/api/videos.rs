@@ -1600,8 +1600,32 @@ pub async fn ai_label_video(
     if !user.is_admin {
         return Err(AppError::Forbidden);
     }
-    tokio::spawn(execute_ai_label_for_video(state, video_id));
-    Ok(Json(serde_json::json!({ "status": "started" })))
+
+    let db_clone = state.db.clone();
+    let video_id_db = video_id.clone();
+
+    tokio::task::spawn_blocking(move || {
+        use crate::db::schema::videos;
+        let mut conn = db_clone.get().map_err(|e| AppError::Internal(e.to_string()))?;
+        diesel::update(videos::table.filter(videos::id.eq(&video_id_db)))
+            .set(videos::is_queued.eq(true))
+            .execute(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+        Ok::<(), AppError>(())
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    let _ = state.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoAiLabeled {
+        video_id: video_id.clone(),
+        is_ai_labeled: false,
+        is_analyzing: false,
+        is_queued: true,
+    });
+
+    let _ = state.ai_queue_tx.send(video_id);
+
+    Ok(Json(serde_json::json!({ "status": "queued" })))
 }
 
 #[derive(Deserialize)]
@@ -1665,7 +1689,7 @@ pub async fn batch_ai_label_video(
         }
     }).await;
 
-    // Send WS notification for every queued video
+    // Send WS notification for every queued video & send to queue worker
     for vid in &video_ids {
         let _ = state.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoAiLabeled {
             video_id: vid.clone(),
@@ -1673,13 +1697,8 @@ pub async fn batch_ai_label_video(
             is_analyzing: false,
             is_queued: true,
         });
+        let _ = state.ai_queue_tx.send(vid.clone());
     }
-
-    tokio::spawn(async move {
-        for vid in video_ids {
-            let _ = execute_ai_label_for_video(state.clone(), vid).await;
-        }
-    });
 
     Ok(Json(serde_json::json!({
         "status": "batch_started",
