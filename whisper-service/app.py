@@ -204,13 +204,22 @@ def health():
 import asyncio
 
 analyze_lock = asyncio.Lock()
+cancelled_video_ids: set[str] = set()
+
+
+@app.post("/cancel/{video_id}")
+async def cancel_video(video_id: str):
+    """Mark a video_id as cancelled so queued /analyze requests skip it immediately."""
+    cancelled_video_ids.add(video_id)
+    print(f"[cancel] video_id={video_id} marked as cancelled. Queue will skip it.", flush=True)
+    return {"status": "cancelled", "video_id": video_id}
 
 
 def _download_and_convert_audio(audio_url: str, tmpdir: str) -> str:
     raw_path = os.path.join(tmpdir, "raw_audio")
     wav_path = os.path.join(tmpdir, "audio.wav")
 
-    print(f"  Downloading audio immediately from URL...", flush=True)
+    print(f"  Downloading audio from URL...", flush=True)
     with requests.get(audio_url, stream=True, timeout=120) as r:
         r.raise_for_status()
         with open(raw_path, "wb") as f:
@@ -239,18 +248,42 @@ def _download_and_convert_audio(audio_url: str, tmpdir: str) -> str:
 
 @app.post("/analyze")
 async def analyze(body: AnalyzeRequest):
-    print(f"[analyze] video_id={body.video_id} request queued.", flush=True)
+    vid = body.video_id
+    print(f"[analyze] video_id={vid} request queued.", flush=True)
+
+    # ── Pre-lock check: skip immediately if already cancelled while waiting in queue ──
+    if vid in cancelled_video_ids:
+        cancelled_video_ids.discard(vid)
+        print(f"[analyze] video_id={vid} was cancelled before lock acquisition. Skipping.", flush=True)
+        return {"video_id": vid, "skipped": True, "reason": "cancelled"}
+
     loop = asyncio.get_running_loop()
 
-    # Acquire lock FIRST so audio download and transcription happen strictly one video at a time
     async with analyze_lock:
-        print(f"[analyze] video_id={body.video_id} processing started (download + transcribe).", flush=True)
+        # ── Post-lock check: could have been cancelled while we waited for the lock ──
+        if vid in cancelled_video_ids:
+            cancelled_video_ids.discard(vid)
+            print(f"[analyze] video_id={vid} was cancelled while waiting in queue. Skipping.", flush=True)
+            return {"video_id": vid, "skipped": True, "reason": "cancelled"}
+
+        print(f"[analyze] video_id={vid} processing started (download + transcribe).", flush=True)
         tmpdir = tempfile.mkdtemp()
         try:
             wav_path = await loop.run_in_executor(None, _download_and_convert_audio, body.audio_url, tmpdir)
+
+            # ── Mid-processing check: cancelled during download? ──
+            if vid in cancelled_video_ids:
+                cancelled_video_ids.discard(vid)
+                print(f"[analyze] video_id={vid} was cancelled during download. Skipping transcription.", flush=True)
+                return {"video_id": vid, "skipped": True, "reason": "cancelled"}
+
             exchanges, all_words = await loop.run_in_executor(None, _detect_exchanges, wav_path)
-            print(f"[analyze] video_id={body.video_id} processing finished.", flush=True)
-            return {"video_id": body.video_id, "exchanges": exchanges, "words": all_words}
+            print(f"[analyze] video_id={vid} processing finished.", flush=True)
+
+            # Clean up cancellation marker if still present (e.g. re-queued)
+            cancelled_video_ids.discard(vid)
+
+            return {"video_id": vid, "exchanges": exchanges, "words": all_words}
         except Exception as exc:
             traceback.print_exc(file=sys.stderr)
             return {"error": str(exc)}

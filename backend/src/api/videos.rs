@@ -1650,6 +1650,18 @@ pub async fn cancel_ai_label_video(
         is_analyzing: false,
     });
 
+    // Notify whisper-service to skip this video if it's queued
+    let whisper_url = std::env::var("WHISPER_URL")
+        .unwrap_or_else(|_| "http://whisper-service:8000".to_string());
+    let video_id_cancel = video_id.clone();
+    tokio::spawn(async move {
+        let _ = reqwest::Client::new()
+            .post(format!("{}/cancel/{}", whisper_url, video_id_cancel))
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await;
+    });
+
     Ok(Json(serde_json::json!({ "status": "cancelled" })))
 }
 
