@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getVideos, aiLabelVideo } from '../api/videos';
+  import { getVideos, aiLabelVideo, cancelAiLabelVideo } from '../api/videos';
   import type { Video } from '../api/types';
 
   interface Props {
@@ -11,12 +11,18 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let unanalyzedVideos = $state<Video[]>([]);
+  let analyzingVideos = $state<Video[]>([]);
   let starting = $state(false);
   let progressMessage = $state<string | null>(null);
+
+  let isCancelMode = $derived(analyzingVideos.length > 0);
 
   onMount(async () => {
     try {
       const all = await getVideos();
+      // Currently analyzing videos
+      analyzingVideos = all.filter(v => v.is_analyzing);
+      
       // Unanalyzed = not human labeled (total_score <= 0 or not tagged) AND not currently ai_labeled AND not currently analyzing
       unanalyzedVideos = all.filter(v => {
         const isHuman = (v.total_score_a ?? 0) > 0 || (v.total_score_b ?? 0) > 0;
@@ -50,6 +56,27 @@
     }
   }
 
+  async function handleBatchCancel() {
+    if (starting || analyzingVideos.length === 0) return;
+    starting = true;
+    error = null;
+    let count = 0;
+    try {
+      for (const video of analyzingVideos) {
+        count++;
+        progressMessage = `Отмена анализа для видео ${count} из ${analyzingVideos.length}...`;
+        await cancelAiLabelVideo(video.id).catch(() => {});
+      }
+      progressMessage = `Анализ успешно отменен для всех ${analyzingVideos.length} видео.`;
+      setTimeout(() => {
+        onclose();
+      }, 1800);
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Ошибка отмены разметки';
+      starting = false;
+    }
+  }
+
   function handleBackdropMousedown(e: MouseEvent) {
     if (e.target === e.currentTarget) {
       // Prevent closing
@@ -70,9 +97,9 @@
   onmousedown={handleBackdropMousedown}
   onclick={handleBackdropClick}
 >
-  <div class="modal" role="dialog" aria-modal="true" aria-label="Массовая ИИ-разметка">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="ИИ-разметка видео">
     <div class="modal-header">
-      <h2>Разметить при помощи ИИ</h2>
+      <h2>{isCancelMode ? 'Отменить ИИ-разметку' : 'Разметить при помощи ИИ'}</h2>
       <button class="close-btn" onclick={onclose} aria-label="Закрыть" disabled={starting}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
           <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -82,7 +109,7 @@
 
     <div class="modal-body">
       {#if loading}
-        <div class="state-msg">Поиск неразмеченных видео…</div>
+        <div class="state-msg">Проверка статуса видео…</div>
       {:else if error}
         <p class="msg error">{error}</p>
         <div class="actions">
@@ -90,6 +117,34 @@
         </div>
       {:else if progressMessage}
         <p class="msg success">{progressMessage}</p>
+      {:else if isCancelMode}
+        <p class="warning-text">
+          В данный момент обрабатывается <strong>{analyzingVideos.length} шт.</strong> видео.
+          Вы действительно хотите отменить ИИ-разметку для всех текущих процессов?
+        </p>
+
+        <div class="list-container">
+          <ul class="stale-list">
+            {#each analyzingVideos as video}
+              <li>
+                <span class="video-date">[{video.date}]</span>
+                <span class="video-path" title={video.seafile_path}>{video.seafile_path}</span>
+              </li>
+            {/each}
+          </ul>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn-outline" onclick={onclose} disabled={starting}>Назад</button>
+          <button class="btn btn-danger" onclick={handleBatchCancel} disabled={starting}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="15" y1="9" x2="9" y2="15" />
+              <line x1="9" y1="9" x2="15" y2="15" />
+            </svg>
+            <span>Отменить все ({analyzingVideos.length})</span>
+          </button>
+        </div>
       {:else if unanalyzedVideos.length === 0}
         <p class="msg-info">Неразмеченных видео не найдено! Все видео уже размечены людьми или ИИ.</p>
         <div class="actions">
@@ -290,6 +345,15 @@
 
   .btn-ai:hover:not(:disabled) {
     background: #7c3aed;
+  }
+
+  .btn-danger {
+    background: #ef4444;
+    color: #fff;
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    background: #dc2626;
   }
 
   .btn:disabled {
