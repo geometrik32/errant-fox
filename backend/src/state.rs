@@ -8,6 +8,7 @@ pub struct AppState {
     pub jwt_secret: String,
     pub avatars_dir: String,
     pub previews_dir: String,
+    pub transcripts_dir: String,
     pub seafile: Arc<SeafileClient>,
     pub ws_hub: WsHub,
     pub presence: Arc<tokio::sync::RwLock<crate::services::ws::PresenceRegistry>>,
