@@ -28,7 +28,7 @@ impl Config {
             seafile_token: required("SEAFILE_TOKEN"),
             previews_dir: required("PREVIEWS_DIR"),
             avatars_dir: required("AVATARS_DIR"),
-            transcripts_dir: env::var("TRANSCRIPTS_DIR").unwrap_or_else(|_| "data/transcripts".to_string()),
+            transcripts_dir: get_transcripts_dir(),
             server_port: required("SERVER_PORT")
                 .parse()
                 .expect("SERVER_PORT must be a valid port number"),
@@ -38,6 +38,16 @@ impl Config {
             vk_app_id: env::var("VK_APP_ID").ok(),
             vk_app_secret: env::var("VK_APP_SECRET").ok(),
         }
+    }
+}
+
+fn get_transcripts_dir() -> String {
+    if let Ok(dir) = env::var("TRANSCRIPTS_DIR") {
+        dir
+    } else if std::path::Path::new("/data").exists() {
+        "/data/transcripts".to_string()
+    } else {
+        "data/transcripts".to_string()
     }
 }
 
