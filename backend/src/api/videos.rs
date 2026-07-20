@@ -1437,15 +1437,15 @@ pub async fn ai_label_video(
     
     tokio::spawn(async move {
         let run_analysis = || async {
-            // Get download URL from Seafile
+            // Contact whisper-service
+            let whisper_url = std::env::var("WHISPER_URL")
+                .unwrap_or_else(|_| "http://whisper-service:8000".to_string());
+
+            // Generate fresh download URL from Seafile right when worker starts contacting whisper
             let download_url = seafile
                 .get_download_url(&video.seafile_path)
                 .await
                 .map_err(|e| format!("Seafile error: {}", e))?;
-
-            // Contact whisper-service
-            let whisper_url = std::env::var("WHISPER_URL")
-                .unwrap_or_else(|_| "http://whisper-service:8000".to_string());
 
             let client = reqwest::Client::new();
             let resp = client
