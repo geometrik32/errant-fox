@@ -51,6 +51,7 @@ pub struct Video {
     pub created_at: NaiveDateTime,
     pub is_ai_labeled: bool,
     pub is_analyzing: bool,
+    pub is_queued: bool,
 }
 
 #[derive(Insertable, Deserialize, Debug)]

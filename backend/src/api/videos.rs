@@ -53,6 +53,7 @@ pub struct VideoListDto {
     pub preview_count: i32,
     pub is_ai_labeled: bool,
     pub is_analyzing: bool,
+    pub is_queued: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seafile_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -108,6 +109,7 @@ pub struct VideoFullDto {
     pub fps: Option<f32>,
     pub is_ai_labeled: bool,
     pub is_analyzing: bool,
+    pub is_queued: bool,
     pub bouts: Vec<BoutDto>,
     pub comments: Vec<CommentDto>,
 }
@@ -224,6 +226,7 @@ fn build_video_full(
         fps: video.fps,
         is_ai_labeled: video.is_ai_labeled,
         is_analyzing: video.is_analyzing,
+        is_queued: video.is_queued,
         bouts: bouts.iter().map(bout_dto).collect(),
         comments: comment_dtos,
     }
@@ -417,6 +420,7 @@ pub async fn list_videos(
                     preview_count: v.preview_count,
                     is_ai_labeled: v.is_ai_labeled,
                     is_analyzing: v.is_analyzing,
+                    is_queued: v.is_queued,
                     seafile_path: if is_admin { Some(v.seafile_path.clone()) } else { None },
                     seafile_web_url: if is_admin {
                         Some(format!(
@@ -1393,14 +1397,17 @@ pub async fn execute_ai_label_for_video(state: AppState, video_id: String) -> Re
         }
     }
 
-    // Set is_analyzing = true in DB
+    // Set is_analyzing = true, is_queued = false in DB
     let db_clone = state.db.clone();
     let video_id_db_init = video_id.clone();
     tokio::task::spawn_blocking(move || {
         use crate::db::schema::videos;
         let mut conn = db_clone.get().map_err(|e| AppError::Internal(e.to_string()))?;
         diesel::update(videos::table.filter(videos::id.eq(&video_id_db_init)))
-            .set(videos::is_analyzing.eq(true))
+            .set((
+                videos::is_analyzing.eq(true),
+                videos::is_queued.eq(false),
+            ))
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
         Ok::<(), AppError>(())
@@ -1413,6 +1420,7 @@ pub async fn execute_ai_label_for_video(state: AppState, video_id: String) -> Re
         video_id: video_id.clone(),
         is_ai_labeled: false,
         is_analyzing: true,
+        is_queued: false,
     });
 
     let video_id_worker = video_id.clone();
@@ -1529,6 +1537,7 @@ pub async fn execute_ai_label_for_video(state: AppState, video_id: String) -> Re
                 .set((
                     videos::is_ai_labeled.eq(true),
                     videos::is_analyzing.eq(false),
+                    videos::is_queued.eq(false),
                 ))
                 .execute(&mut conn)
                 .map_err(|e| e.to_string())?;
@@ -1546,6 +1555,7 @@ pub async fn execute_ai_label_for_video(state: AppState, video_id: String) -> Re
                 video_id: video_id_worker.clone(),
                 is_ai_labeled: true,
                 is_analyzing: false,
+                is_queued: false,
             });
             let _ = ws_hub.send(crate::services::ws::WsEvent::UpdateVideoScore {
                 video_id: video_id_worker,
@@ -1561,7 +1571,10 @@ pub async fn execute_ai_label_for_video(state: AppState, video_id: String) -> Re
                 use crate::db::schema::videos;
                 if let Ok(mut conn) = db_clone.get() {
                     let _ = diesel::update(videos::table.filter(videos::id.eq(&video_id_db)))
-                        .set(videos::is_analyzing.eq(false))
+                        .set((
+                            videos::is_analyzing.eq(false),
+                            videos::is_queued.eq(false),
+                        ))
                         .execute(&mut conn);
                 }
             }).await;
@@ -1570,6 +1583,7 @@ pub async fn execute_ai_label_for_video(state: AppState, video_id: String) -> Re
                 video_id: video_id_worker,
                 is_ai_labeled: false,
                 is_analyzing: false,
+                is_queued: false,
             });
         }
     }
@@ -1638,6 +1652,28 @@ pub async fn batch_ai_label_video(
 
     let count = video_ids.len();
 
+    // Mark all target videos as is_queued = true in DB
+    let db_batch = state.db.clone();
+    let target_ids = video_ids.clone();
+    let _ = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::videos;
+        if let Ok(mut conn) = db_batch.get() {
+            let _ = diesel::update(videos::table.filter(videos::id.eq_any(&target_ids)))
+                .set(videos::is_queued.eq(true))
+                .execute(&mut conn);
+        }
+    }).await;
+
+    // Send WS notification for every queued video
+    for vid in &video_ids {
+        let _ = state.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoAiLabeled {
+            video_id: vid.clone(),
+            is_ai_labeled: false,
+            is_analyzing: false,
+            is_queued: true,
+        });
+    }
+
     tokio::spawn(async move {
         for vid in video_ids {
             let _ = execute_ai_label_for_video(state.clone(), vid).await;
@@ -1666,7 +1702,10 @@ pub async fn cancel_ai_label_video(
         use crate::db::schema::videos;
         let mut conn = db_clone.get().map_err(|e| AppError::Internal(e.to_string()))?;
         diesel::update(videos::table.filter(videos::id.eq(&video_id_db)))
-            .set(videos::is_analyzing.eq(false))
+            .set((
+                videos::is_analyzing.eq(false),
+                videos::is_queued.eq(false),
+            ))
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -1686,6 +1725,7 @@ pub async fn cancel_ai_label_video(
         video_id: video_id.clone(),
         is_ai_labeled,
         is_analyzing: false,
+        is_queued: false,
     });
 
     // Notify whisper-service to skip this video if it's queued

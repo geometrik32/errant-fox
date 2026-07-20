@@ -513,6 +513,7 @@ pub async fn delete_bout(
                     video_id: video_id_for_status,
                     is_ai_labeled,
                     is_analyzing: false,
+                    is_queued: false,
                 });
             }
         }
