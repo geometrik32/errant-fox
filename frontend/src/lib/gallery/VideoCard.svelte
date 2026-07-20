@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { Video } from '../api/types';
   import { resolveColor } from '../api/types';
   import { regeneratePreview, aiLabelVideo, cancelAiLabelVideo } from '../api/videos';
@@ -144,13 +145,19 @@
       }
     }, 1500);
   }
+
+  onMount(() => {
+    window.addEventListener('ef-close-context-menus', handleOtherMenuOpen);
+    return () => {
+      window.removeEventListener('ef-close-context-menus', handleOtherMenuOpen);
+    };
+  });
 </script>
 
 <svelte:window 
   onclick={handleWindowClick} 
   oncontextmenu={handleWindowContextMenu} 
   onkeydown={handleWindowKeyDown} 
-  onef-close-context-menus={handleOtherMenuOpen}
 />
 
 <!-- AI-border wrapper -->
