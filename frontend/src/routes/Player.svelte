@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, untrack } from 'svelte';
   import { currentUser } from '../stores';
   import { getVideo, getSharedVideo } from '../lib/api/videos';
   import type { VideoFull, Bout, Comment } from '../lib/api/types';
@@ -167,17 +167,38 @@
     w?.close();
   });
 
-  // Seek to initial time or shared bout after player is ready
+  // Seek to initial time or shared bout after player is ready (one-shot)
+  let _initialSeekDone = false;
   $effect(() => {
-    if (player && !loading && video && sharedBoutId != null) {
-      const bout = video.bouts.find(b => b.id === sharedBoutId);
+    if (_initialSeekDone) return;
+    if (!player || loading) return;
+    // Use untrack for video to avoid re-runs on WS mutations
+    const v = untrack(() => video);
+    if (!v) return;
+    const boutId = untrack(() => sharedBoutId);
+    if (boutId != null) {
+      const bout = v.bouts.find(b => b.id === boutId);
       if (bout) {
+        _initialSeekDone = true;
         const targetMs = initialTimeMs > 0 ? initialTimeMs : bout.time_start_ms;
         player.seekTo(targetMs);
         player.setLoop(bout.time_start_ms, bout.time_end_ms);
       }
-    } else if (player && initialTimeMs > 0 && !loading && video) {
+    } else if (initialTimeMs > 0) {
+      _initialSeekDone = true;
       player.seekTo(initialTimeMs);
+    } else {
+      _initialSeekDone = true;
+    }
+  });
+
+  // DEBUG: trace timeline values (remove after fix verified)
+  $effect(() => {
+    if (sharedBout) {
+      console.log('[Player] currentTime:', currentTime.toFixed(3),
+        'boutStart:', boutStart.toFixed(3),
+        'timelineCurrentTime:', timelineCurrentTime.toFixed(3),
+        'timelineDuration:', timelineDuration.toFixed(3));
     }
   });
 
