@@ -146,7 +146,29 @@
     };
   }
 
+  // Dynamic page title
+  $effect(() => {
+    if (video) {
+      let pageTitle = 'Errant Fox';
+      if (video.fighter_a && video.fighter_b) {
+        const nameA = video.fighter_a.display_name || 'Игрок A';
+        const nameB = video.fighter_b.display_name || 'Игрок B';
+        pageTitle = `${nameA} vs ${nameB} — Errant Fox`;
+      } else if (video.id) {
+        pageTitle = `${video.id} — Errant Fox`;
+      }
+      if (sharedBout) {
+        pageTitle = `Сход №${sharedBout.order_index + 1} • ${pageTitle}`;
+      }
+      document.title = pageTitle;
+    }
+  });
+
   onMount(async () => {
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+      showJudging = false;
+      showChat = false;
+    }
     try {
       video = shareToken ? await getSharedVideo(videoId, shareToken) : await getVideo(videoId);
       if (video.duration_ms) duration = video.duration_ms / 1000;
@@ -295,6 +317,7 @@
           ondetectedfps={(f) => { if (fps == null) fps = f; }}
           ontogglejudging={() => { showJudging = !showJudging; }}
           ontogglechat={() => { showChat = !showChat; }}
+          onspeedchange={(s) => { speed = s; player?.setSpeed(s); }}
         />
       </div>
 
@@ -340,7 +363,14 @@
           player?.seekTo(targetMs);
         }}
         onloop={({ start, end }) => { player?.seekTo(start); player?.setLoop(start, end); }}
-        onboutclick={(id) => { judgingPanel?.expandBout(id); }}
+        onboutclick={(id) => {
+          judgingPanel?.expandBout(id);
+          const b = liveBouts.find(x => x.id === id);
+          if (b) {
+            player?.seekTo(b.time_start_ms);
+            player?.setLoop(b.time_start_ms, b.time_end_ms);
+          }
+        }}
         oncommentclick={(id) => { highlightedCommentId = id; if (!showChat) showChat = true; }}
         onplay={() => player?.togglePlay()}
         onstepback={() => player?.stepBackward()}

@@ -19,6 +19,7 @@
     ondetectedfps?: (fps: number) => void;
     ontogglejudging?: () => void;
     ontogglechat?: () => void;
+    onspeedchange?: (speed: number) => void;
   }
 
   let {
@@ -38,6 +39,7 @@
     ondetectedfps,
     ontogglejudging,
     ontogglechat,
+    onspeedchange,
   }: Props = $props();
 
   let videoEl: HTMLVideoElement;
@@ -336,9 +338,35 @@
     window.addEventListener('mouseup', onUp);
   }
 
+  let gestureToast = $state<string | null>(null);
+  let gestureToastTimer: number | null = null;
+
+  function triggerGestureToast(msg: string) {
+    if (gestureToastTimer) clearTimeout(gestureToastTimer);
+    gestureToast = msg;
+    gestureToastTimer = window.setTimeout(() => {
+      gestureToast = null;
+      gestureToastTimer = null;
+    }, 750);
+  }
+
   function handleClick(e: MouseEvent) {
     if (e.button !== 0) return;
-    togglePlay();
+    if (!videoEl) return;
+
+    const rect = videoEl.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const isLeftHalf = clickX < rect.width / 2;
+
+    if (isLeftHalf) {
+      const nextSpeed = speed === 0.5 ? 1.0 : 0.5;
+      if (videoEl) videoEl.playbackRate = nextSpeed;
+      onspeedchange?.(nextSpeed);
+      triggerGestureToast(nextSpeed === 0.5 ? '⚡ 0.5x Замедление' : '⚡ 1.0x Нормальная скорость');
+    } else {
+      togglePlay();
+      triggerGestureToast(videoEl.paused ? '❚❚ Пауза' : '▶ Воспроизведение');
+    }
   }
 
   function resetZoom() {
@@ -349,6 +377,10 @@
 </script>
 
 <div class="vp-wrap" bind:this={wrapEl}>
+  {#if gestureToast}
+    <div class="gesture-toast">{gestureToast}</div>
+  {/if}
+
   {#if activeViewers.length > 0}
     <div class="viewers-bar">
       {#each activeViewers as viewer (viewer.id)}
@@ -580,5 +612,31 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+
+  .gesture-toast {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(10, 10, 12, 0.85);
+    color: var(--accent-yellow);
+    padding: 12px 24px;
+    border-radius: var(--radius-md);
+    font-size: 1.15rem;
+    font-weight: 600;
+    pointer-events: none;
+    z-index: 30;
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    animation: toastFade 0.75s ease forwards;
+  }
+
+  @keyframes toastFade {
+    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+    20% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
   }
 </style>

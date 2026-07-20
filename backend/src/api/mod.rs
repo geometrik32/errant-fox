@@ -49,6 +49,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/videos/{id}/stream", get(videos::stream_video))
         .route("/api/videos/{id}/download", get(videos::download_video))
         .route("/api/videos/{id}/share", post(videos::create_share_token))
+        .route("/s/video/{id}", get(videos::og_share_video))
         .route("/api/shared/videos/{id}", get(videos::get_shared_video))
         .route("/api/shared/videos/{id}/comments", post(videos::create_shared_comment))
         .route("/api/shared/videos/{id}/download", get(videos::download_shared_video))
