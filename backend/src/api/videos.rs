@@ -1454,7 +1454,7 @@ pub async fn execute_ai_label_for_video(state: AppState, video_id: String) -> Re
             .await
             .map_err(|e| format!("Failed to read whisper response text: {}", e))?;
 
-        let transcripts_dir = std::env::var("TRANSCRIPTS_DIR").unwrap_or_else(|_| "data/transcripts".to_string());
+        let transcripts_dir = state.transcripts_dir.clone();
         let _ = tokio::fs::create_dir_all(&transcripts_dir).await;
         let transcript_path = format!("{}/{}.json", transcripts_dir, video_id_worker);
         let _ = tokio::fs::write(&transcript_path, &raw_json).await;
