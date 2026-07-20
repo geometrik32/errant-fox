@@ -45,12 +45,11 @@ def _read_wav_mono(wav_path: str):
             data = data.reshape(-1, nchannels).mean(axis=1)
         return framerate, data
 
-def _find_shout_acoustic_peak(wav_path: str, t_whisper: float, search_window_before=1.5, search_window_after=0.5):
-    try:
-        rate, data = _read_wav_mono(wav_path)
-    except Exception as e:
-        print(f"  Warning: Audio read error for acoustic refinement ({e}). Using Whisper timestamp.", flush=True)
+def _find_shout_acoustic_peak(audio_data, t_whisper: float, search_window_before=1.5, search_window_after=0.5):
+    if audio_data is None:
         return t_whisper
+
+    rate, data = audio_data
 
     win_start_sec = max(0.0, t_whisper - search_window_before)
     win_end_sec = min(len(data) / rate, t_whisper + search_window_after)
@@ -140,10 +139,18 @@ def _extract_simple_exchanges_from_faster(segments_list, wav_path: str):
                 curr = nxt
         grouped_stops.append(curr)
 
+    # Pre-load audio data ONCE for acoustic refinement of all stop words
+    audio_data = None
+    if grouped_stops:
+        try:
+            audio_data = _read_wav_mono(wav_path)
+        except Exception as e:
+            print(f"  Warning: Audio read error for acoustic refinement ({e}). Using Whisper timestamp.", flush=True)
+
     exchanges = []
     for stop in grouped_stops:
         stop_time = stop["start"]
-        refined_stop_time = _find_shout_acoustic_peak(wav_path, stop_time)
+        refined_stop_time = _find_shout_acoustic_peak(audio_data, stop_time)
         shift = refined_stop_time - stop_time
         if abs(shift) > 0.05:
             print(f"  [Acoustic Refinement] Stop word at {stop_time:.2f}s -> refined to shout onset at {refined_stop_time:.2f}s (shift {shift:+.2f}s)", flush=True)
@@ -156,6 +163,10 @@ def _extract_simple_exchanges_from_faster(segments_list, wav_path: str):
             "end_ms": int(bout_end * 1000),
             "stop_word": stop["word"]
         })
+
+    # Clean up audio memory buffer
+    if audio_data is not None:
+        del audio_data
 
     return exchanges, all_words
 
