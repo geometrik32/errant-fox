@@ -10,6 +10,7 @@ services:
       DATABASE_URL: /data/db/errant_fox.db
       PREVIEWS_DIR: /data/previews
       AVATARS_DIR: /data/avatars
+      TRANSCRIPTS_DIR: /data/transcripts
       SQLITE_JOURNAL_MODE: DELETE
       WHISPER_URL: http://whisper-service:8000
     networks:

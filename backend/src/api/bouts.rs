@@ -529,15 +529,15 @@ pub fn recalculate_video_ai_status(
     use crate::db::schema::{bouts, bout_history, videos};
     use diesel::prelude::*;
 
-    let bout_ids: Vec<i32> = bouts::table
+    let bouts_data: Vec<(i32, bool)> = bouts::table
         .filter(bouts::video_id.eq(video_id))
-        .select(bouts::id)
-        .load::<i32>(conn)
+        .select((bouts::id, bouts::is_ai))
+        .load::<(i32, bool)>(conn)
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
     let mut has_ai_bout = false;
 
-    for bid in bout_ids {
+    for (bid, is_ai) in bouts_data {
         let last_user: Option<String> = bout_history::table
             .filter(bout_history::bout_id.eq(bid))
             .order((bout_history::created_at.desc(), bout_history::id.desc()))
@@ -551,6 +551,9 @@ pub fn recalculate_video_ai_status(
                 has_ai_bout = true;
                 break;
             }
+        } else if is_ai {
+            has_ai_bout = true;
+            break;
         }
     }
 

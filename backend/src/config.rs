@@ -7,6 +7,7 @@ pub struct Config {
     pub seafile_token: String,
     pub previews_dir: String,
     pub avatars_dir: String,
+    pub transcripts_dir: String,
     pub server_port: u16,
     pub frontend_origin: String,
     pub frontend_url: String,
@@ -27,6 +28,7 @@ impl Config {
             seafile_token: required("SEAFILE_TOKEN"),
             previews_dir: required("PREVIEWS_DIR"),
             avatars_dir: required("AVATARS_DIR"),
+            transcripts_dir: env::var("TRANSCRIPTS_DIR").unwrap_or_else(|_| "data/transcripts".to_string()),
             server_port: required("SERVER_PORT")
                 .parse()
                 .expect("SERVER_PORT must be a valid port number"),

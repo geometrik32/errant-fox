@@ -25,4 +25,4 @@ COPY exchange_viewer_target.html ./exchange_viewer_target.html
 
 EXPOSE 8080
 
-CMD ["sh", "-c", "mkdir -p /data/db /data/previews /data/avatars && ./errant_fox"]
+CMD ["sh", "-c", "mkdir -p /data/db /data/previews /data/avatars /data/transcripts && ./errant_fox"]

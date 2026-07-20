@@ -62,6 +62,13 @@ async fn main() {
                     .values(&new_ai_user)
                     .execute(&mut conn);
             }
+
+            // 3. Recalculate AI status for all videos in database
+            if let Ok(video_ids) = videos::table.select(videos::id).load::<String>(&mut conn) {
+                for vid in video_ids {
+                    let _ = api::bouts::recalculate_video_ai_status(&mut conn, &vid);
+                }
+            }
         }
     });
 
@@ -79,6 +86,7 @@ async fn main() {
         jwt_secret: config.jwt_secret.clone(),
         avatars_dir: config.avatars_dir.clone(),
         previews_dir: config.previews_dir.clone(),
+        transcripts_dir: config.transcripts_dir.clone(),
         seafile: seafile_client,
         ws_hub: ws_tx,
         presence: std::sync::Arc::new(tokio::sync::RwLock::new(services::ws::PresenceRegistry::default())),

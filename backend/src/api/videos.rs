@@ -1454,8 +1454,9 @@ pub async fn execute_ai_label_for_video(state: AppState, video_id: String) -> Re
             .await
             .map_err(|e| format!("Failed to read whisper response text: {}", e))?;
 
-        let _ = tokio::fs::create_dir_all("data/transcripts").await;
-        let transcript_path = format!("data/transcripts/{}.json", video_id_worker);
+        let transcripts_dir = std::env::var("TRANSCRIPTS_DIR").unwrap_or_else(|_| "data/transcripts".to_string());
+        let _ = tokio::fs::create_dir_all(&transcripts_dir).await;
+        let transcript_path = format!("{}/{}.json", transcripts_dir, video_id_worker);
         let _ = tokio::fs::write(&transcript_path, &raw_json).await;
 
         let whisper_resp: WhisperResponse = serde_json::from_str(&raw_json)
@@ -1780,7 +1781,7 @@ pub async fn get_video_transcript(
         return Err(AppError::Forbidden);
     }
 
-    let json_path = format!("data/transcripts/{}.json", video_id);
+    let json_path = format!("{}/{}.json", state.transcripts_dir, video_id);
     let html_content = match tokio::fs::read_to_string(&json_path).await {
         Ok(raw_json) => render_transcript_html(&video_id, &token, &raw_json).await,
         Err(_) => format!(
