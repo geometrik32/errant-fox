@@ -227,21 +227,14 @@ async def cancel_video(video_id: str):
 
 
 def _download_and_convert_audio(audio_url: str, tmpdir: str) -> str:
-    raw_path = os.path.join(tmpdir, "raw_audio")
     wav_path = os.path.join(tmpdir, "audio.wav")
 
-    print(f"  Downloading audio from URL...", flush=True)
-    with requests.get(audio_url, stream=True, timeout=120) as r:
-        r.raise_for_status()
-        with open(raw_path, "wb") as f:
-            for chunk in r.iter_content(chunk_size=65536):
-                f.write(chunk)
-
-    print("  Converting to 16kHz mono WAV...", flush=True)
+    print(f"  Streaming audio directly via ffmpeg from URL...", flush=True)
     result = subprocess.run(
         [
             "ffmpeg", "-y",
-            "-i", raw_path,
+            "-vn",
+            "-i", audio_url,
             "-ar", "16000",
             "-ac", "1",
             "-f", "wav",
@@ -250,9 +243,41 @@ def _download_and_convert_audio(audio_url: str, tmpdir: str) -> str:
         capture_output=True,
         text=True,
     )
-    if result.returncode != 0:
-        msg = result.stderr[-2000:] if result.stderr else "ffmpeg failed"
-        raise RuntimeError(f"ffmpeg error: {msg}")
+    if result.returncode == 0:
+        return wav_path
+
+    # Fallback: if direct HTTP ffmpeg input fails, download raw file & convert
+    print("  Direct ffmpeg stream failed, falling back to stream download...", flush=True)
+    raw_path = os.path.join(tmpdir, "raw_audio")
+    try:
+        with requests.get(audio_url, stream=True, timeout=120) as r:
+            r.raise_for_status()
+            with open(raw_path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=65536):
+                    f.write(chunk)
+
+        result_fb = subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-vn",
+                "-i", raw_path,
+                "-ar", "16000",
+                "-ac", "1",
+                "-f", "wav",
+                wav_path,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result_fb.returncode != 0:
+            msg = result_fb.stderr[-2000:] if result_fb.stderr else "ffmpeg failed"
+            raise RuntimeError(f"ffmpeg error: {msg}")
+    finally:
+        if os.path.exists(raw_path):
+            try:
+                os.remove(raw_path)
+            except Exception:
+                pass
 
     return wav_path
 
