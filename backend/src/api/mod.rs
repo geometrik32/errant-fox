@@ -67,6 +67,10 @@ pub fn router(state: AppState) -> Router {
             post(videos::ai_label_video),
         )
         .route(
+            "/api/admin/videos/batch-ai-label",
+            post(videos::batch_ai_label_video),
+        )
+        .route(
             "/api/videos/{id}/cancel-analysis",
             post(videos::cancel_ai_label_video),
         )

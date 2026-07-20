@@ -75,3 +75,10 @@ export async function cancelAiLabelVideo(id: string): Promise<{ status: string }
     method: 'POST',
   });
 }
+
+export async function batchAiLabelVideos(videoIds?: string[]): Promise<{ status: string; count: number }> {
+  return apiFetch<{ status: string; count: number }>('/admin/videos/batch-ai-label', {
+    method: 'POST',
+    body: JSON.stringify({ video_ids: videoIds }),
+  });
+}
