@@ -241,9 +241,13 @@
     } else if (e.code === keys.stepBackward?.code) {
       e.preventDefault(); player?.stepBackward();
     } else if (e.code === keys.seekBackward?.code) {
-      e.preventDefault(); player?.seekTo(Math.max(0, (currentTime - seekStep) * 1000));
+      e.preventDefault();
+      const minMs = sharedBout ? sharedBout.time_start_ms : 0;
+      player?.seekTo(Math.max(minMs, (currentTime - seekStep) * 1000));
     } else if (e.code === keys.seekForward?.code) {
-      e.preventDefault(); player?.seekTo(Math.min(duration, (currentTime + seekStep) * 1000));
+      e.preventDefault();
+      const maxMs = sharedBout ? sharedBout.time_end_ms : (duration > 0 ? duration * 1000 : Infinity);
+      player?.seekTo(Math.min(maxMs, (currentTime + seekStep) * 1000));
     } else if (e.code === keys.triggerMark?.code) {
       e.preventDefault(); judgingPanel?.triggerMark();
     } else if (e.code === keys.toggleFullscreen?.code) {
