@@ -239,36 +239,24 @@ def _download_and_convert_audio(audio_url: str, tmpdir: str) -> str:
 
 @app.post("/analyze")
 async def analyze(body: AnalyzeRequest):
-    print(f"[analyze] video_id={body.video_id} request received.", flush=True)
+    print(f"[analyze] video_id={body.video_id} request queued.", flush=True)
     loop = asyncio.get_running_loop()
 
-    # 1. Download and convert audio IMMEDIATELY so Seafile temporary URL never expires
-    tmpdir = tempfile.mkdtemp()
-    try:
-        wav_path = await loop.run_in_executor(None, _download_and_convert_audio, body.audio_url, tmpdir)
-    except Exception as exc:
-        print(f"[analyze] video_id={body.video_id} download failed: {exc}", flush=True)
+    # Acquire lock FIRST so audio download and transcription happen strictly one video at a time
+    async with analyze_lock:
+        print(f"[analyze] video_id={body.video_id} processing started (download + transcribe).", flush=True)
+        tmpdir = tempfile.mkdtemp()
         try:
-            import shutil
-            shutil.rmtree(tmpdir, ignore_errors=True)
-        except Exception:
-            pass
-        return {"error": f"Audio download failed: {exc}"}
-
-    # 2. Acquire lock and run Faster-Whisper detection sequentially
-    try:
-        print(f"[analyze] video_id={body.video_id} waiting for CPU lock...", flush=True)
-        async with analyze_lock:
-            print(f"[analyze] video_id={body.video_id} Faster-Whisper processing started.", flush=True)
+            wav_path = await loop.run_in_executor(None, _download_and_convert_audio, body.audio_url, tmpdir)
             exchanges, all_words = await loop.run_in_executor(None, _detect_exchanges, wav_path)
-            print(f"[analyze] video_id={body.video_id} Faster-Whisper processing finished.", flush=True)
+            print(f"[analyze] video_id={body.video_id} processing finished.", flush=True)
             return {"video_id": body.video_id, "exchanges": exchanges, "words": all_words}
-    except Exception as exc:
-        traceback.print_exc(file=sys.stderr)
-        return {"error": str(exc)}
-    finally:
-        try:
-            import shutil
-            shutil.rmtree(tmpdir, ignore_errors=True)
-        except Exception:
-            pass
+        except Exception as exc:
+            traceback.print_exc(file=sys.stderr)
+            return {"error": str(exc)}
+        finally:
+            try:
+                import shutil
+                shutil.rmtree(tmpdir, ignore_errors=True)
+            except Exception:
+                pass
