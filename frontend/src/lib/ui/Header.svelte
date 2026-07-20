@@ -4,6 +4,7 @@
   import CreateUserModal from '../admin/CreateUserModal.svelte';
   import TechniquesModal from '../admin/TechniquesModal.svelte';
   import ProfileModal from './ProfileModal.svelte';
+  import HotkeysModal from './HotkeysModal.svelte';
   import SearchPanel from './SearchPanel.svelte';
   import SyncModal from './SyncModal.svelte';
   import BatchAiModal from './BatchAiModal.svelte';
@@ -18,6 +19,7 @@
   let showCreateUser = $state(false);
   let showTechniques = $state(false);
   let showProfile = $state(false);
+  let showHotkeys = $state(false);
   let showSyncDatabase = $state(false);
   let showBatchAi = $state(false);
 
@@ -152,6 +154,9 @@
             Техники
           </button>
         {/if}
+        <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showHotkeys = true; }}>
+          Горячие клавиши
+        </button>
         {#if $currentUser?.is_admin}
           <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showCreateUser = true; }}>
             Пользователи
@@ -179,6 +184,10 @@
 
 {#if showProfile}
   <ProfileModal onclose={() => { showProfile = false; }} />
+{/if}
+
+{#if showHotkeys}
+  <HotkeysModal onclose={() => { showHotkeys = false; }} />
 {/if}
 
 {#if showCreateUser}
