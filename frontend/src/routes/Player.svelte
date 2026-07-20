@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, untrack } from 'svelte';
   import { currentUser } from '../stores';
+  import { hotkeysStore } from '../lib/stores/hotkeys';
   import { getVideo, getSharedVideo } from '../lib/api/videos';
   import type { VideoFull, Bout, Comment } from '../lib/api/types';
   import VideoPlayer from '../lib/player/VideoPlayer.svelte';
@@ -228,33 +229,38 @@
     const tag = (e.target as HTMLElement).tagName.toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
-    if (e.code === 'Space') {
+    const keys = $hotkeysStore.keys;
+    const seekStep = $hotkeysStore.seekStepSeconds || 2;
+    const slowSpeed = $hotkeysStore.slowSpeed ?? 0.1;
+    const fastSpeed = $hotkeysStore.fastSpeed || 2.0;
+
+    if (e.code === keys.playPause?.code) {
       e.preventDefault(); player?.togglePlay();
-    } else if (e.code === 'KeyX') {
+    } else if (e.code === keys.stepForward?.code) {
       e.preventDefault(); player?.stepForward();
-    } else if (e.code === 'KeyZ') {
+    } else if (e.code === keys.stepBackward?.code) {
       e.preventDefault(); player?.stepBackward();
-    } else if (e.code === 'ArrowLeft') {
-      e.preventDefault(); player?.seekTo(Math.max(0, (currentTime - 2) * 1000));
-    } else if (e.code === 'ArrowRight') {
-      e.preventDefault(); player?.seekTo(Math.min(duration, currentTime + 2) * 1000);
-    } else if (e.code === 'KeyC') {
+    } else if (e.code === keys.seekBackward?.code) {
+      e.preventDefault(); player?.seekTo(Math.max(0, (currentTime - seekStep) * 1000));
+    } else if (e.code === keys.seekForward?.code) {
+      e.preventDefault(); player?.seekTo(Math.min(duration, (currentTime + seekStep) * 1000));
+    } else if (e.code === keys.triggerMark?.code) {
       e.preventDefault(); judgingPanel?.triggerMark();
-    } else if (e.code === 'KeyF') {
+    } else if (e.code === keys.toggleFullscreen?.code) {
       e.preventDefault(); toggleFullscreen();
-    } else if (e.code === 'KeyA') {
+    } else if (e.code === keys.toggleSlow?.code) {
       e.preventDefault();
-      const s = speed === 0.2 ? 1 : 0.2;
+      const s = Math.abs(speed - slowSpeed) < 0.01 ? 1 : slowSpeed;
       speed = s; player?.setSpeed(s);
-    } else if (e.code === 'KeyS') {
+    } else if (e.code === keys.toggleFast?.code) {
       e.preventDefault();
-      const s = speed === 2 ? 1 : 2;
+      const s = Math.abs(speed - fastSpeed) < 0.01 ? 1 : fastSpeed;
       speed = s; player?.setSpeed(s);
-    } else if (e.code === 'KeyG') {
+    } else if (e.code === keys.togglePanels?.code) {
       e.preventDefault();
       showJudging = !showJudging;
       showChat = !showChat;
-    } else if (e.code === 'KeyD') {
+    } else if (e.code === keys.toggleLoop?.code) {
       e.preventDefault();
       if (!shareToken) player?.toggleLoop();
     }
