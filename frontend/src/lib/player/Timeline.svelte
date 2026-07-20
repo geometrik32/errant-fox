@@ -153,11 +153,9 @@
     e.preventDefault();
   }
 
-  let pct = $derived.by(() => {
-    if (!duration || duration <= 0) return 0;
-    const val = (currentTime / duration) * 100;
-    return Math.max(0, Math.min(100, val));
-  });
+  let pct = $derived(
+    duration > 0 ? Math.max(0, Math.min(100, (currentTime / duration) * 100)) : 0
+  );
 
   const isInsideBout = $derived(
     bouts.some(b => {
