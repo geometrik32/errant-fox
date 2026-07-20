@@ -294,7 +294,7 @@
       {/if}
 
       {@const isHumanLabeled = cardState() === 2}
-      {#if video.is_analyzing}
+      {#if video.is_analyzing || video.is_queued}
         <button 
           class="menu-item" 
           onclick={async (e) => { 
@@ -312,13 +312,12 @@
             <line x1="15" y1="9" x2="9" y2="15" />
             <line x1="9" y1="9" x2="15" y2="15" />
           </svg>
-          <span>Отменить анализ ИИ</span>
+          <span>{video.is_analyzing ? 'Отменить анализ ИИ' : 'Убрать из очереди ИИ'}</span>
         </button>
-      {:else}
+      {:else if !isHumanLabeled}
         <button 
           class="menu-item menu-item-ai" 
           onclick={async (e) => { 
-            if (isHumanLabeled) return;
             e.stopPropagation(); 
             closeMenu(); 
             isAiLabeling = true; 
@@ -330,8 +329,8 @@
               isAiLabeling = false; 
             }
           }}
-          disabled={isAiLabeling || isHumanLabeled}
-          title={isHumanLabeled ? 'Нельзя запускать ИИ-разметку для видео, размеченного человеком' : video.is_ai_labeled ? 'Переразметить сходы с помощью ИИ' : 'Разметить сходы (ИИ)'}
+          disabled={isAiLabeling}
+          title={video.is_ai_labeled ? 'Переразметить сходы с помощью ИИ' : 'Разметить сходы (ИИ)'}
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2a10 10 0 1 0 10 10" />
