@@ -118,6 +118,8 @@ pub enum WsEvent {
         is_ai_labeled: bool,
         is_analyzing: bool,
         is_queued: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        has_transcript: Option<bool>,
     },
     UpdateVideoPreview {
         video_id: String,

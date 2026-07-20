@@ -69,6 +69,7 @@ export interface Video {
   is_ai_labeled: boolean;
   is_analyzing?: boolean;
   is_queued?: boolean;
+  has_transcript?: boolean;
   preview_url: string;
   preview_count: number;
   seafile_path?: string;
@@ -115,6 +116,7 @@ export interface VideoFull {
   is_ai_labeled: boolean;
   is_analyzing?: boolean;
   is_queued?: boolean;
+  has_transcript?: boolean;
   bouts: Bout[];
   comments: Comment[];
 }

@@ -274,7 +274,7 @@
       <span>Поделиться</span>
     </button>
     {#if $currentUser?.is_admin}
-      {#if video.is_ai_labeled}
+      {#if video.is_ai_labeled || video.has_transcript}
         <button 
           class="menu-item"
           onclick={(e) => {
