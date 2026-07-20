@@ -219,11 +219,8 @@ pub async fn post_bout(
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        // Clear AI label — a human is now editing this video's bouts
-        diesel::update(videos::table.filter(videos::id.eq(&bout.video_id)))
-            .set(videos::is_ai_labeled.eq(false))
-            .execute(&mut conn)
-            .map_err(|e| AppError::Internal(e.to_string()))?;
+        // Recalculate AI label for video based on remaining bouts' bout_history
+        let _ = recalculate_video_ai_status(&mut conn, &bout.video_id);
 
         let mut notifications = Vec::new();
 
@@ -446,14 +443,8 @@ pub async fn patch_bout(
                 .map_err(|e| AppError::Internal(e.to_string()))?;
         }
 
-        // Clear AI label — human edited this bout
-        {
-            use crate::db::schema::videos;
-            diesel::update(videos::table.filter(videos::id.eq(&cur.video_id)))
-                .set(videos::is_ai_labeled.eq(false))
-                .execute(&mut conn)
-                .map_err(|e| AppError::Internal(e.to_string()))?;
-        }
+        // Recalculate AI label — check if video still contains AI bouts
+        let _ = recalculate_video_ai_status(&mut conn, &cur.video_id);
 
         bouts::table
             .filter(bouts::id.eq(id))
@@ -496,14 +487,8 @@ pub async fn delete_bout(
             return Err(AppError::NotFound);
         }
 
-        // Clear AI label — human deleted a bout
-        {
-            use crate::db::schema::videos;
-            diesel::update(videos::table.filter(videos::id.eq(&bout.video_id)))
-                .set(videos::is_ai_labeled.eq(false))
-                .execute(&mut conn)
-                .map_err(|e| AppError::Internal(e.to_string()))?;
-        }
+        // Recalculate AI label — check if remaining bouts contain AI bouts
+        let _ = recalculate_video_ai_status(&mut conn, &bout.video_id);
 
         Ok::<Bout, AppError>(bout)
     })
@@ -515,10 +500,65 @@ pub async fn delete_bout(
     ws_bout.deleted = Some(true);
     let _ = state.ws_hub.send(WsEvent::UpdateBout(ws_bout));
 
-    // Broadcast updated video score
+    // Broadcast updated video score and video AI status
     tokio::spawn(broadcast_video_score(state.db.clone(), state.ws_hub.clone(), bout.video_id.clone()));
 
+    let db_for_status = state.db.clone();
+    let video_id_for_status = bout.video_id.clone();
+    let ws_hub_for_status = state.ws_hub.clone();
+    tokio::task::spawn_blocking(move || {
+        if let Ok(mut conn) = db_for_status.get() {
+            if let Ok(is_ai_labeled) = recalculate_video_ai_status(&mut conn, &video_id_for_status) {
+                let _ = ws_hub_for_status.send(WsEvent::UpdateVideoAiLabeled {
+                    video_id: video_id_for_status,
+                    is_ai_labeled,
+                    is_analyzing: false,
+                });
+            }
+        }
+    });
+
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub fn recalculate_video_ai_status(
+    conn: &mut diesel::SqliteConnection,
+    video_id: &str,
+) -> Result<bool, AppError> {
+    use crate::db::schema::{bouts, bout_history, videos};
+    use diesel::prelude::*;
+
+    let bout_ids: Vec<i32> = bouts::table
+        .filter(bouts::video_id.eq(video_id))
+        .select(bouts::id)
+        .load::<i32>(conn)
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let mut has_ai_bout = false;
+
+    for bid in bout_ids {
+        let last_user: Option<String> = bout_history::table
+            .filter(bout_history::bout_id.eq(bid))
+            .order((bout_history::created_at.desc(), bout_history::id.desc()))
+            .select(bout_history::user_id)
+            .first::<String>(conn)
+            .optional()
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        if let Some(user_id) = last_user {
+            if user_id == "ai" {
+                has_ai_bout = true;
+                break;
+            }
+        }
+    }
+
+    diesel::update(videos::table.filter(videos::id.eq(video_id)))
+        .set(videos::is_ai_labeled.eq(has_ai_bout))
+        .execute(conn)
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    Ok(has_ai_bout)
 }
 
 #[derive(Serialize)]

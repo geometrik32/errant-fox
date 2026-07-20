@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getVideos, aiLabelVideo, cancelAiLabelVideo } from '../api/videos';
+  import { getVideos, aiLabelVideo, cancelAiLabelVideo, batchAiLabelVideos } from '../api/videos';
   import type { Video } from '../api/types';
 
   interface Props {
@@ -39,17 +39,14 @@
     if (starting || unanalyzedVideos.length === 0) return;
     starting = true;
     error = null;
-    let count = 0;
     try {
-      for (const video of unanalyzedVideos) {
-        count++;
-        progressMessage = `Запуск анализа для видео ${count} из ${unanalyzedVideos.length}...`;
-        await aiLabelVideo(video.id).catch(() => {});
-      }
-      progressMessage = `Успешно отправлено на ИИ-разметку видео: ${unanalyzedVideos.length} шт.`;
+      progressMessage = `Запуск фонового анализа на сервере для ${unanalyzedVideos.length} видео...`;
+      const ids = unanalyzedVideos.map(v => v.id);
+      await batchAiLabelVideos(ids);
+      progressMessage = `Серверная очередь успешно запущена для ${unanalyzedVideos.length} видео! Вы можете закрыть это окно.`;
       setTimeout(() => {
         onclose();
-      }, 1800);
+      }, 1500);
     } catch (e) {
       error = e instanceof Error ? e.message : 'Ошибка запуска разметки';
       starting = false;

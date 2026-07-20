@@ -1349,15 +1349,7 @@ struct WhisperResponse {
     exchanges: Vec<WhisperExchange>,
 }
 
-pub async fn ai_label_video(
-    State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path(video_id): Path<String>,
-) -> Result<impl axum::response::IntoResponse, AppError> {
-    if !user.is_admin {
-        return Err(AppError::Forbidden);
-    }
-
+pub async fn execute_ai_label_for_video(state: AppState, video_id: String) -> Result<(), AppError> {
     // 1. Load video record
     let db = state.db.clone();
     let video_id_clone = video_id.clone();
@@ -1375,16 +1367,10 @@ pub async fn ai_label_video(
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
     if video.is_analyzing {
-        return Ok((
-            axum::http::StatusCode::ACCEPTED,
-            Json(serde_json::json!({
-                "status": "already_processing",
-                "video_id": video_id
-            })),
-        ));
+        return Ok(());
     }
 
-    // Check if video is human-labeled (only if NOT already AI labeled)
+    // Check if video is human-labeled
     if !video.is_ai_labeled {
         let db_check = state.db.clone();
         let video_id_check = video_id.clone();
@@ -1422,194 +1408,246 @@ pub async fn ai_label_video(
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
-    // Send initial WS message to show the spinner in all active clients
+    // Send initial WS message
     let _ = state.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoAiLabeled {
         video_id: video_id.clone(),
         is_ai_labeled: false,
         is_analyzing: true,
     });
 
-    // Spawn background worker to download and analyze the video
     let video_id_worker = video_id.clone();
     let ws_hub = state.ws_hub.clone();
     let seafile = state.seafile.clone();
     let db_for_worker = state.db.clone();
-    
-    tokio::spawn(async move {
-        let run_analysis = || async {
-            // Contact whisper-service
-            let whisper_url = std::env::var("WHISPER_URL")
-                .unwrap_or_else(|_| "http://whisper-service:8000".to_string());
 
-            // Generate fresh download URL from Seafile right when worker starts contacting whisper
-            let download_url = seafile
-                .get_download_url(&video.seafile_path)
-                .await
-                .map_err(|e| format!("Seafile error: {}", e))?;
+    let run_analysis = || async {
+        let whisper_url = std::env::var("WHISPER_URL")
+            .unwrap_or_else(|_| "http://whisper-service:8000".to_string());
 
-            let client = reqwest::Client::new();
-            let resp = client
-                .post(format!("{}/analyze", whisper_url))
-                .json(&serde_json::json!({
-                    "audio_url": download_url,
-                    "video_id": video_id_worker
-                }))
-                .timeout(std::time::Duration::from_secs(3600))
-                .send()
-                .await
-                .map_err(|e| format!("Whisper service unreachable: {}", e))?;
-
-            let raw_json = resp
-                .text()
-                .await
-                .map_err(|e| format!("Failed to read whisper response text: {}", e))?;
-
-            // Save raw transcript response for admin viewer
-            let _ = tokio::fs::create_dir_all("data/transcripts").await;
-            let transcript_path = format!("data/transcripts/{}.json", video_id_worker);
-            let _ = tokio::fs::write(&transcript_path, &raw_json).await;
-
-            let whisper_resp: WhisperResponse = serde_json::from_str(&raw_json)
-                .map_err(|e| format!("Failed to parse whisper response: {}", e))?;
-
-            // Replace bouts in DB
-            let exchanges = whisper_resp.exchanges;
-            let video_id_db = video_id_worker.clone();
-            let db_clone = db_for_worker.clone();
-            
-            tokio::task::spawn_blocking(move || {
-                use crate::db::schema::{bouts, videos};
-                use crate::db::models::NewBout;
-
-                let mut conn = db_clone.get().map_err(|e| e.to_string())?;
-
-                // Check if user cancelled analysis while it was running
-                let is_still_analyzing: bool = videos::table
-                    .filter(videos::id.eq(&video_id_db))
-                    .select(videos::is_analyzing)
-                    .first::<bool>(&mut conn)
-                    .unwrap_or(false);
-
-                if !is_still_analyzing {
-                    return Err("AI analysis was cancelled by user".to_string());
-                }
-
-                // Delete existing bouts
-                diesel::delete(bouts::table.filter(bouts::video_id.eq(&video_id_db)))
-                    .execute(&mut conn)
-                    .map_err(|e| e.to_string())?;
-
-                // Insert new bouts
-                for (i, ex) in exchanges.iter().enumerate() {
-                    diesel::insert_into(bouts::table)
-                        .values(&NewBout {
-                            video_id: video_id_db.clone(),
-                            order_index: (i + 1) as i32,
-                            time_start_ms: ex.start_ms,
-                            time_end_ms: ex.end_ms,
-                            score_a: 0,
-                            score_b: 0,
-                            technique_a_id: None,
-                            technique_b_id: None,
-                            hit_zone_a: None,
-                            hit_zone_b: None,
-                            result_a: None,
-                            result_b: None,
-                            is_ai: true,
-                        })
-                        .execute(&mut conn)
-                        .map_err(|e| e.to_string())?;
-                }
-
-                // Query the inserted bouts to get their generated IDs
-                let inserted_bouts = bouts::table
-                    .filter(bouts::video_id.eq(&video_id_db))
-                    .load::<crate::db::models::Bout>(&mut conn)
-                    .map_err(|e| e.to_string())?;
-
-                // Insert history records for the AI-created bouts
-                use crate::db::models::NewBoutHistory;
-                use crate::db::schema::bout_history;
-                use crate::api::bouts::format_ms;
-
-                for bout in &inserted_bouts {
-                    let details = format!(
-                        "Время: {} — {}",
-                        format_ms(bout.time_start_ms),
-                        format_ms(bout.time_end_ms)
-                    );
-
-                    diesel::insert_into(bout_history::table)
-                        .values(&NewBoutHistory {
-                            bout_id: bout.id,
-                            user_id: "ai".to_string(),
-                            action: "create".to_string(),
-                            details: Some(details),
-                        })
-                        .execute(&mut conn)
-                        .map_err(|e| e.to_string())?;
-                }
-
-                // Mark video as AI-labeled and set is_analyzing to false
-                diesel::update(videos::table.filter(videos::id.eq(&video_id_db)))
-                    .set((
-                        videos::is_ai_labeled.eq(true),
-                        videos::is_analyzing.eq(false),
-                    ))
-                    .execute(&mut conn)
-                    .map_err(|e| e.to_string())?;
-
-                Ok::<(), String>(())
-            })
+        let download_url = seafile
+            .get_download_url(&video.seafile_path)
             .await
-            .map_err(|e| format!("Task join error: {}", e))?
-        };
+            .map_err(|e| format!("Seafile error: {}", e))?;
 
-        match run_analysis().await {
-            Ok(_) => {
-                println!("AI labeling completed successfully for video {}", video_id_worker);
-                let _ = ws_hub.send(crate::services::ws::WsEvent::UpdateVideoAiLabeled {
-                    video_id: video_id_worker.clone(),
-                    is_ai_labeled: true,
-                    is_analyzing: false,
-                });
-                let _ = ws_hub.send(crate::services::ws::WsEvent::UpdateVideoScore {
-                    video_id: video_id_worker,
-                    total_score_a: 0,
-                    total_score_b: 0,
-                });
+        let client = reqwest::Client::new();
+        let resp = client
+            .post(format!("{}/analyze", whisper_url))
+            .json(&serde_json::json!({
+                "audio_url": download_url,
+                "video_id": video_id_worker
+            }))
+            .timeout(std::time::Duration::from_secs(3600))
+            .send()
+            .await
+            .map_err(|e| format!("Whisper service unreachable: {}", e))?;
+
+        let raw_json = resp
+            .text()
+            .await
+            .map_err(|e| format!("Failed to read whisper response text: {}", e))?;
+
+        let _ = tokio::fs::create_dir_all("data/transcripts").await;
+        let transcript_path = format!("data/transcripts/{}.json", video_id_worker);
+        let _ = tokio::fs::write(&transcript_path, &raw_json).await;
+
+        let whisper_resp: WhisperResponse = serde_json::from_str(&raw_json)
+            .map_err(|e| format!("Failed to parse whisper response: {}", e))?;
+
+        let exchanges = whisper_resp.exchanges;
+        let video_id_db = video_id_worker.clone();
+        let db_clone = db_for_worker.clone();
+
+        tokio::task::spawn_blocking(move || {
+            use crate::db::schema::{bouts, videos};
+            use crate::db::models::NewBout;
+
+            let mut conn = db_clone.get().map_err(|e| e.to_string())?;
+
+            let is_still_analyzing: bool = videos::table
+                .filter(videos::id.eq(&video_id_db))
+                .select(videos::is_analyzing)
+                .first::<bool>(&mut conn)
+                .unwrap_or(false);
+
+            if !is_still_analyzing {
+                return Err("AI analysis was cancelled by user".to_string());
             }
-            Err(err) => {
-                eprintln!("AI labeling failed for video {}: {}", video_id_worker, err);
-                
-                // Reset is_analyzing in DB on failure
-                let db_clone = db_for_worker.clone();
-                let video_id_db = video_id_worker.clone();
-                let _ = tokio::task::spawn_blocking(move || {
-                    use crate::db::schema::videos;
-                    if let Ok(mut conn) = db_clone.get() {
-                        let _ = diesel::update(videos::table.filter(videos::id.eq(&video_id_db)))
-                            .set(videos::is_analyzing.eq(false))
-                            .execute(&mut conn);
+
+            diesel::delete(bouts::table.filter(bouts::video_id.eq(&video_id_db)))
+                .execute(&mut conn)
+                .map_err(|e| e.to_string())?;
+
+            for (i, ex) in exchanges.iter().enumerate() {
+                diesel::insert_into(bouts::table)
+                    .values(&NewBout {
+                        video_id: video_id_db.clone(),
+                        order_index: (i + 1) as i32,
+                        time_start_ms: ex.start_ms,
+                        time_end_ms: ex.end_ms,
+                        score_a: 0,
+                        score_b: 0,
+                        technique_a_id: None,
+                        technique_b_id: None,
+                        hit_zone_a: None,
+                        hit_zone_b: None,
+                        result_a: None,
+                        result_b: None,
+                        is_ai: true,
+                    })
+                    .execute(&mut conn)
+                    .map_err(|e| e.to_string())?;
+            }
+
+            let inserted_bouts = bouts::table
+                .filter(bouts::video_id.eq(&video_id_db))
+                .load::<crate::db::models::Bout>(&mut conn)
+                .map_err(|e| e.to_string())?;
+
+            use crate::db::models::NewBoutHistory;
+            use crate::db::schema::bout_history;
+            use crate::api::bouts::format_ms;
+
+            for bout in &inserted_bouts {
+                let details = format!(
+                    "Время: {} — {}",
+                    format_ms(bout.time_start_ms),
+                    format_ms(bout.time_end_ms)
+                );
+
+                diesel::insert_into(bout_history::table)
+                    .values(&NewBoutHistory {
+                        bout_id: bout.id,
+                        user_id: "ai".to_string(),
+                        action: "create".to_string(),
+                        details: Some(details),
+                    })
+                    .execute(&mut conn)
+                    .map_err(|e| e.to_string())?;
+            }
+
+            diesel::update(videos::table.filter(videos::id.eq(&video_id_db)))
+                .set((
+                    videos::is_ai_labeled.eq(true),
+                    videos::is_analyzing.eq(false),
+                ))
+                .execute(&mut conn)
+                .map_err(|e| e.to_string())?;
+
+            Ok::<(), String>(())
+        })
+        .await
+        .map_err(|e| format!("Task join error: {}", e))?
+    };
+
+    match run_analysis().await {
+        Ok(_) => {
+            println!("AI labeling completed successfully for video {}", video_id_worker);
+            let _ = ws_hub.send(crate::services::ws::WsEvent::UpdateVideoAiLabeled {
+                video_id: video_id_worker.clone(),
+                is_ai_labeled: true,
+                is_analyzing: false,
+            });
+            let _ = ws_hub.send(crate::services::ws::WsEvent::UpdateVideoScore {
+                video_id: video_id_worker,
+                total_score_a: 0,
+                total_score_b: 0,
+            });
+        }
+        Err(err) => {
+            eprintln!("AI labeling failed for video {}: {}", video_id_worker, err);
+            let db_clone = db_for_worker.clone();
+            let video_id_db = video_id_worker.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                use crate::db::schema::videos;
+                if let Ok(mut conn) = db_clone.get() {
+                    let _ = diesel::update(videos::table.filter(videos::id.eq(&video_id_db)))
+                        .set(videos::is_analyzing.eq(false))
+                        .execute(&mut conn);
+                }
+            }).await;
+
+            let _ = ws_hub.send(crate::services::ws::WsEvent::UpdateVideoAiLabeled {
+                video_id: video_id_worker,
+                is_ai_labeled: false,
+                is_analyzing: false,
+            });
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn ai_label_video(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(video_id): Path<String>,
+) -> Result<impl axum::response::IntoResponse, AppError> {
+    if !user.is_admin {
+        return Err(AppError::Forbidden);
+    }
+    tokio::spawn(execute_ai_label_for_video(state, video_id));
+    Ok(Json(serde_json::json!({ "status": "started" })))
+}
+
+#[derive(Deserialize)]
+pub struct BatchAiLabelRequest {
+    pub video_ids: Option<Vec<String>>,
+}
+
+pub async fn batch_ai_label_video(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Json(body): Json<BatchAiLabelRequest>,
+) -> Result<impl axum::response::IntoResponse, AppError> {
+    if !user.is_admin {
+        return Err(AppError::Forbidden);
+    }
+
+    let db = state.db.clone();
+    let video_ids = if let Some(ids) = body.video_ids {
+        ids
+    } else {
+        tokio::task::spawn_blocking(move || {
+            use crate::db::schema::{videos, bouts};
+            let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+
+            let all_videos = videos::table
+                .select((videos::id, videos::is_ai_labeled, videos::is_analyzing))
+                .load::<(String, bool, bool)>(&mut conn)
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+
+            let mut unanalyzed = Vec::new();
+            for (v_id, is_ai_labeled, is_analyzing) in all_videos {
+                if !is_ai_labeled && !is_analyzing {
+                    let human_bouts: i64 = bouts::table
+                        .filter(bouts::video_id.eq(&v_id))
+                        .filter(bouts::is_ai.eq(false))
+                        .count()
+                        .get_result(&mut conn)
+                        .unwrap_or(0);
+                    if human_bouts == 0 {
+                        unanalyzed.push(v_id);
                     }
-                }).await;
-
-                let _ = ws_hub.send(crate::services::ws::WsEvent::UpdateVideoAiLabeled {
-                    video_id: video_id_worker,
-                    is_ai_labeled: false,
-                    is_analyzing: false,
-                });
+                }
             }
+            Ok::<Vec<String>, AppError>(unanalyzed)
+        })
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))??
+    };
+
+    let count = video_ids.len();
+
+    tokio::spawn(async move {
+        for vid in video_ids {
+            let _ = execute_ai_label_for_video(state.clone(), vid).await;
         }
     });
 
-    Ok((
-        axum::http::StatusCode::ACCEPTED,
-        Json(serde_json::json!({
-            "status": "processing",
-            "video_id": video_id
-        })),
-    ))
+    Ok(Json(serde_json::json!({
+        "status": "batch_started",
+        "count": count
+    })))
 }
 
 pub async fn cancel_ai_label_video(
@@ -1858,7 +1896,7 @@ pub async fn og_share_video(
             let base_title = format!("{} vs {}", name_a, name_b);
 
             let main_title = if let Some(b) = bout_info {
-                format!("Сход №{} • Errant Fox — {}", b.bout_number, base_title)
+                format!("Сход №{} • Errant Fox — {}", b.order_index, base_title)
             } else {
                 format!("Errant Fox — {}", base_title)
             };
