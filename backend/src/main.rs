@@ -73,6 +73,7 @@ async fn main() {
     });
 
     let (ws_tx, _ws_rx) = tokio::sync::broadcast::channel::<services::ws::WsEvent>(256);
+    let (ai_queue_tx, ai_queue_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
 
     tokio::spawn(services::sync::run_sync(
         seafile_client.clone(),
@@ -95,7 +96,10 @@ async fn main() {
         vk_notifier: std::sync::Arc::new(services::vk::VkNotificationService::new(config.vk_group_token.clone())),
         vk_app_id: config.vk_app_id.clone(),
         vk_app_secret: config.vk_app_secret.clone(),
+        ai_queue_tx,
     };
+
+    services::ai_queue::start_ai_queue_processor(app_state.clone(), ai_queue_rx);
 
     let origin = config
         .frontend_origin

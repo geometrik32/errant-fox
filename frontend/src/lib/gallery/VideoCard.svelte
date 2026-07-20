@@ -321,12 +321,10 @@
             if (isHumanLabeled) return;
             e.stopPropagation(); 
             closeMenu(); 
-            video.is_analyzing = true;
             isAiLabeling = true; 
             try { 
               await aiLabelVideo(video.id);
             } catch (err) { 
-              video.is_analyzing = false;
               alert(err instanceof Error ? err.message : 'Ошибка анализа ИИ'); 
             } finally {
               isAiLabeling = false; 

@@ -17,4 +17,5 @@ pub struct AppState {
     pub vk_notifier: Arc<crate::services::vk::VkNotificationService>,
     pub vk_app_id: Option<String>,
     pub vk_app_secret: Option<String>,
+    pub ai_queue_tx: tokio::sync::mpsc::UnboundedSender<String>,
 }
