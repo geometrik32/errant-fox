@@ -42,12 +42,13 @@
 |---|---|---|
 | **Frontend** | Svelte 5 + TypeScript + Vite | SPA, UI, видеоплеер, графики |
 | **Backend** | Rust + Axum 0.8 + Tokio | REST API, бизнес-логика, WebSocket |
+| **AI Microservice** | Python 3.11 + Faster-Whisper | Детекция стоп-слов, акустическая коррекция пиков |
 | **ORM** | Diesel 2.3 | Типизированные запросы к SQLite |
-| **База данных** | SQLite (один файл) | Пользователи, видео-метаданные, буты, комментарии |
+| **База данных** | SQLite (один файл `errant_fox.db`) | Пользователи, бои, история, комментарии |
 | **Хранение видео** | Seafile (отдельный HTTP-сервис) | Видеофайлы, стриминг |
 | **Превью-кадры** | FFmpeg (запускается из бэкенда) | JPG-кадры для галереи |
-| **Real-time** | WebSocket (broadcast) | Новые комментарии, обновления бутов, новые видео |
-| **Деплой** | Docker Compose + Nginx + Traefik | Контейнеризация, проксирование, SSL |
+| **Real-time** | WebSocket (broadcast) | Комментарии, сходы, статусы ИИ-анализа |
+| **Деплой** | Docker Compose + Nginx + Traefik | Контейнеризация, проксирование |
 
 ---
 
@@ -63,11 +64,7 @@ Errant Fox/
 │   ├── Cargo.toml           ← Зависимости Rust
 │   ├── Cargo.lock
 │   ├── .env.example         ← Шаблон переменных окружения
-│   ├── migrations/          ← SQL-миграции Diesel
-│   │   ├── 0001_initial/
-│   │   ├── 0002_comment_reactions/
-│   │   ├── 0003_comment_bout_search/
-│   │   └── 0004_technique_description/
+│   ├── migrations/          ← 12 SQL-миграций Diesel (0001–0012)
 │   └── src/
 │       ├── main.rs          ← Точка входа
 │       ├── config.rs        ← Конфигурация из ENV
@@ -83,15 +80,20 @@ Errant Fox/
 │       │   └── schema.rs    ← Diesel schema (table! макросы)
 │       ├── api/
 │       │   ├── mod.rs       ← Axum router — все маршруты
-│       │   ├── auth.rs      ← Авторизация + JWT
-│       │   ├── bouts.rs     ← CRUD сходов
-│       │   ├── comments.rs  ← CRUD комментариев + реакции + поиск
+│       │   ├── auth.rs      ← Авторизация, JWT, ShareClaims
+│       │   ├── bouts.rs     ← CRUD сходов + скачивание нарезок
+│       │   ├── comments.rs  ← CRUD комментариев + реакции + гостевые ники
 │       │   ├── techniques.rs← CRUD техник
 │       │   ├── users.rs     ← Профили, бойцы, админ
-│       │   └── videos.rs    ← CRUD видео, стриминг, превью
+│       │   └── videos.rs    ← CRUD видео, стриминг, превью, ИИ-разметка, шаринг
 │       └── middleware/
 │           ├── mod.rs
 │           └── auth.rs      ← JWT-извлечение пользователя
+│
+├── whisper-service/         ← ИИ-микросервис распознавания сходов
+│   ├── app.py               ← FastAPI приложение (Faster-Whisper int8 + Acoustic Peak Refinement)
+│   ├── requirements.txt     ← Зависимости (faster-whisper, numpy, fastapi)
+│   └── Dockerfile           ← Инструкция сборки образов ИИ
 │
 ├── frontend/                ← Svelte 5 SPA
 │   ├── package.json
@@ -171,19 +173,20 @@ Errant Fox/
 ## 4. Архитектура взаимодействия
 
 ```
-[Браузер]  ←──REST (JSON)──→  [Backend: Rust/Axum :8080]  ←──HTTP──→  [Seafile]
-    │                              │                │
-    │                              ├── SQLite        ├── FFmpeg (превью)
-    │                              ├── WebSocket     └── Файловая система
+[Браузер]  ←──REST (JSON)──→  [Backend: Rust/Axum :8080]  ←──HTTP──→  [Whisper Service :8000]
+    │                              │                │                         │
+    │                              ├── SQLite        ├── FFmpeg (превью)       └── Faster-Whisper
+    │                              ├── WebSocket     └── data/transcripts          + Peak Refinement
     │                              └── Broadcast
-    │
-    └── Стриминг видео напрямую с Seafile (байты не проходят через бэкенд)
+    │                                      │
+    └── Стриминг видео напрямую с Seafile ◄┘ (Seafile Server)
 ```
 
-- **REST** — все CRUD-операции (видео, буты, комментарии, пользователи, техники)
-- **WebSocket** — только live-события (новый комментарий, обновление/удаление бута, новое видео из Seafile)
-- **Seafile** — отдельный сервис; бэкенд ходит к нему за списком файлов + download-ссылками; браузер стримит видео напрямую
-- **FFmpeg** — запускается бэкендом для генерации превью-кадров при первом запросе
+- **REST** — все CRUD-операции, вызовы ИИ-разметки, функции публичных ссылок и шаринга
+- **WebSocket** — live-события (комментарии, буты, новые видео, статусы ИИ-анализа `UpdateVideoAiLabeled` и счетов `UpdateVideoScore`)
+- **Seafile** — отдельный сервис; бэкенд ходит к нему за списком файлов и download-ссылками; ИИ-сервис скачивает аудио по прямому URL
+- **Whisper Service** — микросервис на Python/FastAPI для авторазметки сходов (Faster-Whisper int8 + acoustic peak refinement)
+- **FFmpeg** — нарезка превью-кадров и извлечение аудиодорожек WAV 16kHz
 
 ---
 

@@ -15,11 +15,14 @@ HEMA clubs and fighters need a self-hosted tool to:
 - 🎬 **Seafile Integration**: Auto-indexes new video folders by date from Seafile storage and streams directly without transiting through the backend.
 - ⏱ **Precision Playback**: Video playback with frame-by-frame controls (Z/X keys) and mouse-wheel digital zoom.
 - 🏷 **Bout Annotation**: Detailed bout marking (scores, techniques, outcomes, and an interactive 16-zone SVG hit zone selector).
-- 💬 **Timestamped Comments**: Chat comments mapped to video timeline and linked automatically to bouts.
+- 🤖 **AI Exchange Detection**: Automated bout/exchange detection powered by `whisper-service` (Faster-Whisper, CTranslate2 int8 CPU) with acoustic peak refinement for precise shout timestamping, batch labeling, and cancellation queue.
+- 🔗 **Video & Bout Sharing**: Public token-based sharing for videos and specific bouts, allowing guest viewing, guest commenting, and video clip downloading.
+- 💬 **Timestamped Comments**: Chat comments mapped to video timeline and linked automatically to bouts (supports guest nicknames & reactions).
 - 📊 **Fighter Analytics**: Personal dashboard showing radar charts of outcomes, match frequency, chronologic performance, and SVG silhouette heatmaps for damage dealt and received (filtered dynamically by a searchable match history table).
 
 ## Tech stack
 - **Backend**: Rust (Axum, Diesel ORM, SQLite)
+- **AI Microservice**: Python (FastAPI, Faster-Whisper, CTranslate2, NumPy, Wave)
 - **Frontend**: Svelte 5, TypeScript, Vite
 - **Video Decoding**: HTML5 + WebCodecs (HybridVideoDecoder via Mediabunny)
 - **Deployment**: Docker Compose (optimized for TrueNAS SCALE home servers)

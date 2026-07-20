@@ -8,14 +8,15 @@
 |---|---|---|
 | **Frontend** | Svelte 5 + TypeScript + Vite | UI, плеер, интерактивность |
 | **Backend** | Rust + Axum 0.8 + SQLite | API, данные, бизнес-логика |
-| **База данных** | SQLite (файл `/data/db/errant_fox.db`) | Пользователи, бои, комментарии, реакции |
+| **AI Microservice** | Python 3.11 + FastAPI + Faster-Whisper | Распознавание судейских команд, акустический анализ выкриков |
+| **База данных** | SQLite (файл `/data/db/errant_fox.db`) | Пользователи, бои, история, комментарии, реакции |
 | **Хранение видео** | Seafile (отдельный сервис) | Сами видеофайлы |
 | **Превью кадры** | FFmpeg (запускает бэкенд) | Генерация кадров для scrub-анимации |
 | **FPS видео** | moov-парсер (Rust + TypeScript) | Извлечение FPS из MP4 moov atom без скачивания файла |
 | **Связь FE ↔ BE** | REST (данные) + WebSocket (live) | Чёткие API-эндпоинты |
 | **Графики** | Chart.js (динамический импорт) | Радарные, линейные и bar-чарты в статистике |
 
-Бэкенд и фронтенд — **отдельные папки**, взаимодействуют только через API.
+Бэкенд, фронтенд и ИИ-микросервис — **отдельные компоненты**, взаимодействующие через четко определенные контракты API.
 
 ---
 
@@ -31,15 +32,15 @@ Errant Fox/
 │   │   ├── state.rs            ← AppState (пул БД, Seafile, WS hub)
 │   │   ├── db/
 │   │   │   ├── mod.rs          ← init_pool + run_migrations
-│   │   │   ├── schema.rs       ← Diesel schema (6 таблиц)
+│   │   │   ├── schema.rs       ← Diesel schema (7 таблиц)
 │   │   │   └── models.rs       ← Rust-структуры Queryable/Insertable
 │   │   ├── api/
 │   │   │   ├── mod.rs          ← Axum router (все маршруты)
-│   │   │   ├── auth.rs         ← /api/auth/login, JWT, UserDto
+│   │   │   ├── auth.rs         ← /api/auth/login, JWT, UserDto, ShareClaims
 │   │   │   ├── users.rs        ← /api/users/me, /api/fighters, admin users
-│   │   │   ├── videos.rs       ← /api/videos (CRUD, stream, previews)
-│   │   │   ├── bouts.rs        ← /api/bouts
-│   │   │   ├── comments.rs     ← /api/comments + reactions + search
+│   │   │   ├── videos.rs       ← /api/videos (CRUD, stream, previews, share, AI-label)
+│   │   │   ├── bouts.rs        ← /api/bouts + download_shared_bout
+│   │   │   ├── comments.rs     ← /api/comments + reactions + search + guest comments
 │   │   │   └── techniques.rs   ← /api/techniques + admin
 │   │   ├── middleware/
 │   │   │   ├── mod.rs
@@ -48,17 +49,15 @@ Errant Fox/
 │   │   ├── sync.rs             ← Фоновая синхронизация Seafile (60 сек)
 │   │   ├── previews.rs         ← FFmpeg генерация превью-кадров
 │   │   ├── moov.rs             ← Парсинг MP4 moov atom (FPS)
-│   │   └── ws.rs               ← WebSocket hub, broadcast 3 событий
-│   ├── migrations/             ← 5 Diesel-миграций
-│   │   ├── 0001_initial/
-│   │   ├── 0002_comment_reactions/
-│   │   ├── 0003_comment_bout_search/
-│   │   ├── 0004_technique_description/
-│   │   └── 0005_video_fps/
+│   │   └── ws.rs               ← WebSocket hub, broadcast live-событий
+│   ├── migrations/             ← 12 Diesel-миграций
 │   ├── Cargo.toml
 │   ├── .env.example
-│   ├── Dockerfile              ← Dockerfile для сборки бэкенда
-│   └── .dockerignore           ← Список игнорирования бэкенда
+│   └── Dockerfile              ← Dockerfile для сборки бэкенда
+├── whisper-service/            ← Микросервис распознавания речи ИИ
+│   ├── app.py                  ← FastAPI приложение (Faster-Whisper int8 + Acoustic Peak Refinement)
+│   ├── requirements.txt        ← Python зависимости (faster-whisper, numpy, fastapi, requests)
+│   └── Dockerfile              ← Dockerfile для сборки whisper-service
 ├── frontend/                   ← Svelte 5 + Vite
 │   ├── src/
 │   │   ├── main.ts
@@ -67,50 +66,15 @@ Errant Fox/
 │   │   ├── stores.ts           ← Svelte stores (token, user, fighters, techniques)
 │   │   ├── lib/
 │   │   │   ├── api/            ← Клиент к REST API
-│   │   │   │   ├── client.ts   ← apiFetch<T> (fetch + Bearer токен)
-│   │   │   │   ├── types.ts    ← TypeScript-интерфейсы
-│   │   │   │   ├── auth.ts
-│   │   │   │   ├── bouts.ts
-│   │   │   │   ├── comments.ts
-│   │   │   │   ├── fighters.ts
-│   │   │   │   ├── techniques.ts
-│   │   │   │   └── videos.ts
-│   │   │   ├── player/         ← Видео-плеер
-│   │   │   │   ├── VideoPlayer.svelte
-│   │   │   │   ├── Timeline.svelte
-│   │   │   │   ├── JudgingPanel.svelte
-│   │   │   │   ├── BoutCard.svelte
-│   │   │   │   ├── HitZonePicker.svelte
-│   │   │   │   ├── Chat.svelte
-│   │   │   │   └── moov.ts     ← Клиентский MP4 FPS-парсер
-│   │   │   ├── gallery/        ← Галерея
-│   │   │   │   ├── VideoCard.svelte
-│   │   │   │   ├── VideoGrid.svelte
-│   │   │   │   └── Sidebar.svelte
-│   │   │   ├── stats/          ← Статистика
-│   │   │   │   ├── FighterSidebar.svelte
-│   │   │   │   ├── HistoryTable.svelte
-│   │   │   │   ├── QuickStats.svelte   (≈ TopTechniques.svelte)
-│   │   │   │   ├── TopTechniques.svelte
-│   │   │   │   ├── FrequencyChart.svelte
-│   │   │   │   ├── ResultsChart.svelte
-│   │   │   │   ├── ScoreChart.svelte
-│   │   │   │   ├── RadarChart.svelte
-│   │   │   │   ├── BodySilhouette.svelte
-│   │   │   │   └── RecentOpponents.svelte
-│   │   │   ├── admin/          ← Администрирование
-│   │   │   │   ├── CreateUserModal.svelte
-│   │   │   │   └── TechniquesModal.svelte
-│   │   │   └── ui/             ← Общие компоненты
-│   │   │       ├── Header.svelte
-│   │   │       ├── ProfileModal.svelte
-│   │   │       └── SearchPanel.svelte
-│   │   └── routes/             ← Страницы (Auth, Gallery, Stats, Player)
+│   │   │   ├── player/         ← Видео-плеер, таймлайн, судейская панель, чат
+│   │   │   ├── gallery/        ← Галерея видео
+│   │   │   ├── stats/          ← Дашборд статистики бойца
+│   │   │   ├── admin/          ← Модалки администрирования
+│   │   │   └── ui/             ← Общие компоненты UI (Batch AI Modal, Context Menus)
+│   │   └── routes/             ← Страницы (Auth, Gallery, Stats, Player, SharedPlayer)
 │   ├── package.json
 │   ├── vite.config.ts
-│   ├── Dockerfile              ← Dockerfile для сборки фронтенда
-│   ├── nginx.conf              ← Конфигурация Nginx для фронтенда
-│   └── .dockerignore           ← Список игнорирования фронтенда
+│   └── Dockerfile              ← Dockerfile для сборки фронтенда
 ├── docker-compose.yml          ← Production Docker Compose (GHCR образы)
 ├── docker-compose.dev.yml      ← Dev Docker Compose (локальная сборка)
 ├── docs/                       ← Документация
@@ -119,7 +83,7 @@ Errant Fox/
 
 ---
 
-## 1. Авторизация
+## 1. Авторизация и Гостевой Доступ
 
 | Функция | Где | Инструмент |
 |---|---|---|
@@ -127,18 +91,14 @@ Errant Fox/
 | Отправка логина/пароля | Frontend → Backend | POST /api/auth/login |
 | Проверка пароля | **Backend** | Rust: bcrypt сравнение хеша |
 | Выдача токена доступа | **Backend** | Rust: генерация JWT (срок 7 дней) |
-| Хранение токена | Frontend | localStorage (ключ `ef_token`) |
+| Генерация Share-токена | **Backend** | Rust: `make_share_token` (JWT с ID видео и опциональным `bout_id`) |
+| Проверка доступа к расшаренным видео | **Backend** | Rust: декодирование `ShareClaims` |
+| Гостевые комментарии | **Backend** | Rust: запись `guest_nickname` в таблицу `comments` |
 | Проверка токена на каждом запросе | **Backend** | Rust: middleware CurrentUser расшифровывает JWT |
-| Выход из системы | Frontend | Удаление токена из localStorage |
-| Генерация цвета | **Backend** | Rust: детерминированный цвет из user.id при первом логине |
-| Подтверждение цвета при get_me | **Backend** | Если color = null → генерируется и сохраняется |
 
 ---
 
 ## 2. Интеграция с Seafile
-
-> Seafile — отдельный сервис на том же сервере. Наш бэкенд обращается к нему по HTTP.
-> Видеобайты через наш бэкенд **не проходят** — браузер стримит напрямую с Seafile.
 
 | Функция | Где | Инструмент |
 |---|---|---|
@@ -147,204 +107,95 @@ Errant Fox/
 | Парсинг даты из имени папки | **Backend** | Rust: regex `(\d{4}-\d{2}-\d{2})` |
 | Извлечение FPS из video | **Backend** | Rust: `moov.rs` — парсинг MP4 moov atom через HTTP Range (первые 2 МБ) |
 | Добавление новых видео в БД | **Backend** | Rust → SQLite INSERT |
-| Уведомление фронта о новом видео | **Backend → Frontend** | WebSocket broadcast `new_video` |
-| Получение временной ссылки на видео | **Backend** | Rust: reqwest → Seafile API → отдаёт URL клиенту |
+| Получение временной ссылки на видео | **Backend** | Rust: reqwest → Seafile API → отдаёт URL клиенту или Whisper Service |
 | Стриминг видео | Frontend | Браузер: HTML5 `<video src="...seafile_url...">` |
 | Генерация превью-кадров | **Backend** | Rust: скачивает видео частично → FFmpeg → 10 кадров JPG → кеш |
-| Раздача превью-кадров | **Backend** | Rust: GET /api/videos/:id/previews/:frame |
 
 ---
 
-## 3. Галерея (экран «Видео»)
+## 3. Автоматическая ИИ-разметка сходов (Whisper Service)
 
-| Функция | Где | Инструмент |
-|---|---|---|
-| Запрос списка видео с фильтрами | Frontend → Backend | GET /api/videos?fighter=X&date_from=Y&date_to=Z |
-| Фильтрация по бойцам | **Backend** | Rust: SQL WHERE по fighter_a_id / fighter_b_id |
-| Фильтрация по диапазону дат | **Backend** | Rust: SQL WHERE по date |
-| Рендеринг сетки карточек | Frontend | Svelte компоненты VideoCard + VideoGrid |
-| Статичное превью (первый кадр) | Frontend | `<img src="/api/videos/:id/previews/0">` |
-| Hover scrub анимация | Frontend | Svelte: mousemove → меняет src превью (кадры 0…N) |
-| Маркер «Заполните данные» | Frontend | Svelte: условный рендеринг если fighter_a_id = null |
-| Клик на неразмеченное → модал | Frontend | Svelte: TagModal (встроен в VideoCard) |
-| Выбор бойцов A/B в модале | Frontend | Svelte: дропдауны со списком из /api/fighters |
-| Сохранение бойцов A/B | Frontend → Backend | PATCH /api/videos/:id |
-| Переход в видео-плеер | Frontend | Svelte Router (hash-based) |
-| Поиск по комментариям | Frontend → Backend | GET /api/comments/search?q=... → SearchPanel |
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin as Администратор
+    participant FE as Frontend (Svelte 5)
+    participant BE as Backend (Rust Axum)
+    participant WS as WebSocket Clients
+    participant AI as Whisper Service (FastAPI)
+    participant SF as Seafile Storage
+    participant DB as SQLite DB
+
+    Admin->>FE: Клик "Запустить ИИ-разметку" (одиночная или пакетная)
+    FE->>BE: POST /api/videos/{id}/ai-label
+    BE->>DB: UPDATE videos SET is_analyzing = 1
+    BE->>WS: Push UpdateVideoAiLabeled (is_analyzing=true)
+    BE-->>FE: HTTP 202 Accepted (Background task spawned)
+    
+    BE->>SF: Запрос генерации прямой ссылки на видео/аудио
+    SF-->>BE: Прямой URL файла
+    BE->>AI: POST /analyze {audio_url, video_id}
+    
+    note over AI: Очередь анализов (asyncio.Lock)<br/>Проверка отмены (cancelled_video_ids)
+    AI->>SF: Загрузка аудиофайла
+    AI->>AI: Конвертация FFmpeg -> WAV 16kHz mono
+    AI->>AI: Транскрипция Faster-Whisper (int8 CPU)
+    AI->>AI: Детекция стоп-слов (Стоп, Бой, Время)
+    AI->>AI: Acoustic Peak Refinement (уточнение пика выкрика)
+    AI-->>BE: JSON {exchanges: [{start_ms, end_ms}], words: [...]}
+
+    BE->>BE: Сохранение data/transcripts/{video_id}.json
+    BE->>DB: REPLACE INTO bouts (is_ai = 1), INSERT INTO bout_history
+    BE->>DB: UPDATE videos SET is_ai_labeled = 1, is_analyzing = 0
+    BE->>WS: Push UpdateVideoAiLabeled (is_ai_labeled=true, is_analyzing=false)
+    BE->>WS: Push UpdateVideoScore
+```
+
+### Акустическое уточнение пиков (Acoustic Peak Refinement)
+Whisper может возвращать таймкод слова с погрешностью до нескольких сотен миллисекунд. Чтобы сход привязывался точно к моменту судейского команда-выкрика:
+1. Берется временное окно `[T_whisper - 1.5s, T_whisper + 0.5s]` аудиодорожки.
+2. Рассчитывается RMS (Root Mean Square) энергия 20-миллисекундных фреймов.
+3. Находится точка резкого нарастания звука (onset frame), превышающая порог фонового шума.
+4. Скооректированный таймкод пика `T_exact` используется для построения интервала схода: `[max(0, T_exact - 2.0s), T_exact + 1.0s]`.
 
 ---
 
-## 4. Видео-плеер
-
-### 4.1. Воспроизведение
+## 4. Видеоплеер и Таймлайн
 
 | Функция | Где | Инструмент |
 |---|---|---|
 | Загрузка метаданных видео (бойцы, буты, комменты) | Frontend → Backend | GET /api/videos/:id |
-| Стриминг видео | **Браузер напрямую с Seafile** | HTML5 `<video>` |
-| Play / Pause | Frontend | `videoElement.play()` / `.pause()` |
-| Клик на видео = play/pause | Frontend | Svelte: click listener |
-| Seek по клику на прогресс-бар | Frontend | `videoElement.currentTime = t` |
-| Цифровой зум (колесо мыши) | Frontend | CSS `transform: scale()` с origin в точке курсора |
-| Покадровый шаг вперёд (X) | Frontend | HybridVideoDecoder → WebCodecs |
-| Покадровый шаг назад (Z) | Frontend | HybridVideoDecoder → WebCodecs |
-| Пауза (Space) | Frontend | Svelte: keydown listener |
-| Контроль скорости (0.1×–2.0×) | Frontend | `videoElement.playbackRate` |
-| Громкость | Frontend | `videoElement.volume` |
-| Loop (зацикливание диапазона) | Frontend | Svelte: watchdog на timeupdate → seek к start |
+| Покадровый шаг вперёд (X) / назад (Z) | Frontend | HybridVideoDecoder → WebCodecs |
+| Цифровой зум | Frontend | CSS `transform: scale()` с origin в точке курсора |
+| Интерактивный таймлайн | Frontend | Svelte 5 (`$state`, `$derived`, `untrack`) |
+| Циклическое воспроизведение (Loop) схода | Frontend | Svelte: one-shot effect с untrack |
+| Модалка инспектора транскрипта | Backend | GET /api/videos/:id/transcript |
 
-### 4.2. Таймлайн (нижняя панель)
+---
+
+## 5. Чат и Публичный Шаринг
 
 | Функция | Где | Инструмент |
 |---|---|---|
-| Основной прогресс-бар | Frontend | Svelte: `currentTime / duration * 100%` |
-| Маркеры комментариев (точки) | Frontend | Svelte: SVG/div по `timestamp_ms / duration` |
-| Трек сходов (цветные прямоугольники) | Frontend | Svelte: `time_start_ms / duration` → ширина и позиция |
-| Клик на сегмент схода → loop | Frontend | Svelte: устанавливает loopStart/loopEnd + включает loop |
-| Клик на маркер комментария → seek | Frontend | `videoElement.currentTime = comment.timestamp_ms / 1000` |
+| Привязка комментария к таймкоду | Frontend | Svelte: берет `currentTime` плеера |
+| Авто-привязка к сходу | **Backend** | Запись `bout_id` если попадает в интервал |
+| Отправка гостевого комментария | Frontend → Backend | POST /api/shared/videos/:id/comments |
+| Генерация ссылки шаринга | Frontend → Backend | POST /api/videos/:id/share (bout_id опционально) |
+| Скачивание видеоклипа / схода | Frontend → Backend | GET /api/shared/videos/:id/download, GET /api/shared/bouts/:id/download |
 
 ---
 
-## 5. Разметка сходов (Судейская панель)
+## 6. WebSocket — Live-события
 
-| Функция | Где | Инструмент |
+WebSocket используется для мгновенной синхронизации состояния между пользователями:
+
+| Событие | Описание | Направление |
 |---|---|---|
-| Дропдауны бойцов A/B | Frontend | Svelte: предзаполнены из метаданных видео |
-| Нажать START → зафиксировать начало | Frontend | Svelte: записывает `currentTime` |
-| Нажать FINISH → отправить сход | Frontend → Backend | POST /api/bouts (video_id, time_start_ms, time_end_ms) |
-| Сохранение схода в БД | **Backend** | Rust → SQLite |
-| Broadcast схода всем зрителям | **Backend** | WebSocket: рассылка `update_bout` |
-| Список карточек сходов | Frontend | Svelte: отсортировано по order_index |
-| Раскрытие/закрытие карточки | Frontend | Svelte: локальный стейт (аккордеон) |
-| Поля карточки: очки, техника, зона, результат | Frontend | Svelte: форма с дропдаунами + HitZonePicker |
-| Выбор зоны (HitZonePicker) | Frontend | Svelte: SVG-силуэт с 16 кликабельными зонами |
-| Список техник для дропдауна | Frontend (кеш) | Загружается один раз: GET /api/techniques |
-| Зоны поражения (enum) | Frontend | Константа: 16 значений (HitZonePicker) |
-| Сохранить карточку | Frontend → Backend | PATCH /api/bouts/:id |
-| Удалить сход | Frontend → Backend | DELETE /api/bouts/:id |
-| TOTAL SCORE в футере | Frontend | Svelte: `sum(score_a) : sum(score_b)` из загруженных бутов |
-| Live-обновление | Frontend ← Backend | WS событие `update_bout` → обновить/удалить bout в списке |
-
----
-
-## 6. Чат и комментарии
-
-| Функция | Где | Инструмент |
-|---|---|---|
-| Загрузка комментариев при открытии видео | Frontend → Backend | В составе GET /api/videos/:id |
-| Отображение треда комментариев | Frontend | Svelte: рекурсивный компонент (reply_to_id) |
-| Поле ввода + Enter = отправить | Frontend | Svelte: форма |
-| Привязка к текущей позиции видео | Frontend | Svelte: берёт `currentTime` в момент отправки |
-| Авто-привязка к сходу | **Backend** | Определяет bout_id по timestamp_ms |
-| Сохранение комментария в БД | **Backend** | Rust → SQLite |
-| Real-time рассылка другим зрителям | **Backend** | WebSocket broadcast `new_comment` |
-| Получение нового комментария live | Frontend | WebSocket listener → добавляет в список |
-| Клик на тайм-код → seek + пауза | Frontend | `currentTime = ms / 1000` + `pause()` |
-| Ответить на комментарий | Frontend → Backend | POST /api/comments (с reply_to_id) |
-| Лайк / дизлайк комментария | Frontend → Backend | POST /api/comments/:id/react |
-| Убрать реакцию | Frontend → Backend | DELETE /api/comments/:id/react |
-| Поиск по комментариям | Frontend → Backend | GET /api/comments/search?q=... |
-| Все видят все комментарии | **Backend** | Rust: без фильтрации по пользователю |
-
----
-
-## 7. Статистика (экран «Бойцы»)
-
-> Данные загружаются с бэкенда один раз. Все вычисления, фильтрация, графики — **на фронтенде**.
-
-| Функция | Где | Инструмент |
-|---|---|---|
-| Список бойцов в сайдбаре | Frontend (кеш) | GET /api/fighters |
-| Загрузка всех боёв бойца | Frontend → Backend | GET /api/fighters/:id/bouts |
-| Таблица «История боёв» | Frontend | Svelte: HistoryTable с сортировкой/фильтрацией |
-| Фильтрация по столбцам таблицы | Frontend | Svelte: реактивный filtered-массив |
-| Блок «Топ техник» | Frontend | Svelte: TopTechniques — groupBy technique + max count |
-| Квик-блоки: чаще всего использую/промахиваюсь/получаю | Frontend | Svelte: QuickStats — computed из filtered-массива |
-| Радарная диаграмма результатов | Frontend | Chart.js: RadarChart — 7 осей (hit/afterblow/late/disqualification/no_strike/miss/blocked) |
-| График: частота поединков (X=недели, Y=кол-во) | Frontend | Chart.js: FrequencyChart |
-| График: динамика результатов (победа/поражение) | Frontend | Chart.js: ResultsChart + фильтр по оппоненту |
-| Процент побед/поражений | Frontend | Svelte: `wins / total * 100` |
-| График: прогресс по баллам | Frontend | Chart.js: ScoreChart |
-| Силуэт: нанесённый урон | Frontend | SVG (BodySilhouette) с динамической заливкой 6 зон |
-| Силуэт: полученный урон | Frontend | SVG — данные бойца B в бутах где A участвовал |
-| Последние оппоненты | Frontend | Svelte: RecentOpponents — список с win/loss |
-| Дата первого зафиксированного боя | Frontend | Svelte: min(date) из массива боёв |
-| Клик → → переход к видео | Frontend | Svelte Router hash `#/player/video_id?t=timestamp_ms` |
-
----
-
-## 8. Управление пользователями
-
-| Функция | Где | Инструмент |
-|---|---|---|
-| Создать пользователя (Admin) | Frontend → Backend | POST /api/admin/users |
-| Изменить пользователя (Admin) | Frontend → Backend | PATCH /api/admin/users/:id |
-| Загрузить аватар пользователю (Admin) | Frontend → Backend | POST /api/admin/users/:id/avatar |
-| Хеширование пароля | **Backend** | Rust: bcrypt |
-| Просмотр профиля | Frontend | GET /api/users/me |
-| Редактирование профиля | Frontend → Backend | PATCH /api/users/me (username, display_name, password, color) |
-| Загрузка/смена аватара | Frontend → Backend | POST /api/users/me/avatar |
-| Проверка прав Admin | **Backend** | Rust: middleware читает is_admin из JWT |
-| Удалить пользователя (Admin) | Frontend → Backend | DELETE /api/admin/users/:id |
-
----
-
-## 9. Управление техниками (Admin)
-
-| Функция | Где | Инструмент |
-|---|---|---|
-| Список всех техник | Frontend → Backend | GET /api/techniques |
-| Добавить технику | Frontend → Backend | POST /api/admin/techniques (name + description) |
-| Изменить технику | Frontend → Backend | PATCH /api/admin/techniques/:id |
-| Удалить технику | Frontend → Backend | DELETE /api/admin/techniques/:id |
-| Хранение списка | **Backend** | SQLite: таблица techniques |
-
----
-
-## Схема взаимодействия
-
-```
-[ Браузер ]                    [ Backend (Rust) ]           [ Seafile ]
-    │                                  │                         │
-    │── POST /api/auth/login ─────────►│                         │
-    │◄── JWT токен ───────────────────│                         │
-    │                                  │                         │
-    │── GET /api/videos ──────────────►│── HTTP GET (список) ──►│
-    │◄── список видео ────────────────│◄── папки/файлы ─────────│
-    │                                  │                         │
-    │── GET /api/videos/:id/previews ─►│── FFmpeg (нарезка) ───►│
-    │◄── превью кадры (JPG) ──────────│    (один раз, кеш)      │
-    │                                  │                         │
-    │── GET /api/videos/:id ──────────►│── GET seafile_url ────►│
-    │◄── метаданные + seafile_url ────│◄── временная ссылка ────│
-    │                                  │                         │
-    │── видео-поток ──────────────────────────────────────────►│
-    │◄── байты видео ────────────────────────────────────────────│
-    │   (браузер стримит напрямую)     │                         │
-    │                                  │                         │
-    │── WS: connect ──────────────────►│                         │
-    │── WS: {"token":"..."} ──────────►│── валидация JWT         │
-    │── WS: {"watching":"video-id"} ──►│── фильтр событий        │
-    │◄── WS: new_comment ───────────────│── SQLite INSERT         │
-    │◄── WS: update_bout ──────────────│── SQLite UPDATE/DELETE  │
-    │◄── WS: new_video ────────────────│── Seafile sync found    │
-```
-
----
-
-## WebSocket — только live-события
-
-WebSocket используется **только** там, где нужно мгновенное обновление у нескольких пользователей:
-
-| Событие | Направление | Фильтрация |
-|---|---|---|
-| Новый комментарий (`new_comment`) | Backend → клиенты, watching video_id | По video_id |
-| Изменение/удаление схода (`update_bout`) | Backend → клиенты, watching video_id | По video_id |
-| Новое видео появилось в Seafile (`new_video`) | Backend → все подключённые | Без фильтрации |
-
-Клиент отправляет `{"watching": "<video_id>"}` при открытии видео и `{"watching": null}` при закрытии. События `new_comment` и `update_bout` доставляются только тем, кто watching нужное видео.
-
-Всё остальное — REST.
+| `new_comment` | Новый комментарий к видео | Backend → Clients watching `video_id` |
+| `update_bout` | Изменение или удаление схода | Backend → Clients watching `video_id` |
+| `new_video` | В Seafile обнаружено новое видео | Backend → Все подключенные |
+| `UpdateVideoAiLabeled` | Изменение статуса ИИ-анализа (`is_analyzing`, `is_ai_labeled`) | Backend → Все подключенные |
+| `UpdateVideoScore` | Обновление итогового счета видео | Backend → Все подключенные |
 
 ---
 
@@ -352,13 +203,10 @@ WebSocket используется **только** там, где нужно м
 
 | Данные | Где хранится |
 |---|---|
-| Видеофайлы | Seafile |
-| Превью-кадры (JPG) | Локальная папка на сервере (`/data/previews/`) |
-| Аватары пользователей | Локальная папка на сервере (`/data/avatars/`) |
-| Пользователи, бойцы, права | SQLite: `users` |
-| Видео-метаданные, seafile_path, FPS | SQLite: `videos` |
-| Буты (сходы) | SQLite: `bouts` |
-| Техники | SQLite: `techniques` |
-| Комментарии | SQLite: `comments` |
-| Реакции на комментарии | SQLite: `comment_reactions` |
-| JWT-токены | Только у клиента (localStorage, ключ `ef_token`) |
+| Видеофайлы | Seafile Server |
+| ИИ-модели Whisper | Docker volume `whisper_cache` (`/root/.cache/whisper`) |
+| Сырые транскрипты ИИ | Локальная директория `/data/transcripts/{video_id}.json` |
+| Превью-кадры (JPG) | Локальная директория `/data/previews/` |
+| Аватары пользователей | Локальная директория `/data/avatars/` |
+| База данных SQLite | Файл `/data/db/errant_fox.db` |
+| JWT-токены авторизации | `localStorage` браузера (`ef_token`) |

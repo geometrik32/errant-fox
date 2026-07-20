@@ -259,13 +259,25 @@ tokio-tungstenite = "0.26"
 - [x] Обработка ошибок: apiFetch показывает сообщения, WS переподключается
 - [x] Тёмная/светлая темы (CSS-переменные, data-theme)
 - [x] Адаптивная вёрстка (mobile-friendly)
-- [x] `infra/Dockerfile.backend` — multi-stage (rust:1.80-alpine → alpine:3.20)
-- [x] `infra/Dockerfile.frontend` — multi-stage (node:20-alpine → nginx:alpine)
-- [x] `infra/docker-compose.yml` — backend + frontend, Traefik labels
-- [x] `infra/docker-compose.local.yml` — локальное переопределение (без Traefik, порты наружу)
-- [x] `infra/nginx.conf` — проксирование /api и /ws на backend
-- [x] `deploy.md` — инструкция по деплою на TrueNAS
+- [x] Dockerfile (multi-stage) и docker-compose конфигурация
+- [x] deploy.md — инструкция по деплою на TrueNAS
 - [x] Миграции применяются автоматически при старте бэкенда
+
+---
+
+## Фаза 9 — Модуль ИИ-разметки, Публичный шаринг и Расширения ✅
+
+**Результат:** интеграция Faster-Whisper, акустическое уточнение пиков, пакетный анализ, гостевые ссылки и учет ролей.
+
+### Выполнено:
+- [x] Разработка микросервиса `whisper-service` (Python + FastAPI + Faster-Whisper int8 CTranslate2)
+- [x] Алгоритм **Acoustic Peak Refinement** (анализ RMS энергии волновой формы около выкрика)
+- [x] Пакетная разметка (`Batch AI Modal`) и система отмены заданий
+- [x] Публичные ссылки и шаринг видео (`POST /api/videos/:id/share`, `/api/shared/*`)
+- [x] Гостевые комментарии со свободным указанием никнейма
+- [x] Миграции 0006–0012 (`vk_id`, `bout_history`, `guest_nickname`, `role`, `is_ai_labeled`, `is_analyzing`, `is_ai`)
+- [x] Инспектор распознавания сходов (`GET /api/videos/:id/transcript`)
+- [x] Реактивные обновления Timeline и Плеера на Svelte 5
 
 ---
 
@@ -293,6 +305,17 @@ tokio-tungstenite = "0.26"
 | PATCH | `/api/videos/:id` | `api/videos.rs` |
 | GET | `/api/videos/:id/stream` | `api/videos.rs` |
 | GET | `/api/videos/:id/previews/:frame` | `api/videos.rs` |
+| POST | `/api/videos/:id/ai-label` | `api/videos.rs` |
+| POST | `/api/videos/:id/cancel-analysis` | `api/videos.rs` |
+| GET | `/api/videos/:id/transcript` | `api/videos.rs` |
+| POST | `/api/videos/:id/share` | `api/videos.rs` |
+| GET | `/api/shared/videos/:id` | `api/videos.rs` |
+| POST | `/api/shared/videos/:id/comments` | `api/videos.rs` |
+| GET | `/api/shared/videos/:id/download` | `api/videos.rs` |
+| GET | `/api/shared/bouts/:id/download` | `api/bouts.rs` |
+| GET | `/api/admin/videos/sync-check` | `api/videos.rs` |
+| POST | `/api/admin/videos/sync-clean` | `api/videos.rs` |
+| POST | `/api/admin/videos/import` | `api/videos.rs` |
 | POST | `/api/bouts` | `api/bouts.rs` |
 | PATCH | `/api/bouts/:id` | `api/bouts.rs` |
 | DELETE | `/api/bouts/:id` | `api/bouts.rs` |
@@ -303,3 +326,4 @@ tokio-tungstenite = "0.26"
 | DELETE | `/api/comments/:id/react` | `api/comments.rs` |
 | GET | `/api/comments/search` | `api/comments.rs` |
 | GET | `/ws` | `ws.rs` |
+
