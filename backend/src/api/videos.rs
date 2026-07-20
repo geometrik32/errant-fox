@@ -1809,3 +1809,100 @@ async fn render_transcript_html(video_id: &str, token: &str, raw_json: &str) -> 
     html
 }
 
+#[derive(Deserialize)]
+pub struct ShareOgQuery {
+    pub token: Option<String>,
+    pub bout_id: Option<i32>,
+    pub t: Option<i64>,
+}
+
+pub async fn og_share_video(
+    Path(id): Path<String>,
+    Query(query): Query<ShareOgQuery>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let video_id = id.clone();
+    let db_pool = state.db.clone();
+    let bout_id_opt = query.bout_id;
+
+    let res = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::{videos, users, bouts};
+        let mut conn = db_pool.get().ok()?;
+
+        let video = videos::table
+            .filter(videos::id.eq(&video_id))
+            .first::<Video>(&mut conn)
+            .ok()?;
+
+        let fighter_a = video.fighter_a_id.as_ref().and_then(|fa_id| {
+            users::table.filter(users::id.eq(fa_id)).first::<User>(&mut conn).ok()
+        });
+        let fighter_b = video.fighter_b_id.as_ref().and_then(|fb_id| {
+            users::table.filter(users::id.eq(fb_id)).first::<User>(&mut conn).ok()
+        });
+
+        let mut bout_info = None;
+        if let Some(bid) = bout_id_opt {
+            if let Ok(b) = bouts::table.filter(bouts::id.eq(bid)).first::<Bout>(&mut conn) {
+                bout_info = Some(b);
+            }
+        }
+
+        Some((video, fighter_a, fighter_b, bout_info))
+    }).await.ok().flatten();
+
+    let (title, description) = match res {
+        Some((video, fighter_a, fighter_b, bout_info)) => {
+            let name_a = fighter_a.map(|u| u.display_name).unwrap_or_else(|| "Игрок A".to_string());
+            let name_b = fighter_b.map(|u| u.display_name).unwrap_or_else(|| "Игрок B".to_string());
+            let base_title = format!("{} vs {}", name_a, name_b);
+
+            let main_title = if let Some(b) = bout_info {
+                format!("Сход №{} • Errant Fox — {}", b.bout_number, base_title)
+            } else {
+                format!("Errant Fox — {}", base_title)
+            };
+
+            let desc = format!("Анализ фехтовального боя. Дата: {}", video.date);
+            (main_title, desc)
+        }
+        None => (
+            "Errant Fox — Видео".to_string(),
+            "Анализ фехтовальных боев и сходов в Errant Fox".to_string(),
+        )
+    };
+
+    let token_param = query.token.as_deref().unwrap_or("");
+    let bout_param = query.bout_id.map(|b| format!("&bout_id={}", b)).unwrap_or_default();
+    let time_param = query.t.map(|t| format!("&t={}", t)).unwrap_or_default();
+
+    let target_hash_url = format!("/#/share/video/{}?token={}{}{}", id, token_param, bout_param, time_param);
+
+    let html = format!(r#"<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <meta property="og:site_name" content="Errant Fox" />
+    <meta property="og:type" content="video.other" />
+    <meta property="og:title" content="{title}" />
+    <meta property="og:description" content="{description}" />
+    <meta property="og:image" content="/icon-512.png" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta http-equiv="refresh" content="0;url={target_hash_url}" />
+</head>
+<body style="background:#0a0a0c;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+    <div style="text-align:center;">
+        <p>Перенаправление на Errant Fox...</p>
+        <p><a href="{target_hash_url}" style="color:#f59e0b;">Нажмите здесь, если перенаправление не произошло автоматически</a></p>
+    </div>
+    <script>
+        window.location.href = "{target_hash_url}";
+    </script>
+</body>
+</html>"#);
+
+    axum::response::Html(html)
+}
+

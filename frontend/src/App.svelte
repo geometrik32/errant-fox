@@ -80,6 +80,14 @@
     hash.startsWith('#/player/') || hash.startsWith('#/share/video/') ? 'player' : hash === '#/stats' ? 'stats' : 'gallery'
   );
 
+  $effect(() => {
+    if (routeName === 'gallery') {
+      document.title = 'Errant Fox — Анализ боев';
+    } else if (routeName === 'stats') {
+      document.title = 'Errant Fox — Статистика';
+    }
+  });
+
   let isShareRoute = $derived(hash.startsWith('#/share/video/'));
 
   let playerId = $derived.by(() => {
