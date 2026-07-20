@@ -1,6 +1,7 @@
 <script lang="ts">
   import { techniques, currentUser } from '../../stores';
   import { createTechnique, patchTechnique, deleteTechnique } from '../api/techniques';
+  import ConfirmModal from '../ui/ConfirmModal.svelte';
 
   interface Props {
     onclose?: () => void;
@@ -55,8 +56,17 @@
     }
   }
 
-  async function remove(id: number, name: string) {
-    if (!confirm(`Удалить технику «${name}»?\n\nЕсли техника записана в сходах, данные о ней там сотрутся.`)) return;
+  let deleteTargetTechnique = $state<{ id: number; name: string } | null>(null);
+
+  function promptDelete(id: number, name: string) {
+    deleteTargetTechnique = { id, name };
+  }
+
+  async function confirmDelete() {
+    if (!deleteTargetTechnique) return;
+    const { id } = deleteTargetTechnique;
+    deleteTargetTechnique = null;
+
     deleteErrors = { ...deleteErrors, [id]: '' };
     try {
       await deleteTechnique(id);
@@ -166,7 +176,7 @@
                       </button>
                       <button
                         class="btn-delete"
-                        onclick={() => remove(t.id, t.name)}
+                        onclick={() => promptDelete(t.id, t.name)}
                         aria-label="Удалить технику {t.name}"
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -212,6 +222,18 @@
     </div>
   </div>
 </div>
+
+{#if deleteTargetTechnique}
+  <ConfirmModal
+    title="Удаление техники"
+    message={`Удалить технику «${deleteTargetTechnique.name}»?\n\nЕсли техника записана в сходах, данные о ней там сотрутся.`}
+    confirmText="Удалить"
+    cancelText="Отмена"
+    danger={true}
+    onconfirm={confirmDelete}
+    oncancel={() => (deleteTargetTechnique = null)}
+  />
+{/if}
 
 <style>
   .modal-backdrop {

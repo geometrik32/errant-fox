@@ -4,6 +4,7 @@
   import { getFighters } from '../api/fighters';
   import { resolveColor } from '../api/types';
   import { generateCodeVerifier, generateCodeChallenge } from '$lib/utils/pkce';
+  import ConfirmModal from './ConfirmModal.svelte';
 
   interface Props {
     onclose: () => void;
@@ -113,8 +114,14 @@
     }
   }
 
-  async function handleUnlinkVk() {
-    if (!confirm('Вы уверены, что хотите отвязать аккаунт ВКонтакте?')) return;
+  let showUnlinkVkConfirm = $state(false);
+
+  function promptUnlinkVk() {
+    showUnlinkVkConfirm = true;
+  }
+
+  async function confirmUnlinkVk() {
+    showUnlinkVkConfirm = false;
     try {
       saving = true;
       error = '';
@@ -220,7 +227,7 @@
               </svg>
               <span class="vk-connected-label">ВКонтакте подключен</span>
             </div>
-            <button type="button" class="vk-unlink-btn" onclick={handleUnlinkVk} disabled={saving}>
+            <button type="button" class="vk-unlink-btn" onclick={promptUnlinkVk} disabled={saving}>
               Отвязать
             </button>
           </div>
@@ -266,6 +273,18 @@
     </form>
   </div>
 </div>
+
+{#if showUnlinkVkConfirm}
+  <ConfirmModal
+    title="Отвязка ВКонтакте"
+    message="Вы уверены, что хотите отвязать аккаунт ВКонтакте?"
+    confirmText="Отвязать"
+    cancelText="Отмена"
+    danger={true}
+    onconfirm={confirmUnlinkVk}
+    oncancel={() => (showUnlinkVkConfirm = false)}
+  />
+{/if}
 
 <style>
   .modal-backdrop {

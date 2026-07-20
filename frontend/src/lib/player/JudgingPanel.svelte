@@ -6,6 +6,7 @@
   import { createBout } from '../api/bouts';
   import { patchVideo } from '../api/videos';
   import BoutCard from './BoutCard.svelte';
+  import ConfirmModal from '../ui/ConfirmModal.svelte';
 
   interface Props {
     video: VideoFull;
@@ -164,10 +165,18 @@
   let expandedBoutId = $state<number | null>(untrack(() => sharedBoutId ?? null));
   let dirtyBoutIds = $state(new Set<number>());
 
-  async function handleExpand(id: number) {
+  let targetExpandId = $state<number | null>(null);
+
+  function handleExpand(id: number) {
     if (expandedBoutId !== null && expandedBoutId !== id && dirtyBoutIds.has(expandedBoutId)) {
-      if (!confirm('Есть несохранённые изменения. Свернуть текущую карточку?')) return;
+      targetExpandId = id;
+      return;
     }
+    doExpand(id);
+  }
+
+  async function doExpand(id: number) {
+    targetExpandId = null;
     expandedBoutId = id;
     const b = bouts.find(b => b.id === id);
     if (b) onseekrequest?.(b.time_start_ms, b.time_end_ms);
@@ -494,6 +503,18 @@
   </div>
 
 </div>
+
+{#if targetExpandId !== null}
+  <ConfirmModal
+    title="Несохранённые изменения"
+    message="В текущей карточке схода есть несохранённые изменения. Свернуть её и открыть другую?"
+    confirmText="Свернуть"
+    cancelText="Отмена"
+    danger={false}
+    onconfirm={() => doExpand(targetExpandId!)}
+    oncancel={() => (targetExpandId = null)}
+  />
+{/if}
 
 <style>
   .panel {
