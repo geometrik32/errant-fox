@@ -8,6 +8,7 @@
   import HitZonePicker from './HitZonePicker.svelte';
   import BoutHistoryModal from './BoutHistoryModal.svelte';
   import ShareModal from '../ui/ShareModal.svelte';
+  import ConfirmModal from '../ui/ConfirmModal.svelte';
 
   type ResultType = 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | 'disqualification' | 'afterblow';
 
@@ -164,15 +165,30 @@
     }
   }
 
+  let showDeleteConfirm = $state(false);
+  let showCollapseConfirm = $state(false);
+
   function handleCollapse() {
-    if (dirty && !confirm('Есть несохранённые изменения. Свернуть карточку?')) return;
+    if (dirty) {
+      showCollapseConfirm = true;
+    } else {
+      oncollapse?.();
+    }
+  }
+
+  function confirmCollapse() {
+    showCollapseConfirm = false;
     oncollapse?.();
   }
 
   let deleting = $state(false);
 
-  async function handleDelete() {
-    if (!confirm(`Удалить Сход ${boutIndex}?`)) return;
+  function promptDelete() {
+    showDeleteConfirm = true;
+  }
+
+  async function confirmDelete() {
+    showDeleteConfirm = false;
     deleting = true;
     try {
       await deleteBout(bout.id);
@@ -530,7 +546,7 @@
             <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
           </svg>
         </button>
-        <button class="btn-delete" onclick={handleDelete} disabled={deleting} aria-label="Удалить сход">
+        <button class="btn-delete" onclick={promptDelete} disabled={deleting} aria-label="Удалить сход">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
             <polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14H6L5,6"/><path d="M10,11v6"/><path d="M14,11v6"/><path d="M9,6V4h6v2"/>
           </svg>
@@ -571,6 +587,30 @@
 
 {#if showHistory}
   <BoutHistoryModal boutId={bout.id} {boutIndex} onclose={() => { showHistory = false; }} />
+{/if}
+
+{#if showDeleteConfirm}
+  <ConfirmModal
+    title="Удаление схода"
+    message={`Вы действительно хотите удалить Сход ${boutIndex}? Это действие нельзя отменить.`}
+    confirmText="Удалить"
+    cancelText="Отмена"
+    danger={true}
+    onconfirm={confirmDelete}
+    oncancel={() => (showDeleteConfirm = false)}
+  />
+{/if}
+
+{#if showCollapseConfirm}
+  <ConfirmModal
+    title="Несохранённые изменения"
+    message="В этой карточке схода есть несохранённые изменения. Вы действительно хотите свернуть её?"
+    confirmText="Свернуть"
+    cancelText="Отмена"
+    danger={false}
+    onconfirm={confirmCollapse}
+    oncancel={() => (showCollapseConfirm = false)}
+  />
 {/if}
 
 <style>

@@ -3,6 +3,7 @@
   import { createUser, patchUser, deleteUser, uploadUserAvatar, getAdminUsers, getFighters } from '../api/fighters';
   import { resolveColor } from '../api/types';
   import type { Fighter } from '../api/types';
+  import ConfirmModal from '../ui/ConfirmModal.svelte';
 
   interface Props {
     onclose?: () => void;
@@ -187,8 +188,16 @@
     }
   }
 
-  async function handleDelete(f: Fighter) {
-    if (!confirm(`Точно ли вы хотите удалить пользователя «${f.display_name}»? Все метаданные этого пользователя будут очищены из базы данных.`)) return;
+  let deleteTargetFighter = $state<Fighter | null>(null);
+
+  function promptDelete(f: Fighter) {
+    deleteTargetFighter = f;
+  }
+
+  async function confirmDelete() {
+    if (!deleteTargetFighter) return;
+    const f = deleteTargetFighter;
+    deleteTargetFighter = null;
     try {
       await deleteUser(f.id);
       await loadUsers();
@@ -459,7 +468,7 @@
                       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                     </svg>
                   </button>
-                  <button class="btn-icon danger" onclick={() => handleDelete(f)} title="Удалить">
+                  <button class="btn-icon danger" onclick={() => promptDelete(f)} title="Удалить">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                       <polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                       <path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -482,6 +491,18 @@
     </div>
   </div>
 </div>
+
+{#if deleteTargetFighter}
+  <ConfirmModal
+    title="Удаление пользователя"
+    message={`Точно ли вы хотите удалить пользователя «${deleteTargetFighter.display_name}»? Все метаданные этого пользователя будут очищены из базы данных.`}
+    confirmText="Удалить"
+    cancelText="Отмена"
+    danger={true}
+    onconfirm={confirmDelete}
+    oncancel={() => (deleteTargetFighter = null)}
+  />
+{/if}
 
 <style>
   .modal-backdrop {

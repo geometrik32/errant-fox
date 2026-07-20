@@ -3,6 +3,7 @@
   import { currentUser } from '../../stores';
   import type { Comment, Bout } from '../api/types';
   import { createComment, updateComment, deleteComment, reactComment, deleteReact, createSharedComment } from '../api/comments';
+  import ConfirmModal from '../ui/ConfirmModal.svelte';
 
   interface Props {
     videoId: string;
@@ -182,8 +183,16 @@
     }
   }
 
-  async function handleDelete(id: number) {
-    if (!confirm('Удалить сообщение?')) return;
+  let deleteTargetId = $state<number | null>(null);
+
+  function promptDelete(id: number) {
+    deleteTargetId = id;
+  }
+
+  async function confirmDelete() {
+    if (deleteTargetId === null) return;
+    const id = deleteTargetId;
+    deleteTargetId = null;
     await deleteComment(id);
     comments = comments.filter(c => c.id !== id && c.reply_to_id !== id);
     oncommentschange?.(comments);
@@ -340,7 +349,7 @@
             {#if $currentUser?.id === c.author.id}
               <button class="edit-link" onclick={() => startEdit(c)}>Ред.</button>
             {/if}
-            <button class="del-link" onclick={() => handleDelete(c.id)} title="Удалить">
+            <button class="del-link" onclick={() => promptDelete(c.id)} title="Удалить">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -389,6 +398,18 @@
   </div>
 
 </div>
+
+{#if deleteTargetId !== null}
+  <ConfirmModal
+    title="Удаление сообщения"
+    message="Вы действительно хотите удалить этот комментарий?"
+    confirmText="Удалить"
+    cancelText="Отмена"
+    danger={true}
+    onconfirm={confirmDelete}
+    oncancel={() => (deleteTargetId = null)}
+  />
+{/if}
 
 <style>
   .chat {
