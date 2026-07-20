@@ -160,7 +160,7 @@
             Актуализировать базу
           </button>
           <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showBatchAi = true; }}>
-            Разметить неразмеченные (ИИ)
+            ИИ-разметка видео
           </button>
         {/if}
 

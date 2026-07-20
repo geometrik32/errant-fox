@@ -27,10 +27,77 @@ _start_pattern = re.compile(
 )
 
 
-def _extract_simple_exchanges_from_faster(segments_list):
+import wave
+import numpy as np
+
+def _read_wav_mono(wav_path: str):
+    with wave.open(wav_path, 'rb') as w:
+        params = w.getparams()
+        nchannels, sampwidth, framerate, nframes = params[:4]
+        frames = w.readframes(nframes)
+        if sampwidth == 2:
+            data = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+        elif sampwidth == 4:
+            data = np.frombuffer(frames, dtype=np.int32).astype(np.float32) / 2147483648.0
+        else:
+            raise ValueError(f"Unsupported sample width: {sampwidth}")
+        if nchannels > 1:
+            data = data.reshape(-1, nchannels).mean(axis=1)
+        return framerate, data
+
+def _find_shout_acoustic_peak(wav_path: str, t_whisper: float, search_window_before=1.5, search_window_after=0.5):
+    try:
+        rate, data = _read_wav_mono(wav_path)
+    except Exception as e:
+        print(f"  Warning: Audio read error for acoustic refinement ({e}). Using Whisper timestamp.", flush=True)
+        return t_whisper
+
+    win_start_sec = max(0.0, t_whisper - search_window_before)
+    win_end_sec = min(len(data) / rate, t_whisper + search_window_after)
+
+    idx_start = int(win_start_sec * rate)
+    idx_end = int(win_end_sec * rate)
+
+    if idx_end <= idx_start:
+        return t_whisper
+
+    window_data = data[idx_start:idx_end]
+    frame_len = int(rate * 0.02) # 20ms
+    if len(window_data) < frame_len:
+        return t_whisper
+
+    num_frames = len(window_data) // frame_len
+    rms = np.array([
+        np.sqrt(np.mean(window_data[i * frame_len : (i + 1) * frame_len] ** 2))
+        for i in range(num_frames)
+    ])
+
+    if len(rms) == 0:
+        return t_whisper
+
+    max_frame = np.argmax(rms)
+    max_rms = rms[max_frame]
+    background_noise = np.percentile(rms, 20)
+
+    if max_rms < 0.04 or max_rms < background_noise * 1.8:
+        return t_whisper
+
+    onset_frame = max_frame
+    thresh = background_noise + 0.35 * (max_rms - background_noise)
+    for f in range(max_frame, -1, -1):
+        if rms[f] < thresh:
+            onset_frame = f
+            break
+
+    refined_time = win_start_sec + (onset_frame * 0.02)
+    return float(refined_time)
+
+
+def _extract_simple_exchanges_from_faster(segments_list, wav_path: str):
     """
-    Pure & Simple Detection for faster-whisper output:
-    Every 'Стоп' word detected at T_stop creates a bout: [max(0, T_stop - 2.0s), T_stop + 1.0s].
+    Pure & Simple Detection for faster-whisper output with Acoustic Peak Refinement:
+    Every 'Стоп' word detected at T_stop is refined to the exact onset of the acoustic shout.
+    Bout window: [max(0, T_exact - 2.0s), T_exact + 1.0s].
     Close duplicate stop words (within 3.0s) are grouped to keep only the first trigger.
     """
     all_words = []
@@ -76,8 +143,13 @@ def _extract_simple_exchanges_from_faster(segments_list):
     exchanges = []
     for stop in grouped_stops:
         stop_time = stop["start"]
-        bout_start = max(0.0, stop_time - 2.0)
-        bout_end = stop_time + 1.0
+        refined_stop_time = _find_shout_acoustic_peak(wav_path, stop_time)
+        shift = refined_stop_time - stop_time
+        if abs(shift) > 0.05:
+            print(f"  [Acoustic Refinement] Stop word at {stop_time:.2f}s -> refined to shout onset at {refined_stop_time:.2f}s (shift {shift:+.2f}s)", flush=True)
+
+        bout_start = max(0.0, refined_stop_time - 2.0)
+        bout_end = refined_stop_time + 1.0
 
         exchanges.append({
             "start_ms": int(bout_start * 1000),
@@ -103,7 +175,7 @@ def _detect_exchanges(wav_path: str):
             initial_prompt="Бой! Стоп! Удар! Разметка сходов фехтовального поединка."
         )
         segments_list = list(segments)
-        exchanges, all_words = _extract_simple_exchanges_from_faster(segments_list)
+        exchanges, all_words = _extract_simple_exchanges_from_faster(segments_list, wav_path)
 
         for idx, ex in enumerate(exchanges):
             print(f"  Exchange {idx+1}: {ex['start_ms']}ms – {ex['end_ms']}ms ('{ex.get('stop_word', '')}')", flush=True)
