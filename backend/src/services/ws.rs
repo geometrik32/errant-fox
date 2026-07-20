@@ -117,6 +117,7 @@ pub enum WsEvent {
         video_id: String,
         is_ai_labeled: bool,
         is_analyzing: bool,
+        is_queued: bool,
     },
     UpdateVideoPreview {
         video_id: String,

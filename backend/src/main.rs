@@ -32,9 +32,12 @@ async fn main() {
         use crate::db::models::NewUser;
         use diesel::prelude::*;
         if let Ok(mut conn) = db_pool_clone.get() {
-            // 1. Reset analyzing state
+            // 1. Reset analyzing & queued state
             let _ = diesel::update(videos::table)
-                .set(videos::is_analyzing.eq(false))
+                .set((
+                    videos::is_analyzing.eq(false),
+                    videos::is_queued.eq(false),
+                ))
                 .execute(&mut conn);
 
             // 2. Ensure AI user exists

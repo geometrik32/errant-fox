@@ -162,8 +162,9 @@
 
 <!-- AI-border wrapper -->
 <div class="card-wrapper" 
-     class:ai-labeled={video.is_ai_labeled && !video.is_analyzing}
-     class:analyzing={video.is_analyzing || isAiLabeling}>
+     class:ai-labeled={video.is_ai_labeled && !video.is_analyzing && !video.is_queued}
+     class:analyzing={video.is_analyzing || isAiLabeling}
+     class:queued={video.is_queued && !video.is_analyzing}>
 <button
   class="card"
   class:state-untagged={cardState() === 0}
@@ -192,6 +193,14 @@
       <div class="spinner-container">
         <div class="spinner ai-spinner"></div>
         <span class="spinner-text">Анализ ИИ...</span>
+      </div>
+    {:else if video.is_queued}
+      <div class="spinner-container queued-container">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-yellow)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span class="spinner-text queued-text">В очереди ИИ</span>
       </div>
     {:else if isRegenerating}
       <div class="spinner-container">
@@ -474,9 +483,31 @@
     box-shadow: 0 0 10px 1px rgba(124, 58, 237, 0.25);
   }
 
+  /* Queued state: amber glowing border */
+  .card-wrapper.queued {
+    padding: 2px;
+    background: linear-gradient(
+      135deg,
+      #f59e0b 0%,
+      #d97706 50%,
+      #b45309 100%
+    );
+    box-shadow: 0 0 10px 1px rgba(245, 158, 11, 0.35);
+  }
+
   .card-wrapper.analyzing .card,
-  .card-wrapper.ai-labeled .card {
+  .card-wrapper.ai-labeled .card,
+  .card-wrapper.queued .card {
     border-color: transparent;
+  }
+
+  .queued-container {
+    background: rgba(15, 23, 42, 0.8) !important;
+  }
+
+  .queued-text {
+    color: var(--accent-yellow) !important;
+    font-weight: 600;
   }
 
   /* ── Card base ─────────────────────────────────────── */

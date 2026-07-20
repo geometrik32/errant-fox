@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getVideos, aiLabelVideo, cancelAiLabelVideo, batchAiLabelVideos } from '../api/videos';
+  import { getVideos, cancelAiLabelVideo, batchAiLabelVideos } from '../api/videos';
   import type { Video } from '../api/types';
 
   interface Props {
@@ -12,21 +12,25 @@
   let error = $state<string | null>(null);
   let unanalyzedVideos = $state<Video[]>([]);
   let analyzingVideos = $state<Video[]>([]);
+  let queuedVideos = $state<Video[]>([]);
   let starting = $state(false);
   let progressMessage = $state<string | null>(null);
 
-  let isCancelMode = $derived(analyzingVideos.length > 0);
+  let activeOrQueuedCount = $derived(analyzingVideos.length + queuedVideos.length);
+  let isCancelMode = $derived(activeOrQueuedCount > 0);
 
   onMount(async () => {
     try {
       const all = await getVideos();
       // Currently analyzing videos
       analyzingVideos = all.filter(v => v.is_analyzing);
+      // Queued videos
+      queuedVideos = all.filter(v => v.is_queued);
       
-      // Unanalyzed = not human labeled (total_score <= 0 or not tagged) AND not currently ai_labeled AND not currently analyzing
+      // Unanalyzed = not human labeled (total_score <= 0 or not tagged) AND not currently ai_labeled AND not currently analyzing AND not queued
       unanalyzedVideos = all.filter(v => {
         const isHuman = (v.total_score_a ?? 0) > 0 || (v.total_score_b ?? 0) > 0;
-        return !isHuman && !v.is_ai_labeled && !v.is_analyzing;
+        return !isHuman && !v.is_ai_labeled && !v.is_analyzing && !v.is_queued;
       });
     } catch (e) {
       error = e instanceof Error ? e.message : 'Не удалось загрузить список видео';
@@ -40,7 +44,7 @@
     starting = true;
     error = null;
     try {
-      progressMessage = `Запуск фонового анализа на сервере для ${unanalyzedVideos.length} видео...`;
+      progressMessage = `Запуск фоновой очереди на сервере для ${unanalyzedVideos.length} видео...`;
       const ids = unanalyzedVideos.map(v => v.id);
       await batchAiLabelVideos(ids);
       progressMessage = `Серверная очередь успешно запущена для ${unanalyzedVideos.length} видео! Вы можете закрыть это окно.`;
@@ -54,22 +58,23 @@
   }
 
   async function handleBatchCancel() {
-    if (starting || analyzingVideos.length === 0) return;
+    const cancelTargets = [...analyzingVideos, ...queuedVideos];
+    if (starting || cancelTargets.length === 0) return;
     starting = true;
     error = null;
     let count = 0;
     try {
-      for (const video of analyzingVideos) {
+      for (const video of cancelTargets) {
         count++;
-        progressMessage = `Отмена анализа для видео ${count} из ${analyzingVideos.length}...`;
+        progressMessage = `Отмена очереди для видео ${count} из ${cancelTargets.length}...`;
         await cancelAiLabelVideo(video.id).catch(() => {});
       }
-      progressMessage = `Анализ успешно отменен для всех ${analyzingVideos.length} видео.`;
+      progressMessage = `Очередь ИИ успешно отменена для всех ${cancelTargets.length} видео.`;
       setTimeout(() => {
         onclose();
-      }, 1800);
+      }, 1500);
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Ошибка отмены разметки';
+      error = e instanceof Error ? e.message : 'Ошибка отмены очереди';
       starting = false;
     }
   }
@@ -116,15 +121,21 @@
         <p class="msg success">{progressMessage}</p>
       {:else if isCancelMode}
         <p class="warning-text">
-          В данный момент обрабатывается <strong>{analyzingVideos.length} шт.</strong> видео.
-          Вы действительно хотите отменить ИИ-разметку для всех текущих процессов?
+          Анализируется: <strong>{analyzingVideos.length} шт.</strong>, в очереди: <strong>{queuedVideos.length} шт.</strong><br/>
+          Вы действительно хотите отменить ИИ-разметку для всей очереди?
         </p>
 
         <div class="list-container">
           <ul class="stale-list">
             {#each analyzingVideos as video}
               <li>
-                <span class="video-date">[{video.date}]</span>
+                <span class="video-date" style="color: #a78bfa;">[Анализ ИИ...]</span>
+                <span class="video-path" title={video.seafile_path}>{video.seafile_path}</span>
+              </li>
+            {/each}
+            {#each queuedVideos as video}
+              <li>
+                <span class="video-date" style="color: var(--accent-yellow);">[В очереди ИИ]</span>
                 <span class="video-path" title={video.seafile_path}>{video.seafile_path}</span>
               </li>
             {/each}
@@ -139,7 +150,7 @@
               <line x1="15" y1="9" x2="9" y2="15" />
               <line x1="9" y1="9" x2="15" y2="15" />
             </svg>
-            <span>Отменить все ({analyzingVideos.length})</span>
+            <span>Отменить всю очередь ({activeOrQueuedCount})</span>
           </button>
         </div>
       {:else if unanalyzedVideos.length === 0}

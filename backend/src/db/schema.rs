@@ -28,6 +28,7 @@ diesel::table! {
         created_at     -> Timestamp,
         is_ai_labeled  -> Bool,
         is_analyzing   -> Bool,
+        is_queued      -> Bool,
     }
 }
 

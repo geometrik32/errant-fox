@@ -152,14 +152,14 @@
         } else if (msg.type === 'update_video_ai_labeled') {
           allVideos = allVideos.map(v => {
             if (v.id === msg.video_id) {
-              return { ...v, is_ai_labeled: msg.is_ai_labeled, is_analyzing: msg.is_analyzing };
+              return { ...v, is_ai_labeled: msg.is_ai_labeled, is_analyzing: msg.is_analyzing, is_queued: msg.is_queued };
             }
             return v;
           });
           applyFilter();
-          if (!msg.is_analyzing) {
+          if (!msg.is_analyzing && !msg.is_queued) {
             getVideo(msg.video_id).then((updated: VideoFull) => {
-              allVideos = allVideos.map(v => v.id === msg.video_id ? { ...v, ...updated, is_analyzing: false } : v);
+              allVideos = allVideos.map(v => v.id === msg.video_id ? { ...v, ...updated, is_analyzing: false, is_queued: false } : v);
               applyFilter();
             }).catch(() => {});
           }
