@@ -514,6 +514,7 @@ pub async fn delete_bout(
                     is_ai_labeled,
                     is_analyzing: false,
                     is_queued: false,
+                    has_transcript: None,
                 });
             }
         }

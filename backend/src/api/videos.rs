@@ -54,6 +54,7 @@ pub struct VideoListDto {
     pub is_ai_labeled: bool,
     pub is_analyzing: bool,
     pub is_queued: bool,
+    pub has_transcript: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seafile_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -110,6 +111,7 @@ pub struct VideoFullDto {
     pub is_ai_labeled: bool,
     pub is_analyzing: bool,
     pub is_queued: bool,
+    pub has_transcript: bool,
     pub bouts: Vec<BoutDto>,
     pub comments: Vec<CommentDto>,
 }
@@ -165,6 +167,7 @@ fn build_video_full(
     users_map: &HashMap<String, User>,
     reactions_map: &HashMap<i32, (i32, i32, Option<String>)>,
     stream_url: String,
+    transcripts_dir: &str,
 ) -> VideoFullDto {
     let fighter_a = video
         .fighter_a_id
@@ -216,6 +219,8 @@ fn build_video_full(
         })
         .collect();
 
+    let has_transcript = std::path::Path::new(&format!("{}/{}.json", transcripts_dir, video.id)).exists();
+
     VideoFullDto {
         id: video.id.clone(),
         date: video.date.format("%Y-%m-%d").to_string(),
@@ -227,6 +232,7 @@ fn build_video_full(
         is_ai_labeled: video.is_ai_labeled,
         is_analyzing: video.is_analyzing,
         is_queued: video.is_queued,
+        has_transcript,
         bouts: bouts.iter().map(bout_dto).collect(),
         comments: comment_dtos,
     }
@@ -313,6 +319,7 @@ pub async fn list_videos(
     let db = state.db.clone();
     let fighter_id = params.fighter_id.clone();
     let is_admin = _user.0.is_admin;
+    let transcripts_dir = state.transcripts_dir.clone();
 
     let result = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{bouts, users, videos};
@@ -421,6 +428,7 @@ pub async fn list_videos(
                     is_ai_labeled: v.is_ai_labeled,
                     is_analyzing: v.is_analyzing,
                     is_queued: v.is_queued,
+                    has_transcript: std::path::Path::new(&format!("{}/{}.json", transcripts_dir, v.id)).exists(),
                     seafile_path: if is_admin { Some(v.seafile_path.clone()) } else { None },
                     seafile_web_url: if is_admin {
                         Some(format!(
@@ -480,6 +488,7 @@ pub async fn get_video_dto_impl(
     // 3. Load relations and build full DTO
     let video_id_clone = video_id.to_string();
     let db_clone = db.clone();
+    let transcripts_dir = state.transcripts_dir.clone();
     let dto = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{bouts, comment_reactions, comments};
 
@@ -517,6 +526,7 @@ pub async fn get_video_dto_impl(
             &users_map,
             &reactions_map,
             String::new(),
+            &transcripts_dir,
         ))
     })
     .await
@@ -741,6 +751,7 @@ pub async fn patch_video(
     let user_id = user.id.clone();
     let frontend_origin = state.frontend_url.clone();
     let video_id_for_db = video_id.clone();
+    let transcripts_dir = state.transcripts_dir.clone();
 
     let (dto, notifications) = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{bouts, comment_reactions, comments, videos, users};
@@ -843,6 +854,7 @@ pub async fn patch_video(
             &users_map,
             &reactions_map,
             String::new(),
+            &transcripts_dir,
         );
 
         Ok::<_, AppError>((full_dto, notifications))
@@ -1421,6 +1433,7 @@ pub async fn execute_ai_label_for_video(state: AppState, video_id: String) -> Re
         is_ai_labeled: false,
         is_analyzing: true,
         is_queued: false,
+        has_transcript: None,
     });
 
     let video_id_worker = video_id.clone();
@@ -1557,6 +1570,7 @@ pub async fn execute_ai_label_for_video(state: AppState, video_id: String) -> Re
                 is_ai_labeled: true,
                 is_analyzing: false,
                 is_queued: false,
+                has_transcript: Some(true),
             });
             let _ = ws_hub.send(crate::services::ws::WsEvent::UpdateVideoScore {
                 video_id: video_id_worker,
@@ -1585,6 +1599,7 @@ pub async fn execute_ai_label_for_video(state: AppState, video_id: String) -> Re
                 is_ai_labeled: false,
                 is_analyzing: false,
                 is_queued: false,
+                has_transcript: None,
             });
         }
     }
@@ -1621,6 +1636,7 @@ pub async fn ai_label_video(
         is_ai_labeled: false,
         is_analyzing: false,
         is_queued: true,
+        has_transcript: None,
     });
 
     let _ = state.ai_queue_tx.send(video_id);
@@ -1696,6 +1712,7 @@ pub async fn batch_ai_label_video(
             is_ai_labeled: false,
             is_analyzing: false,
             is_queued: true,
+            has_transcript: None,
         });
         let _ = state.ai_queue_tx.send(vid.clone());
     }
@@ -1746,6 +1763,7 @@ pub async fn cancel_ai_label_video(
         is_ai_labeled,
         is_analyzing: false,
         is_queued: false,
+        has_transcript: None,
     });
 
     // Notify whisper-service to skip this video if it's queued

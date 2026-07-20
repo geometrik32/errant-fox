@@ -152,7 +152,8 @@
         } else if (msg.type === 'update_video_ai_labeled') {
           allVideos = allVideos.map(v => {
             if (v.id === msg.video_id) {
-              return { ...v, is_ai_labeled: msg.is_ai_labeled, is_analyzing: msg.is_analyzing, is_queued: msg.is_queued };
+              const has_transcript = msg.has_transcript !== undefined ? msg.has_transcript : v.has_transcript;
+              return { ...v, is_ai_labeled: msg.is_ai_labeled, is_analyzing: msg.is_analyzing, is_queued: msg.is_queued, has_transcript };
             }
             return v;
           });
