@@ -13,6 +13,10 @@
     looping?: boolean;
     speed?: number;
     volume?: number;
+    hoveredCommentId?: number | null;
+    activeFlashingCommentId?: number | null;
+    oncommenthover?: (id: number) => void;
+    oncommentleave?: () => void;
     onseek?: (timestamp_ms: number) => void;
     onloop?: (range: { start: number; end: number }) => void;
     onboutclick?: (boutId: number) => void;
@@ -30,6 +34,7 @@
     onfinishclick?: () => void;
     onshare?: () => void;
     readonly?: boolean;
+    isDrawingMode?: boolean;
   }
 
   let {
@@ -43,10 +48,15 @@
     looping = false,
     speed = 1,
     volume = 1,
+    readonly = false,
+    isDrawingMode = false,
+    hoveredCommentId = null,
+    activeFlashingCommentId = null,
     fps = 25,
     startTime = null,
     finishing = false,
-    readonly = false,
+    oncommenthover,
+    oncommentleave,
     onseek,
     onloop,
     onboutclick,
@@ -134,12 +144,14 @@
   let progressEl: HTMLDivElement | null = $state(null);
 
   function seekAt(e: MouseEvent, el: HTMLElement) {
+    if (isDrawingMode) return;
     const r = el.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
     onseek?.(pct * duration * 1000);
   }
 
   function startDrag(e: MouseEvent) {
+    if (isDrawingMode) return;
     if (!progressEl) return;
     seekAt(e, progressEl);
     const el = progressEl;
@@ -170,17 +182,22 @@
     duration > 0 ? (b.time_start_ms / (duration * 1000)) * 100 : 0;
   const boutW = (b: Bout) =>
     duration > 0 ? ((b.time_end_ms - b.time_start_ms) / (duration * 1000)) * 100 : 0;
+  let topLevelComments = $derived(comments.filter(c => !c.reply_to_id));
 </script>
 
 <div class="timeline">
 
   <!-- Row 1: Comment markers -->
   <div class="track track--comments">
-    {#each comments as c (c.id)}
+    {#each topLevelComments as c (c.id)}
       <button
         class="c-dot"
+        class:hovered={hoveredCommentId === c.id}
+        class:flashing={activeFlashingCommentId === c.id}
         style="left: {commentPos(c)}%; background: {commentColor(c)}"
-        onclick={() => { onseek?.(c.timestamp_ms); oncommentclick?.(c.id); }}
+        onclick={() => { if (!isDrawingMode) { onseek?.(c.timestamp_ms); oncommentclick?.(c.id); } }}
+        onmouseenter={() => oncommenthover?.(c.id)}
+        onmouseleave={() => oncommentleave?.()}
         title={c.text}
         aria-label="Комментарий: {c.text}"
       ></button>
@@ -389,9 +406,31 @@
     transition: transform 0.1s, background 0.1s;
   }
 
-  .c-dot:hover {
+  .c-dot:hover, .c-dot.hovered {
     transform: translate(-50%, -50%) scale(1.7);
-    background: #7dd0f5;
+    background: #a0aec0 !important;
+    box-shadow: 0 0 8px rgba(160, 174, 192, 0.8);
+  }
+
+  .c-dot.flashing {
+    animation: dot-white-flash 1.2s ease-out;
+  }
+
+  @keyframes dot-white-flash {
+    0% {
+      transform: translate(-50%, -50%) scale(2.2);
+      background: #ffffff !important;
+      box-shadow: 0 0 12px #ffffff;
+    }
+    50% {
+      transform: translate(-50%, -50%) scale(2.0);
+      background: #ffffff !important;
+      box-shadow: 0 0 8px #ffffff;
+    }
+    100% {
+      transform: translate(-50%, -50%) scale(1);
+      box-shadow: none;
+    }
   }
 
 

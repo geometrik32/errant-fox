@@ -90,8 +90,18 @@
     });
   });
 
-  // Highlighted comment ID from URL or timeline click
+  // Highlighted & Hovered comment IDs
   let highlightedCommentId = $state<number | null>(initialHighlightedId ?? null);
+  let hoveredCommentId = $state<number | null>(null);
+  let activeFlashingCommentId = $state<number | null>(null);
+
+  function triggerFlashingComment(id: number) {
+    activeFlashingCommentId = null;
+    highlightedCommentId = id;
+    requestAnimationFrame(() => {
+      activeFlashingCommentId = id;
+    });
+  }
 
   // Panel visibility
   let showJudging = $state(true);
@@ -253,6 +263,7 @@
   });
 
   function handleKeydown(e: KeyboardEvent) {
+    if (isDrawingMode) return;
     const tag = (e.target as HTMLElement).tagName.toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
@@ -392,6 +403,9 @@
             comments={liveComments}
             {currentTime}
             highlightedId={highlightedCommentId}
+            {hoveredCommentId}
+            oncommenthover={(id) => { hoveredCommentId = id; }}
+            oncommentleave={() => { hoveredCommentId = null; }}
             bouts={liveBouts}
             {shareToken}
             {sharedBoutId}
@@ -437,6 +451,11 @@
         {startTime}
         {finishing}
         readonly={!!shareToken}
+        {isDrawingMode}
+        {hoveredCommentId}
+        {activeFlashingCommentId}
+        oncommenthover={(id) => { hoveredCommentId = id; }}
+        oncommentleave={() => { hoveredCommentId = null; }}
         onseek={(ms) => {
           activeCommentDrawing = null;
           const targetMs = sharedBout ? ms + sharedBout.time_start_ms : ms;
@@ -452,7 +471,7 @@
           }
         }}
         oncommentclick={(id) => {
-          highlightedCommentId = id;
+          triggerFlashingComment(id);
           if (!showChat) showChat = true;
           const comm = liveComments.find(c => c.id === id);
           if (comm) {
