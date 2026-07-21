@@ -1405,6 +1405,26 @@ pub async fn execute_ai_label_for_video(state: AppState, video_id: String) -> Re
         .map_err(|e| AppError::Internal(e.to_string()))??;
 
         if is_human_labeled {
+            let db_clean = state.db.clone();
+            let video_id_clean = video_id.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                use crate::db::schema::videos;
+                if let Ok(mut conn) = db_clean.get() {
+                    let _ = diesel::update(videos::table.filter(videos::id.eq(&video_id_clean)))
+                        .set((
+                            videos::is_analyzing.eq(false),
+                            videos::is_queued.eq(false),
+                        ))
+                        .execute(&mut conn);
+                }
+            }).await;
+            let _ = state.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoAiLabeled {
+                video_id: video_id.clone(),
+                is_ai_labeled: false,
+                is_analyzing: false,
+                is_queued: false,
+                has_transcript: None,
+            });
             return Err(AppError::BadRequest("Нельзя размечать с помощью ИИ видео, размеченное человеком".to_string()));
         }
     }
@@ -1457,7 +1477,7 @@ pub async fn execute_ai_label_for_video(state: AppState, video_id: String) -> Re
                 "audio_url": download_url,
                 "video_id": video_id_worker
             }))
-            .timeout(std::time::Duration::from_secs(3600))
+            .timeout(std::time::Duration::from_secs(900))
             .send()
             .await
             .map_err(|e| format!("Whisper service unreachable: {}", e))?;

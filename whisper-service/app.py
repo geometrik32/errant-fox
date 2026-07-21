@@ -230,24 +230,30 @@ def _download_and_convert_audio(audio_url: str, tmpdir: str) -> str:
     wav_path = os.path.join(tmpdir, "audio.wav")
 
     print(f"  Streaming audio directly via ffmpeg from URL...", flush=True)
-    result = subprocess.run(
-        [
-            "ffmpeg", "-y",
-            "-vn",
-            "-i", audio_url,
-            "-ar", "16000",
-            "-ac", "1",
-            "-f", "wav",
-            wav_path,
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode == 0:
-        return wav_path
+    try:
+        result = subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-vn",
+                "-i", audio_url,
+                "-ar", "16000",
+                "-ac", "1",
+                "-f", "wav",
+                wav_path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        if result.returncode == 0:
+            return wav_path
+    except subprocess.TimeoutExpired:
+        print("  Direct ffmpeg stream timed out after 180s, falling back to HTTP stream download...", flush=True)
+    except Exception as e:
+        print(f"  Direct ffmpeg stream error ({e}), falling back to HTTP stream download...", flush=True)
 
     # Fallback: if direct HTTP ffmpeg input fails, download raw file & convert
-    print("  Direct ffmpeg stream failed, falling back to stream download...", flush=True)
+    print("  Executing fallback stream download via requests...", flush=True)
     raw_path = os.path.join(tmpdir, "raw_audio")
     try:
         with requests.get(audio_url, stream=True, timeout=120) as r:
@@ -268,10 +274,13 @@ def _download_and_convert_audio(audio_url: str, tmpdir: str) -> str:
             ],
             capture_output=True,
             text=True,
+            timeout=180,
         )
         if result_fb.returncode != 0:
             msg = result_fb.stderr[-2000:] if result_fb.stderr else "ffmpeg failed"
             raise RuntimeError(f"ffmpeg error: {msg}")
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("ffmpeg conversion timed out after 180 seconds")
     finally:
         if os.path.exists(raw_path):
             try:
