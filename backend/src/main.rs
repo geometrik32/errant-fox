@@ -63,7 +63,12 @@ async fn main() {
                     .execute(&mut conn);
             }
 
-            // 3. Recalculate AI status for all videos in database
+            // 3. Reset any stale is_analyzing status to is_queued = true on server restart
+            let _ = diesel::update(videos::table.filter(videos::is_analyzing.eq(true)))
+                .set((videos::is_analyzing.eq(false), videos::is_queued.eq(true)))
+                .execute(&mut conn);
+
+            // 4. Recalculate AI status for all videos in database
             if let Ok(video_ids) = videos::table.select(videos::id).load::<String>(&mut conn) {
                 for vid in video_ids {
                     let _ = api::bouts::recalculate_video_ai_status(&mut conn, &vid);
