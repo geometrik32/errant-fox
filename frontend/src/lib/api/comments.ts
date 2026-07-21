@@ -53,7 +53,6 @@ export interface CreateSharedCommentData {
   text: string;
   timestamp_ms: number;
   reply_to_id?: number | null;
-  bout_id?: number | null;
   drawing?: string | null;
 }
 
@@ -66,7 +65,6 @@ export async function createSharedComment(data: CreateSharedCommentData): Promis
       text: data.text,
       reply_to_id: data.reply_to_id,
       timestamp_ms: data.timestamp_ms,
-      bout_id: data.bout_id,
       drawing: data.drawing,
     }),
   });

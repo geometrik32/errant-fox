@@ -172,6 +172,22 @@ pub async fn post_bout(
             .first(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
+        if body.time_start_ms >= body.time_end_ms {
+            return Err(AppError::BadRequest("Время начала должно быть меньше времени конца.".to_string()));
+        }
+
+        let overlapping = bouts::table
+            .filter(bouts::video_id.eq(&body.video_id))
+            .filter(bouts::time_start_ms.lt(body.time_end_ms))
+            .filter(bouts::time_end_ms.gt(body.time_start_ms))
+            .first::<Bout>(&mut conn)
+            .optional()
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        if overlapping.is_some() {
+            return Err(AppError::BadRequest("Сход пересекается по времени с существующим сходом.".to_string()));
+        }
+
         let order_index = max_order.map(|m| m + 1).unwrap_or(1);
 
         diesel::insert_into(bouts::table)
@@ -333,6 +349,25 @@ pub async fn patch_bout(
 
         let time_start_ms = body.time_start_ms.unwrap_or(cur.time_start_ms);
         let time_end_ms = body.time_end_ms.unwrap_or(cur.time_end_ms);
+
+        if time_start_ms >= time_end_ms {
+            return Err(AppError::BadRequest("Время начала должно быть меньше времени конца.".to_string()));
+        }
+
+        if time_start_ms != cur.time_start_ms || time_end_ms != cur.time_end_ms {
+            let overlapping = bouts::table
+                .filter(bouts::video_id.eq(&cur.video_id))
+                .filter(bouts::id.ne(id))
+                .filter(bouts::time_start_ms.lt(time_end_ms))
+                .filter(bouts::time_end_ms.gt(time_start_ms))
+                .first::<Bout>(&mut conn)
+                .optional()
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+
+            if overlapping.is_some() {
+                return Err(AppError::BadRequest("Сход пересекается по времени с существующим сходом.".to_string()));
+            }
+        }
         let score_a = body.score_a.unwrap_or(cur.score_a);
         let score_b = body.score_b.unwrap_or(cur.score_b);
         let technique_a_id = body.technique_a_id.unwrap_or(cur.technique_a_id);

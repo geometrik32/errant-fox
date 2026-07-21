@@ -14,6 +14,7 @@
 
   interface Props {
     bout: Bout;
+    allBouts?: Bout[];
     boutIndex: number;
     fighters: [VideoFighter | null, VideoFighter | null];
     expanded: boolean;
@@ -30,6 +31,7 @@
 
   let {
     bout,
+    allBouts = [],
     boutIndex,
     fighters,
     expanded,
@@ -132,6 +134,19 @@
   let saveError = $state<string | null>(null);
 
   async function handleSave() {
+    if (timeStartMs >= timeEndMs) {
+      saveError = 'Время начала должно быть меньше времени конца';
+      return;
+    }
+    if (allBouts && allBouts.length > 0) {
+      const hasOverlap = allBouts.some(
+        b => b.id !== bout.id && Math.max(timeStartMs, b.time_start_ms) < Math.min(timeEndMs, b.time_end_ms)
+      );
+      if (hasOverlap) {
+        saveError = 'Время схода пересекается с другим сходом';
+        return;
+      }
+    }
     saving = true;
     saveError = null;
     try {
