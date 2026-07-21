@@ -22,7 +22,6 @@
   let showHotkeys = $state(false);
   let showSyncDatabase = $state(false);
   let showBatchAi = $state(false);
-  let batchAiMode = $state<'new' | 'relabel'>('new');
 
   let activeNav = $derived(
     hash === '#/stats' ? 'stats' : hash === '#/search' ? 'search' : 'gallery'
@@ -165,11 +164,8 @@
           <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showSyncDatabase = true; }}>
             Актуализировать базу
           </button>
-          <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; batchAiMode = 'new'; showBatchAi = true; }}>
+          <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showBatchAi = true; }}>
             ИИ-разметка видео
-          </button>
-          <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; batchAiMode = 'relabel'; showBatchAi = true; }}>
-            ИИ-переразметка видео
           </button>
         {/if}
 
@@ -207,7 +203,7 @@
 {/if}
 
 {#if showBatchAi}
-  <BatchAiModal mode={batchAiMode} onclose={() => { showBatchAi = false; }} />
+  <BatchAiModal onclose={() => { showBatchAi = false; }} />
 {/if}
 
 <style>
