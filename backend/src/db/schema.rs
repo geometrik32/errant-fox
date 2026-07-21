@@ -71,6 +71,7 @@ diesel::table! {
         edited_at    -> Nullable<Timestamp>,
         bout_id      -> Nullable<Integer>,
         guest_nickname -> Nullable<Text>,
+        drawing      -> Nullable<Text>,
     }
 }
 

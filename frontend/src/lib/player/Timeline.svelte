@@ -394,6 +394,7 @@
     background: #7dd0f5;
   }
 
+
   /* ── Row 2: Progress bar ── */
   .track--progress {
     height: 8px;

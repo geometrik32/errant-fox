@@ -138,6 +138,7 @@ pub struct Comment {
     pub edited_at: Option<NaiveDateTime>,
     pub bout_id: Option<i32>,
     pub guest_nickname: Option<String>,
+    pub drawing: Option<String>,
 }
 
 #[derive(Insertable, Deserialize, Debug)]
@@ -150,6 +151,7 @@ pub struct NewComment {
     pub reply_to_id: Option<i32>,
     pub bout_id: Option<i32>,
     pub guest_nickname: Option<String>,
+    pub drawing: Option<String>,
 }
 
 // ── comment_reactions ─────────────────────────────────────────────────────────

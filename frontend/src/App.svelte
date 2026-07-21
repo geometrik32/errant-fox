@@ -56,6 +56,11 @@
              url.searchParams.delete('device_id');
              url.searchParams.delete('state');
              url.searchParams.delete('expires_in');
+             const savedHash = sessionStorage.getItem('post_auth_hash');
+             if (savedHash && (!url.hash || url.hash === '#/')) {
+               url.hash = savedHash;
+             }
+             sessionStorage.removeItem('post_auth_hash');
              window.history.replaceState({}, '', url.pathname + url.hash);
              sessionStorage.removeItem('vk_code_verifier');
              sessionStorage.removeItem('vk_state');
@@ -67,6 +72,11 @@
              url.searchParams.delete('device_id');
              url.searchParams.delete('state');
              url.searchParams.delete('expires_in');
+             const savedHash = sessionStorage.getItem('post_auth_hash');
+             if (savedHash && (!url.hash || url.hash === '#/')) {
+               url.hash = savedHash;
+             }
+             sessionStorage.removeItem('post_auth_hash');
              window.history.replaceState({}, '', url.pathname + url.hash);
           })
           .finally(() => {
@@ -115,6 +125,11 @@
     const match = hash.match(/[?&]t=(\d+)/);
     return match ? parseInt(match[1], 10) : 0;
   });
+
+  let highlightedCommentId = $derived.by(() => {
+    const match = hash.match(/[?&]comment_id=(\d+)/);
+    return match ? parseInt(match[1], 10) : null;
+  });
 </script>
 
 {#if vkAuthLoading}
@@ -153,8 +168,8 @@
         {:else if routeName === 'stats'}
           <Stats />
         {:else if routeName === 'player' && playerId}
-          {#key playerId + '-' + initialTimeMs + '-' + shareToken + '-' + sharedBoutId}
-          <Player videoId={playerId} {initialTimeMs} {shareToken} {sharedBoutId} />
+          {#key playerId + '-' + shareToken + '-' + sharedBoutId}
+          <Player videoId={playerId} {initialTimeMs} {shareToken} {sharedBoutId} {highlightedCommentId} />
           {/key}
         {/if}
       {/if}

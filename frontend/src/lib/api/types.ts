@@ -104,6 +104,7 @@ export interface Comment {
   dislikes: number;
   my_reaction: 'like' | 'dislike' | null;
   bout_id?: number | null;
+  drawing?: string | null;
 }
 
 export interface VideoFull {

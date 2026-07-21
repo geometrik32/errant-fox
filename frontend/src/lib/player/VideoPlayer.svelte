@@ -1,17 +1,28 @@
 <script lang="ts">
   import { onDestroy, untrack } from 'svelte';
   import { extractFpsFromUrl } from './moov';
+  import DrawingCanvas, { type Stroke } from './DrawingCanvas.svelte';
+  import DrawingToolbar from './DrawingToolbar.svelte';
+  import type { VideoFighter } from '../api/types';
 
   interface Props {
     src: string;
     fps?: number | null;
     speed?: number;
     volume?: number;
+    playing?: boolean;
     judgingOpen?: boolean;
     chatOpen?: boolean;
     markingActive?: boolean;
     markingFinishAnimationKey?: number;
     activeViewers?: any[];
+    isDrawingMode?: boolean;
+    drawingStrokes?: Stroke[];
+    activeCommentDrawing?: Stroke[] | null;
+    userColor?: string | null;
+    currentUser?: any;
+    fighterA?: VideoFighter | null;
+    fighterB?: VideoFighter | null;
     ontimeupdate?: (t: number) => void;
     ondurationchange?: (d: number) => void;
     onplayingchange?: (p: boolean) => void;
@@ -20,6 +31,8 @@
     ontogglejudging?: () => void;
     ontogglechat?: () => void;
     onspeedchange?: (speed: number) => void;
+    onstrokeschange?: (strokes: Stroke[]) => void;
+    onclosedrawing?: () => void;
   }
 
   let {
@@ -27,11 +40,19 @@
     fps = null,
     speed = 1,
     volume = 1,
+    playing = false,
     judgingOpen = true,
     chatOpen = true,
     markingActive = false,
     markingFinishAnimationKey = 0,
     activeViewers = [],
+    isDrawingMode = false,
+    drawingStrokes = $bindable([]),
+    activeCommentDrawing = null,
+    userColor = null,
+    currentUser = null,
+    fighterA = null,
+    fighterB = null,
     ontimeupdate,
     ondurationchange,
     onplayingchange,
@@ -40,9 +61,15 @@
     ontogglejudging,
     ontogglechat,
     onspeedchange,
+    onstrokeschange,
+    onclosedrawing,
   }: Props = $props();
 
   let videoEl: HTMLVideoElement;
+
+  let drawColor = $state('#ef4444');
+  let drawWidth = $state(4);
+  let activeTool = $state<'brush' | 'eraser'>('brush');
 
   /// Effective FPS (integer): API value → moov parser fallback → 30 as last resort.
   let effectiveFps = $state<number>(untrack(() => fps != null && fps > 0 ? Math.round(fps) : 0));
@@ -304,32 +331,52 @@
     if (zoom === 1) { panX = 0; panY = 0; }
   }
 
-  function handleMousedown(e: MouseEvent) {
-    if (e.button !== 1) return;
-    e.preventDefault();
+  let lastPanX = 0;
+  let lastPanY = 0;
 
+  function startPan(clientX: number, clientY: number) {
     const now = Date.now();
-    if (now - lastMiddleClickTime < 400) {
+    // Only reset zoom if middle click was pressed twice in <240ms WITHOUT panning movement
+    if (now - lastMiddleClickTime < 240 && Math.hypot(panX - lastPanX, panY - lastPanY) < 4) {
       resetZoom();
       lastMiddleClickTime = 0;
       return;
     }
     lastMiddleClickTime = now;
+    lastPanX = panX;
+    lastPanY = panY;
 
     panning = true;
-    panStartX = e.clientX;
-    panStartY = e.clientY;
+    panStartX = clientX;
+    panStartY = clientY;
     panStartPanX = panX;
     panStartPanY = panY;
+  }
+
+  function updatePan(clientX: number, clientY: number) {
+    if (!panning) return;
+    panX = panStartPanX + clientX - panStartX;
+    panY = panStartPanY + clientY - panStartY;
+  }
+
+  function endPan() {
+    panning = false;
+  }
+
+  function handleMousedown(e: MouseEvent) {
+    if (e.button !== 1) return;
+    e.preventDefault();
+
+    startPan(e.clientX, e.clientY);
+    if (!panning) return; // was double-click reset
 
     function onMove(ev: MouseEvent) {
-      if (!panning) return;
-      panX = panStartPanX + ev.clientX - panStartX;
-      panY = panStartPanY + ev.clientY - panStartY;
+      updatePan(ev.clientX, ev.clientY);
     }
 
-    function onUp() {
-      panning = false;
+    function onUp(ev: MouseEvent) {
+      if (ev.button !== 1) return;
+      endPan();
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     }
@@ -387,6 +434,54 @@
     preload="metadata"
     playsinline
   ></video>
+
+  {#if isDrawingMode}
+    <DrawingCanvas
+      interactive={true}
+      bind:strokes={drawingStrokes}
+      currentColor={drawColor}
+      currentWidth={drawWidth}
+      {activeTool}
+      {zoom}
+      {panX}
+      {panY}
+      onwheel={handleWheel}
+      onpanstart={(e) => { startPan(e.clientX, e.clientY); }}
+      onpanmove={(e) => { updatePan(e.clientX, e.clientY); }}
+      onpanend={() => { endPan(); }}
+      {onstrokeschange}
+      onundo={() => {
+        drawingStrokes = drawingStrokes?.slice(0, -1) || [];
+        onstrokeschange?.(drawingStrokes);
+      }}
+    />
+    <DrawingToolbar
+      bind:color={drawColor}
+      bind:width={drawWidth}
+      bind:activeTool={activeTool}
+      {userColor}
+      {currentUser}
+      {fighterA}
+      {fighterB}
+      hasStrokes={(drawingStrokes?.length ?? 0) > 0}
+      onundo={() => {
+        drawingStrokes = drawingStrokes?.slice(0, -1) || [];
+        onstrokeschange?.(drawingStrokes);
+      }}
+      onclear={() => {
+        drawingStrokes = [];
+        onstrokeschange?.([]);
+      }}
+    />
+  {:else if !playing && activeCommentDrawing && activeCommentDrawing.length > 0}
+    <DrawingCanvas
+      interactive={false}
+      strokes={activeCommentDrawing}
+      {zoom}
+      {panX}
+      {panY}
+    />
+  {/if}
 
   {#if outlineMode}
     <div

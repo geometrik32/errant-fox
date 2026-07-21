@@ -39,6 +39,8 @@ pub struct CommentResponse {
     pub dislikes: i32,
     pub my_reaction: Option<String>,
     pub bout_id: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub drawing: Option<String>,
 }
 
 fn to_response(c: &Comment, author: &User, likes: i32, dislikes: i32, my_reaction: Option<String>) -> CommentResponse {
@@ -67,6 +69,7 @@ fn to_response(c: &Comment, author: &User, likes: i32, dislikes: i32, my_reactio
         dislikes,
         my_reaction,
         bout_id: c.bout_id,
+        drawing: c.drawing.clone(),
     }
 }
 
@@ -108,6 +111,7 @@ fn to_ws_comment(c: &Comment, author: &User) -> WsComment {
         created_at: c.created_at.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
         edited_at: None,
         bout_id: c.bout_id,
+        drawing: c.drawing.clone(),
     }
 }
 
@@ -119,6 +123,7 @@ pub struct CreateCommentRequest {
     pub timestamp_ms: i32,
     pub text: String,
     pub reply_to_id: Option<i32>,
+    pub drawing: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -183,13 +188,17 @@ pub async fn post_comment(
                 reply_to_id: body.reply_to_id,
                 bout_id,
                 guest_nickname: None,
+                drawing: body.drawing.clone(),
             })
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
+        let comment_id: i32 = diesel::select(diesel::dsl::sql::<diesel::sql_types::Integer>("last_insert_rowid()"))
+            .get_result(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
         let comment = comments::table
-            .filter(comments::author_id.eq(&user_id))
-            .order(comments::id.desc())
+            .filter(comments::id.eq(comment_id))
             .first::<Comment>(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -240,13 +249,14 @@ pub async fn post_comment(
                             if let Some(ref vk_id_str) = parent_author.vk_id {
                                 if !vk_id_str.trim().is_empty() {
                                     let msg = format!(
-                                        "💬 Пользователь {} ответил на ваш комментарий к бою {}:\n\"{}\"\n\nСсылка: {}/#/player/{}?t={}",
+                                        "💬 Пользователь {} ответил на ваш комментарий к бою {}:\n\"{}\"\n\nСсылка: {}/#/player/{}?t={}&comment_id={}",
                                         commenter_name,
                                         video_title,
                                         comment.text,
                                         frontend_origin,
                                         comment.video_id,
-                                        comment.timestamp_ms
+                                        comment.timestamp_ms,
+                                        comment.id
                                     );
                                     notifications.push(NotificationTarget {
                                         vk_id: vk_id_str.clone(),
@@ -276,13 +286,14 @@ pub async fn post_comment(
                         if let Some(ref vk_id_str) = part_user.vk_id {
                             if !vk_id_str.trim().is_empty() {
                                 let msg = format!(
-                                    "💬 В вашем бою {} пользователь {} оставил новый комментарий:\n\"{}\"\n\nСсылка: {}/#/player/{}?t={}",
+                                    "💬 В вашем бою {} пользователь {} оставил новый комментарий:\n\"{}\"\n\nСсылка: {}/#/player/{}?t={}&comment_id={}",
                                     video_title,
                                     commenter_name,
                                     comment.text,
                                     frontend_origin,
                                     comment.video_id,
-                                    comment.timestamp_ms
+                                    comment.timestamp_ms,
+                                    comment.id
                                 );
                                 notifications.push(NotificationTarget {
                                     vk_id: vk_id_str.clone(),

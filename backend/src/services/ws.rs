@@ -34,6 +34,8 @@ pub struct WsComment {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub edited_at: Option<String>,
     pub bout_id: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub drawing: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
