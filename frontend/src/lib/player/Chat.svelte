@@ -718,21 +718,12 @@
                 onclick={() => handleCommentClick(r)}
               >
                 <div class="msg-head">
-                  <div class="avatar avatar-split">
-                    {#if activeThreadParent?.author.avatar_url}
-                      <img class="avatar-half avatar-left" src={activeThreadParent.author.avatar_url} alt={activeThreadParent.author.display_name} onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                    {:else}
-                      <div class="avatar-half avatar-left avatar-fallback">
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-                      </div>
-                    {/if}
-                    {#if r.author.avatar_url}
-                      <img class="avatar-half avatar-right" src={r.author.avatar_url} alt={r.author.display_name} onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                    {:else}
-                      <div class="avatar-half avatar-right avatar-fallback">
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-                      </div>
-                    {/if}
+                  <div class="avatar">
+                    <svg class="avatar-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5"/>
+                      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                    <img src={r.author.avatar_url} alt={r.author.display_name} onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                   </div>
                   <span class="name">{r.author.display_name}</span>
                   {#if r.drawing}
@@ -1111,43 +1102,12 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    position: relative;
   }
 
   .avatar img {
     width: 100%;
     height: 100%;
     object-fit: cover;
-  }
-
-  .avatar-split {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-  }
-
-  .avatar-half {
-    width: 50%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .avatar-left {
-    border-right: 1px solid rgba(0, 0, 0, 0.4);
-  }
-
-  .avatar-right {
-    border-left: 1px solid rgba(255, 255, 255, 0.2);
-  }
-
-  .avatar-fallback {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--text-tertiary);
   }
 
   .name {
