@@ -32,8 +32,8 @@ pub fn start_ai_queue_processor(state: AppState, mut rx: mpsc::UnboundedReceiver
                 continue;
             }
 
-            // 2. If no items in DB, wait for a signal on rx OR poll after 3 seconds
-            let _ = tokio::time::timeout(Duration::from_secs(3), rx.recv()).await;
+            // 2. If no items in DB, wait for a wake-up signal on rx OR poll after 60 seconds
+            let _ = tokio::time::timeout(Duration::from_secs(60), rx.recv()).await;
         }
     });
 }
