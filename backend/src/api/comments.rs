@@ -181,13 +181,25 @@ pub async fn post_comment(
                 .unwrap_or(None)
         };
 
+        // Normalize reply_to_id so all replies belong to 1st-order parent
+        let effective_reply_to_id = match body.reply_to_id {
+            Some(pid) => {
+                if let Ok(parent) = comments::table.filter(comments::id.eq(pid)).first::<Comment>(&mut conn) {
+                    Some(parent.reply_to_id.unwrap_or(pid))
+                } else {
+                    Some(pid)
+                }
+            }
+            None => None,
+        };
+
         diesel::insert_into(comments::table)
             .values(&NewComment {
                 video_id: body.video_id.clone(),
                 author_id: user_id.clone(),
                 timestamp_ms: body.timestamp_ms,
                 text: body.text.clone(),
-                reply_to_id: body.reply_to_id,
+                reply_to_id: effective_reply_to_id,
                 bout_id,
                 guest_nickname: None,
                 drawing: body.drawing.clone(),

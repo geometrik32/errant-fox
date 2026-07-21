@@ -684,19 +684,31 @@ pub async fn create_shared_comment(
             }
         }).map_err(|e| AppError::Internal(e.to_string()))?;
 
+        use crate::db::schema::comments;
+
+        let effective_reply_to_id = match body.reply_to_id {
+            Some(pid) => {
+                if let Ok(parent) = comments::table.filter(comments::id.eq(pid)).first::<Comment>(&mut conn) {
+                    Some(parent.reply_to_id.unwrap_or(pid))
+                } else {
+                    Some(pid)
+                }
+            }
+            None => None,
+        };
+
         // 2. Insert new comment
         let new_comment = NewComment {
             video_id: video_id.clone(),
             author_id: user.id.clone(),
             timestamp_ms: body.timestamp_ms,
             text: body.text,
-            reply_to_id: body.reply_to_id,
+            reply_to_id: effective_reply_to_id,
             bout_id: claims_bout_id.or(body.bout_id),
             guest_nickname: Some(nickname.clone()),
             drawing: body.drawing.clone(),
         };
 
-        use crate::db::schema::comments;
         let c: Comment = conn.transaction::<Comment, diesel::result::Error, _>(|tx_conn| {
             diesel::insert_into(comments::table)
                 .values(&new_comment)

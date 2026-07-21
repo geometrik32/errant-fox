@@ -4,6 +4,7 @@
 
   export interface SlotPreset {
     hex: string;
+    width?: number;
     avatar_url?: string;
   }
 
@@ -47,40 +48,46 @@
     { hex: '#ffffff', label: 'Белый' },
   ];
 
-  // 3 Preset Color Slots
+  // 3 Preset Color + Width Slots
   let presets = $state<SlotPreset[]>([
-    { hex: '#ef4444' },
-    { hex: '#f59e0b' },
-    { hex: '#10b981' },
+    { hex: '#ef4444', width: 4 },
+    { hex: '#f59e0b', width: 4 },
+    { hex: '#10b981', width: 4 },
   ]);
   let activeSlot = $state<number>(0);
   let openPopover = $state<boolean>(false);
 
   onMount(() => {
     try {
-      const saved = localStorage.getItem('ef_drawing_color_presets_v2');
+      const saved = localStorage.getItem('ef_drawing_color_presets_v3');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length >= 3) {
           presets = parsed.map((p: any) =>
-            typeof p === 'string' ? { hex: p } : { hex: p.hex, avatar_url: p.avatar_url }
+            typeof p === 'string'
+              ? { hex: p, width: 4 }
+              : { hex: p.hex, width: p.width ?? 4, avatar_url: p.avatar_url }
           );
         }
       } else {
         const myCol = userColor || currentUser?.color;
         const myAv = currentUser?.avatar_url;
         if (myCol) {
-          presets[0] = { hex: myCol, avatar_url: myAv };
+          presets[0] = { hex: myCol, width: 4, avatar_url: myAv };
         }
       }
     } catch (e) {}
-    color = presets[activeSlot]?.hex || '#ef4444';
+    const activeP = presets[activeSlot];
+    if (activeP) {
+      color = activeP.hex;
+      if (activeP.width) width = activeP.width;
+    }
   });
 
   function savePresets(newPresets: SlotPreset[]) {
     presets = newPresets;
     try {
-      localStorage.setItem('ef_drawing_color_presets_v2', JSON.stringify(newPresets));
+      localStorage.setItem('ef_drawing_color_presets_v3', JSON.stringify(newPresets));
     } catch (e) {}
   }
 
@@ -91,14 +98,21 @@
       activeSlot = index;
       openPopover = false;
     }
-    color = presets[index]?.hex || '#ef4444';
-    activeTool = 'brush';
-    oncolorchange?.(color);
+    const target = presets[index];
+    if (target) {
+      color = target.hex;
+      if (target.width) {
+        width = target.width;
+        onwidthchange?.(width);
+      }
+      activeTool = 'brush';
+      oncolorchange?.(color);
+    }
   }
 
   function chooseColorForCurrentSlot(hex: string, avatar_url?: string) {
     const next = [...presets];
-    next[activeSlot] = { hex, avatar_url };
+    next[activeSlot] = { hex, width, avatar_url };
     savePresets(next);
     color = hex;
     activeTool = 'brush';
@@ -110,6 +124,12 @@
     const val = Number((e.target as HTMLInputElement).value);
     width = val;
     onwidthchange?.(val);
+    // Update active slot preset width
+    const next = [...presets];
+    if (next[activeSlot]) {
+      next[activeSlot] = { ...next[activeSlot], width: val };
+      savePresets(next);
+    }
   }
 
   function setTool(t: 'brush' | 'eraser') {
