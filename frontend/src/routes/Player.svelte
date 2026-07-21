@@ -109,14 +109,21 @@
   let drawingStrokes = $state<any[]>([]);
   let activeCommentDrawing = $state<any[] | null>(null);
   let activeCommentTimestampMs = $state<number | null>(null);
+  let pendingCommentSeek = $state(false);
 
   // Clear comment drawing when currentTime moves away from the comment's timestamp
   $effect(() => {
     if (activeCommentDrawing && activeCommentTimestampMs !== null) {
       const diffMs = Math.abs(currentTime * 1000 - activeCommentTimestampMs);
-      if (diffMs > 50) {
-        activeCommentDrawing = null;
-        activeCommentTimestampMs = null;
+      if (pendingCommentSeek) {
+        if (diffMs < 500) {
+          pendingCommentSeek = false;
+        }
+      } else {
+        if (diffMs > 500) {
+          activeCommentDrawing = null;
+          activeCommentTimestampMs = null;
+        }
       }
     }
   });
@@ -399,6 +406,7 @@
             onselectcommentdrawing={(strokes, timestampMs) => {
               activeCommentDrawing = strokes;
               activeCommentTimestampMs = timestampMs ?? null;
+              pendingCommentSeek = true;
               player?.pause();
             }}
             onseek={(ms) => { player?.seekTo(ms); player?.pause(); }}
@@ -447,15 +455,21 @@
           highlightedCommentId = id;
           if (!showChat) showChat = true;
           const comm = liveComments.find(c => c.id === id);
-          if (comm && comm.drawing) {
-            try {
-              const data = JSON.parse(comm.drawing);
-              if (data && Array.isArray(data.strokes)) {
-                activeCommentDrawing = data.strokes;
-              }
-            } catch(e) {}
-          } else {
-            activeCommentDrawing = null;
+          if (comm) {
+            player?.seekTo(comm.timestamp_ms);
+            if (comm.drawing) {
+              try {
+                const data = JSON.parse(comm.drawing);
+                if (data && Array.isArray(data.strokes)) {
+                  activeCommentDrawing = data.strokes;
+                  activeCommentTimestampMs = comm.timestamp_ms;
+                  pendingCommentSeek = true;
+                }
+              } catch(e) {}
+            } else {
+              activeCommentDrawing = null;
+              activeCommentTimestampMs = null;
+            }
           }
           player?.pause();
         }}

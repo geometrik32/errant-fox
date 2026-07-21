@@ -129,6 +129,8 @@ pub struct CreateCommentRequest {
 #[derive(Deserialize)]
 pub struct PatchCommentRequest {
     pub text: String,
+    #[serde(default)]
+    pub drawing: Option<Option<String>>,
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
@@ -337,6 +339,8 @@ pub async fn patch_comment(
     let user_id = user.id.clone();
     let new_text = body.text.clone();
 
+    let new_drawing = body.drawing.clone();
+
     let (comment, likes, dislikes, my_reaction) = tokio::task::spawn_blocking(move || {
         use crate::db::schema::comments;
 
@@ -362,6 +366,13 @@ pub async fn patch_comment(
             ))
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        if let Some(ref d) = new_drawing {
+            diesel::update(comments::table.filter(comments::id.eq(id)))
+                .set(comments::drawing.eq(d))
+                .execute(&mut conn)
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+        }
 
         let updated = comments::table
             .filter(comments::id.eq(id))
