@@ -114,7 +114,7 @@
 >
   <div class="modal" role="dialog" aria-modal="true" aria-label="ИИ-разметка видео">
     <div class="modal-header">
-      <h2>{isCancelMode ? 'Отменить ИИ-разметку' : (activeTab === 'relabel' ? 'ИИ-переразметка (без расшифровки)' : 'Разметить при помощи ИИ')}</h2>
+      <h2>{isCancelMode ? 'Отменить ИИ-разметку' : 'Разметить при помощи ИИ'}</h2>
       <button class="close-btn" onclick={onclose} aria-label="Закрыть" disabled={starting}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
           <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
