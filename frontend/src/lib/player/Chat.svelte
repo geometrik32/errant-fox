@@ -225,17 +225,36 @@
   function startEdit(c: Comment) {
     editingId = c.id;
     editText = c.text;
+    onseek?.(c.timestamp_ms);
+    const strokes = parseDrawing(c.drawing);
+    drawingStrokes = strokes ? [...strokes] : [];
+    onstartdrawing?.();
+  }
+
+  function cancelEdit() {
+    editingId = null;
+    editText = '';
+    drawingStrokes = [];
+    onclosedrawing?.();
   }
 
   async function submitEdit(id: number) {
     const t = editText.trim();
     if (!t) return;
     try {
-      const updated = await updateComment(id, t);
+      let drawingDataStr: string | null = null;
+      if (drawingStrokes && drawingStrokes.length > 0) {
+        drawingDataStr = JSON.stringify({ version: 1, strokes: drawingStrokes });
+      }
+      const updated = await updateComment(id, t, drawingDataStr);
       comments = comments.map(c => c.id === id ? updated : c);
       oncommentschange?.(comments);
-    } finally {
       editingId = null;
+      editText = '';
+      drawingStrokes = [];
+      onclosedrawing?.();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Ошибка обновления комментария');
     }
   }
 
@@ -370,13 +389,9 @@
           </div>
           <span class="name">{c.author.display_name}</span>
           {#if c.drawing}
-            <button class="drawing-badge" onclick={(e) => { e.stopPropagation(); handleCommentClick(c); }} title="Посмотреть рисунок">
-              🎨
-            </button>
+            <span class="drawing-badge" title="Прикреплен рисунок">🎨</span>
           {/if}
-          <button class="ts" onclick={(e) => { e.stopPropagation(); handleCommentClick(c); }}>
-            {fmtMs(c.timestamp_ms)}
-          </button>
+          <span class="ts">{fmtMs(c.timestamp_ms)}</span>
         </div>
 
         {#if c.reply_to_id !== null}
@@ -384,16 +399,31 @@
         {/if}
 
         {#if editingId === c.id}
-          <div class="edit-area">
+          <div class="edit-area" onclick={(e) => e.stopPropagation()}>
             <textarea
               class="input-glass edit-inp"
               bind:value={editText}
               rows="2"
-              onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitEdit(c.id); } if (e.key === 'Escape') editingId = null; }}
+              onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitEdit(c.id); } if (e.key === 'Escape') cancelEdit(); }}
             ></textarea>
-            <div class="edit-actions">
+            <div class="input-actions-row" style="margin-top: 4px;">
+              <button
+                type="button"
+                class="pencil-btn"
+                class:active={isDrawingMode || (drawingStrokes && drawingStrokes.length > 0)}
+                onclick={toggleDrawingMode}
+                title="Нарисовать / отредактировать рисунок"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                </svg>
+                <span>{drawingStrokes && drawingStrokes.length > 0 ? 'Рисунок' : 'Рисовать'}</span>
+              </button>
+            </div>
+            <div class="edit-actions" style="margin-top: 8px;">
               <button class="btn btn-primary btn-sm" onclick={() => submitEdit(c.id)}>Сохранить</button>
-              <button class="btn btn-outline btn-sm" onclick={() => { editingId = null; }}>Отмена</button>
+              <button class="btn btn-outline btn-sm" onclick={cancelEdit}>Отмена</button>
             </div>
           </div>
         {:else}
@@ -878,19 +908,13 @@
     width: 22px;
     height: 22px;
     border-radius: 50%;
-    cursor: pointer;
     margin-left: 4px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     padding: 0;
     line-height: 1;
-    transition: var(--transition);
-  }
-
-  .drawing-badge:hover {
-    background: rgba(245, 158, 11, 0.35);
-    transform: scale(1.15);
+    flex-shrink: 0;
   }
 
   .input-actions-row {

@@ -16,10 +16,10 @@ export async function createComment(data: CreateCommentData): Promise<Comment> {
   });
 }
 
-export async function updateComment(id: number, text: string): Promise<Comment> {
+export async function updateComment(id: number, text: string, drawing?: string | null): Promise<Comment> {
   return apiFetch<Comment>(`/comments/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, drawing }),
   });
 }
 
