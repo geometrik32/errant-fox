@@ -4,13 +4,19 @@
   import type { Video } from '../api/types';
 
   interface Props {
+    mode?: 'new' | 'relabel';
     onclose: () => void;
   }
-  let { onclose }: Props = $props();
+  let { mode = 'new', onclose }: Props = $props();
 
+  let activeTab = $state<'new' | 'relabel'>('new');
+  $effect(() => {
+    activeTab = mode;
+  });
   let loading = $state(true);
   let error = $state<string | null>(null);
   let unanalyzedVideos = $state<Video[]>([]);
+  let missingTranscriptVideos = $state<Video[]>([]);
   let analyzingVideos = $state<Video[]>([]);
   let queuedVideos = $state<Video[]>([]);
   let starting = $state(false);
@@ -18,6 +24,7 @@
 
   let activeOrQueuedCount = $derived(analyzingVideos.length + queuedVideos.length);
   let isCancelMode = $derived(activeOrQueuedCount > 0);
+  let activeTargetList = $derived(activeTab === 'new' ? unanalyzedVideos : missingTranscriptVideos);
 
   onMount(async () => {
     try {
@@ -27,10 +34,16 @@
       // Queued videos
       queuedVideos = all.filter(v => v.is_queued);
       
-      // Unanalyzed = not human labeled (total_score <= 0 or not tagged) AND not currently ai_labeled AND not currently analyzing AND not queued
+      // Unanalyzed = not human labeled (has_human_bouts or scores) AND not currently ai_labeled AND not currently analyzing AND not queued
       unanalyzedVideos = all.filter(v => {
-        const isHuman = (v.total_score_a ?? 0) > 0 || (v.total_score_b ?? 0) > 0;
+        const isHuman = v.has_human_bouts || (v.total_score_a ?? 0) > 0 || (v.total_score_b ?? 0) > 0;
         return !isHuman && !v.is_ai_labeled && !v.is_analyzing && !v.is_queued;
+      });
+
+      // Missing transcript = AI labeled (or tagged) AND no transcript on server AND not human labeled AND not analyzing AND not queued
+      missingTranscriptVideos = all.filter(v => {
+        const isHuman = v.has_human_bouts || (v.total_score_a ?? 0) > 0 || (v.total_score_b ?? 0) > 0;
+        return !isHuman && !v.has_transcript && (v.is_ai_labeled || v.is_tagged) && !v.is_analyzing && !v.is_queued;
       });
     } catch (e) {
       error = e instanceof Error ? e.message : 'Не удалось загрузить список видео';
@@ -40,14 +53,14 @@
   });
 
   async function handleBatchLabel() {
-    if (starting || unanalyzedVideos.length === 0) return;
+    if (starting || activeTargetList.length === 0) return;
     starting = true;
     error = null;
     try {
-      progressMessage = `Запуск фоновой очереди на сервере для ${unanalyzedVideos.length} видео...`;
-      const ids = unanalyzedVideos.map(v => v.id);
+      progressMessage = `Запуск фоновой очереди на сервере для ${activeTargetList.length} видео...`;
+      const ids = activeTargetList.map(v => v.id);
       await batchAiLabelVideos(ids);
-      progressMessage = `Серверная очередь успешно запущена для ${unanalyzedVideos.length} видео! Вы можете закрыть это окно.`;
+      progressMessage = `Серверная очередь успешно запущена для ${activeTargetList.length} видео! Вы можете закрыть это окно.`;
       setTimeout(() => {
         onclose();
       }, 1500);
@@ -101,7 +114,7 @@
 >
   <div class="modal" role="dialog" aria-modal="true" aria-label="ИИ-разметка видео">
     <div class="modal-header">
-      <h2>{isCancelMode ? 'Отменить ИИ-разметку' : 'Разметить при помощи ИИ'}</h2>
+      <h2>{isCancelMode ? 'Отменить ИИ-разметку' : (activeTab === 'relabel' ? 'ИИ-переразметка (без расшифровки)' : 'Разметить при помощи ИИ')}</h2>
       <button class="close-btn" onclick={onclose} aria-label="Закрыть" disabled={starting}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
           <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -153,39 +166,70 @@
             <span>Отменить всю очередь ({activeOrQueuedCount})</span>
           </button>
         </div>
-      {:else if unanalyzedVideos.length === 0}
-        <p class="msg-info">Неразмеченных видео не найдено! Все видео уже размечены людьми или ИИ.</p>
-        <div class="actions">
-          <button class="btn btn-primary" onclick={onclose}>Отлично</button>
-        </div>
       {:else}
-        <p class="warning-text">
-          Найдено <strong>{unanalyzedVideos.length} шт.</strong> неразмеченных видео.
-          Запустить автоматическую ИИ-разметку сходов для всех этих видео?
-        </p>
-
-        <div class="list-container">
-          <ul class="stale-list">
-            {#each unanalyzedVideos as video}
-              <li>
-                <span class="video-date">[{video.date}]</span>
-                <span class="video-path" title={video.seafile_path}>{video.seafile_path}</span>
-              </li>
-            {/each}
-          </ul>
-        </div>
-
-        <div class="actions">
-          <button class="btn btn-outline" onclick={onclose} disabled={starting}>Отмена</button>
-          <button class="btn btn-ai" onclick={handleBatchLabel} disabled={starting}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 2a10 10 0 1 0 10 10" />
-              <path d="M12 6v6l4 2" />
-              <circle cx="19" cy="5" r="3" fill="currentColor" stroke="none" />
-            </svg>
-            <span>Запустить анализ ({unanalyzedVideos.length})</span>
+        <!-- Tab selector -->
+        <div class="tabs-bar">
+          <button
+            class="tab-btn"
+            class:active={activeTab === 'new'}
+            onclick={() => activeTab = 'new'}
+            disabled={starting}
+          >
+            Новые неразмеченные ({unanalyzedVideos.length})
+          </button>
+          <button
+            class="tab-btn"
+            class:active={activeTab === 'relabel'}
+            onclick={() => activeTab = 'relabel'}
+            disabled={starting}
+          >
+            Без расшифровки ({missingTranscriptVideos.length})
           </button>
         </div>
+
+        {#if activeTargetList.length === 0}
+          <p class="msg-info">
+            {activeTab === 'new' 
+              ? 'Неразмеченных видео не найдено! Все видео уже размечены людьми или ИИ.' 
+              : 'Видео без расшифровок не найдено! У всех ИИ-видео уже есть файлы расшифровки.'}
+          </p>
+          <div class="actions">
+            <button class="btn btn-primary" onclick={onclose}>Отлично</button>
+          </div>
+        {:else}
+          <p class="warning-text">
+            {#if activeTab === 'new'}
+              Найдено <strong>{unanalyzedVideos.length} шт.</strong> неразмеченных видео.
+              Запустить автоматическую ИИ-разметку сходов для всех этих видео?
+            {:else}
+              Найдено <strong>{missingTranscriptVideos.length} шт.</strong> видео с отсутствующей расшифровкой.
+              Запустить повторную ИИ-разметку для сбора расшифровок?
+            {/if}
+          </p>
+
+          <div class="list-container">
+            <ul class="stale-list">
+              {#each activeTargetList as video}
+                <li>
+                  <span class="video-date">[{video.date}]</span>
+                  <span class="video-path" title={video.seafile_path}>{video.seafile_path}</span>
+                </li>
+              {/each}
+            </ul>
+          </div>
+
+          <div class="actions">
+            <button class="btn btn-outline" onclick={onclose} disabled={starting}>Отмена</button>
+            <button class="btn btn-ai" onclick={handleBatchLabel} disabled={starting}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2a10 10 0 1 0 10 10" />
+                <path d="M12 6v6l4 2" />
+                <circle cx="19" cy="5" r="3" fill="currentColor" stroke="none" />
+              </svg>
+              <span>{activeTab === 'new' ? 'Запустить анализ' : 'Запустить переразметку'} ({activeTargetList.length})</span>
+            </button>
+          </div>
+        {/if}
       {/if}
     </div>
   </div>
@@ -246,6 +290,37 @@
 
   .modal-body {
     padding: 20px;
+  }
+
+  .tabs-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 10px;
+  }
+
+  .tab-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    padding: 6px 12px;
+    border-radius: var(--radius-md);
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .tab-btn:hover:not(:disabled) {
+    color: var(--text-main);
+    background: var(--surface-hover);
+  }
+
+  .tab-btn.active {
+    background: #8b5cf6;
+    border-color: #8b5cf6;
+    color: #fff;
   }
 
   .state-msg, .msg-info {

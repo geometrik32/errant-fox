@@ -29,13 +29,14 @@
   let cardState = $derived((): 0 | 1 | 2 | 3 => {
     const hasFighters = !!video.fighter_a && !!video.fighter_b;
     if (!hasFighters || !video.is_tagged) return 0;
+    if (video.has_human_bouts) return 2;
+    if (video.is_ai_labeled) return 3;
     const scoreA = video.total_score_a;
     const scoreB = video.total_score_b;
     const hasScores = scoreA !== undefined && scoreB !== undefined;
     const hasBouts = hasScores && ((scoreA ?? 0) > 0 || (scoreB ?? 0) > 0);
-    if (!hasBouts) return 0;
-    if (video.is_ai_labeled) return 3;
-    return 2;
+    if (hasBouts) return 2;
+    return 0;
   });
 
   function handleClick() {
@@ -274,7 +275,7 @@
       <span>Поделиться</span>
     </button>
     {#if $currentUser?.is_admin}
-      {#if video.is_ai_labeled || video.has_transcript}
+      {#if video.has_transcript}
         <button 
           class="menu-item"
           onclick={(e) => {
@@ -293,7 +294,7 @@
         </button>
       {/if}
 
-      {@const isHumanLabeled = cardState() === 2}
+      {@const isHumanLabeled = cardState() === 2 || video.has_human_bouts}
       {#if video.is_analyzing || video.is_queued}
         <button 
           class="menu-item" 

@@ -55,6 +55,7 @@ pub struct VideoListDto {
     pub is_analyzing: bool,
     pub is_queued: bool,
     pub has_transcript: bool,
+    pub has_human_bouts: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seafile_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -112,6 +113,7 @@ pub struct VideoFullDto {
     pub is_analyzing: bool,
     pub is_queued: bool,
     pub has_transcript: bool,
+    pub has_human_bouts: bool,
     pub bouts: Vec<BoutDto>,
     pub comments: Vec<CommentDto>,
 }
@@ -220,6 +222,7 @@ fn build_video_full(
         .collect();
 
     let has_transcript = std::path::Path::new(&format!("{}/{}.json", transcripts_dir, video.id)).exists();
+    let has_human_bouts = bouts.iter().any(|b| !b.is_ai);
 
     VideoFullDto {
         id: video.id.clone(),
@@ -233,6 +236,7 @@ fn build_video_full(
         is_analyzing: video.is_analyzing,
         is_queued: video.is_queued,
         has_transcript,
+        has_human_bouts,
         bouts: bouts.iter().map(bout_dto).collect(),
         comments: comment_dtos,
     }
@@ -403,11 +407,14 @@ pub async fn list_videos(
 
                 let is_tagged = v.fighter_a_id.is_some() && v.fighter_b_id.is_some();
 
+                let bouts = bouts_by_video
+                    .get(&v.id)
+                    .map(|b| b.as_slice())
+                    .unwrap_or(&[]);
+
+                let has_human_bouts = bouts.iter().any(|b| !b.is_ai);
+
                 let (total_score_a, total_score_b) = if is_tagged {
-                    let bouts = bouts_by_video
-                        .get(&v.id)
-                        .map(|b| b.as_slice())
-                        .unwrap_or(&[]);
                     let sa: i32 = bouts.iter().map(|b| b.score_a).sum();
                     let sb: i32 = bouts.iter().map(|b| b.score_b).sum();
                     (Some(sa), Some(sb))
@@ -429,6 +436,7 @@ pub async fn list_videos(
                     is_analyzing: v.is_analyzing,
                     is_queued: v.is_queued,
                     has_transcript: std::path::Path::new(&format!("{}/{}.json", transcripts_dir, v.id)).exists(),
+                    has_human_bouts,
                     seafile_path: if is_admin { Some(v.seafile_path.clone()) } else { None },
                     seafile_web_url: if is_admin {
                         Some(format!(
@@ -1679,7 +1687,7 @@ pub async fn batch_ai_label_video(
     }
 
     let db = state.db.clone();
-    let video_ids = if let Some(ids) = body.video_ids {
+    let raw_ids = if let Some(ids) = body.video_ids {
         ids
     } else {
         tokio::task::spawn_blocking(move || {
@@ -1710,6 +1718,40 @@ pub async fn batch_ai_label_video(
         .await
         .map_err(|e| AppError::Internal(e.to_string()))??
     };
+
+    // Filter out any video that has human-labeled bouts or is currently analyzing
+    let db_filter = state.db.clone();
+    let video_ids: Vec<String> = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::{videos, bouts};
+        let mut conn = db_filter.get().map_err(|e| AppError::Internal(e.to_string()))?;
+        let target_videos = videos::table
+            .filter(videos::id.eq_any(&raw_ids))
+            .select((videos::id, videos::is_ai_labeled, videos::is_analyzing))
+            .load::<(String, bool, bool)>(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut valid = Vec::new();
+        for (v_id, is_ai_labeled, is_analyzing) in target_videos {
+            if is_analyzing {
+                continue;
+            }
+            if is_ai_labeled {
+                valid.push(v_id);
+            } else {
+                let human_bouts: i64 = bouts::table
+                    .filter(bouts::video_id.eq(&v_id))
+                    .filter(bouts::is_ai.eq(false))
+                    .count()
+                    .get_result(&mut conn)
+                    .unwrap_or(0);
+                if human_bouts == 0 {
+                    valid.push(v_id);
+                }
+            }
+        }
+        Ok::<Vec<String>, AppError>(valid)
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
 
     let count = video_ids.len();
 
