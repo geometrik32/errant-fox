@@ -103,7 +103,6 @@ export interface Comment {
   likes: number;
   dislikes: number;
   my_reaction: 'like' | 'dislike' | null;
-  bout_id?: number | null;
   drawing?: string | null;
 }
 
@@ -148,6 +147,4 @@ export interface SearchResult {
   video_date: string;
   fighter_a_name: string | null;
   fighter_b_name: string | null;
-  bout_id: number | null;
-  bout_order_index: number | null;
 }

@@ -613,7 +613,6 @@ pub struct CreateSharedCommentRequest {
     pub text: String,
     pub reply_to_id: Option<i32>,
     pub timestamp_ms: i32,
-    pub bout_id: Option<i32>,
     pub drawing: Option<String>,
 }
 
@@ -647,7 +646,6 @@ pub async fn create_shared_comment(
 
     let guest_id = "guest".to_string();
 
-    let claims_bout_id = claims.bout_id;
     let db_pool = state.db.clone();
     let comment_resp = tokio::task::spawn_blocking(move || {
         use crate::db::schema::users;
@@ -704,7 +702,6 @@ pub async fn create_shared_comment(
             timestamp_ms: body.timestamp_ms,
             text: body.text,
             reply_to_id: effective_reply_to_id,
-            bout_id: claims_bout_id.or(body.bout_id),
             guest_nickname: Some(nickname.clone()),
             drawing: body.drawing.clone(),
         };
@@ -737,7 +734,6 @@ pub async fn create_shared_comment(
             likes: 0,
             dislikes: 0,
             my_reaction: None,
-            bout_id: c.bout_id,
             drawing: c.drawing.clone(),
         };
 
@@ -756,7 +752,6 @@ pub async fn create_shared_comment(
             reply_to_id: c.reply_to_id,
             created_at: c.created_at.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
             edited_at: None,
-            bout_id: c.bout_id,
             drawing: c.drawing.clone(),
         });
         let _ = state.ws_hub.send(ws_event);

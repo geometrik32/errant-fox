@@ -114,12 +114,7 @@
                 <td class="col-fighters">{fighters(r)}</td>
                 <td class="col-action">
                   <button class="btn-goto" onclick={() => navigate(r)}>
-                    {#if r.bout_order_index !== null}
-                      Сход {r.bout_order_index}
-                    {:else}
-                      Видео
-                    {/if}
-                    →
+                    Перейти →
                   </button>
                 </td>
               </tr>

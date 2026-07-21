@@ -69,7 +69,6 @@ diesel::table! {
         reply_to_id  -> Nullable<Integer>,
         created_at   -> Timestamp,
         edited_at    -> Nullable<Timestamp>,
-        bout_id      -> Nullable<Integer>,
         guest_nickname -> Nullable<Text>,
         drawing      -> Nullable<Text>,
     }
@@ -98,7 +97,6 @@ diesel::table! {
 diesel::joinable!(bouts             -> videos   (video_id));
 diesel::joinable!(comments          -> videos   (video_id));
 diesel::joinable!(comments          -> users    (author_id));
-diesel::joinable!(comments          -> bouts    (bout_id));
 diesel::joinable!(comment_reactions -> comments (comment_id));
 diesel::joinable!(comment_reactions -> users    (user_id));
 diesel::joinable!(bout_history      -> bouts    (bout_id));

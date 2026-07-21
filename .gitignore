@@ -40,6 +40,8 @@ frontend/dist/
 # Python Virtual Environments
 venv/
 .venv/
+__pycache__/
+*.pyc
 
 # AI / Neural model experiments
 ai_research/

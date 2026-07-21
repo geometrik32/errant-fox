@@ -113,6 +113,13 @@
       startTime = null;
       onmarkingchange?.(false);
     } else {
+      const curMs = Math.round(currentTime * 1000);
+      const isInsideExisting = bouts.some(
+        b => curMs >= b.time_start_ms && curMs <= b.time_end_ms
+      );
+      if (isInsideExisting) {
+        return;
+      }
       startTime = currentTime;
       finishError = null;
       onmarkingchange?.(true);
@@ -129,14 +136,24 @@
 
   export async function handleFinish() {
     if (startTime === null) return;
+    const startMs = Math.round(Math.min(startTime, currentTime) * 1000);
+    const endMs = Math.round(Math.max(startTime, currentTime) * 1000);
+
+    if (startMs >= endMs) return;
+
+    const hasOverlap = bouts.some(
+      b => Math.max(startMs, b.time_start_ms) < Math.min(endMs, b.time_end_ms)
+    );
+    if (hasOverlap) return;
+
     onpauserequest?.();
     finishing = true;
     finishError = null;
     try {
       const created = await createBout({
         video_id: video.id,
-        time_start_ms: Math.round(startTime * 1000),
-        time_end_ms: Math.round(currentTime * 1000),
+        time_start_ms: startMs,
+        time_end_ms: endMs,
       });
       const exists = bouts.some(b => b.id === created.id);
       if (!exists) {
@@ -323,6 +340,7 @@
       <div data-bout-id={bout.id}>
         <BoutCard
           {bout}
+          allBouts={bouts}
           videoId={video.id}
           boutIndex={i + 1}
           fighters={[activeFighterA, activeFighterB]}

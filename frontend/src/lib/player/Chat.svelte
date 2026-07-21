@@ -228,7 +228,6 @@
           text: t,
           timestamp_ms: commentTimeMs,
           reply_to_id: targetReplyId,
-          bout_id: sharedBoutId,
           drawing: drawingDataStr,
         });
       } else {
