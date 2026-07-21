@@ -87,6 +87,7 @@
   let threadTextareaEl = $state<HTMLTextAreaElement | null>(null);
 
   let filterByActiveBout = $state(false);
+  let filterByTimeline = $state(false);
   let currentTimeMs = $derived(currentTime * 1000);
 
   let sortedBouts = $derived(
@@ -107,6 +108,12 @@
       filtered = filtered.filter(c => {
         if (highlightedId && c.id === highlightedId) return true;
         return c.timestamp_ms >= sharedBout.time_start_ms && c.timestamp_ms <= sharedBout.time_end_ms;
+      });
+    } else if (filterByTimeline) {
+      filtered = filtered.filter(c => {
+        if (highlightedId && c.id === highlightedId) return true;
+        const diff = currentTimeMs - c.timestamp_ms;
+        return diff >= -500 && diff <= 15000;
       });
     } else if (filterByActiveBout) {
       if (currentBout) {
@@ -344,7 +351,7 @@
   // Scroll to + flash highlighted comment
   $effect(() => {
     const id = highlightedId;
-    if (!id) return;
+    if (!id || (filterByTimeline && activeThreadParentId === null)) return;
     const targetEl = activeThreadParentId !== null ? threadListEl : listEl;
     if (!targetEl) return;
     const el = targetEl.querySelector<HTMLElement>(`[data-comment-id="${id}"]`);
@@ -358,12 +365,22 @@
   // Scroll to hovered comment from timeline marker
   $effect(() => {
     const id = hoveredCommentId;
-    if (!id) return;
+    if (!id || (filterByTimeline && activeThreadParentId === null)) return;
     const targetEl = activeThreadParentId !== null ? threadListEl : listEl;
     if (!targetEl) return;
     const el = targetEl.querySelector<HTMLElement>(`[data-comment-id="${id}"]`);
     if (el) {
       el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  });
+
+  // Auto-scroll to bottom in Live Stream mode
+  $effect(() => {
+    if (filterByTimeline && activeThreadParentId === null && listEl) {
+      topLevelComments;
+      requestAnimationFrame(() => {
+        if (listEl) listEl.scrollTop = listEl.scrollHeight;
+      });
     }
   });
 
@@ -405,27 +422,29 @@
         <div class="chat-header">
           <span class="chat-title">Комментарии ({topLevelComments.length})</span>
           {#if !sharedBoutId}
-            <label class="filter-switch" title="Показывать только комментарии внутри текущего схода">
+            <label class="filter-switch" title="Живой чат: комментарии всплывают снизу по мере воспроизведения">
               <div class="switch-container">
                 <input 
                   type="checkbox" 
-                  bind:checked={filterByActiveBout} 
+                  bind:checked={filterByTimeline} 
                 />
                 <span class="slider"></span>
               </div>
               <span class="switch-label">
-                {#if currentBoutIndex !== -1}
-                  По сходу №{currentBoutIndex + 1}
-                {:else}
-                  По сходу
-                {/if}
+                Живой чат
               </span>
             </label>
           {/if}
         </div>
 
         <!-- Message list -->
-        <div class="list" bind:this={listEl}>
+        <div class="list" class:live-stream-mode={filterByTimeline} bind:this={listEl}>
+          {#if filterByTimeline && topLevelComments.length === 0}
+            <div class="live-stream-empty">
+              <span class="live-stream-empty-icon">💬</span>
+              <span>Комментарии появятся по мере таймлайна...</span>
+            </div>
+          {/if}
           {#each topLevelComments as c (c.id)}
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -699,12 +718,21 @@
                 onclick={() => handleCommentClick(r)}
               >
                 <div class="msg-head">
-                  <div class="avatar">
-                    <svg class="avatar-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5"/>
-                      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                    </svg>
-                    <img src={r.author.avatar_url} alt={r.author.display_name} onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  <div class="avatar avatar-split">
+                    {#if activeThreadParent?.author.avatar_url}
+                      <img class="avatar-half avatar-left" src={activeThreadParent.author.avatar_url} alt={activeThreadParent.author.display_name} onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    {:else}
+                      <div class="avatar-half avatar-left avatar-fallback">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                      </div>
+                    {/if}
+                    {#if r.author.avatar_url}
+                      <img class="avatar-half avatar-right" src={r.author.avatar_url} alt={r.author.display_name} onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    {:else}
+                      <div class="avatar-half avatar-right avatar-fallback">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                      </div>
+                    {/if}
                   </div>
                   <span class="name">{r.author.display_name}</span>
                   {#if r.drawing}
@@ -1083,12 +1111,43 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    position: relative;
   }
 
   .avatar img {
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+
+  .avatar-split {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .avatar-half {
+    width: 50%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .avatar-left {
+    border-right: 1px solid rgba(0, 0, 0, 0.4);
+  }
+
+  .avatar-right {
+    border-left: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .avatar-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-tertiary);
   }
 
   .name {
@@ -1317,5 +1376,51 @@
       border-color: var(--color-primary);
       color: var(--color-primary);
     }
+  }
+
+  /* ── Live Stream Mode Styles ── */
+  .list.live-stream-mode {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 12px;
+    overflow-y: auto;
+    height: 100%;
+  }
+
+  .list.live-stream-mode .msg {
+    margin-bottom: 0;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-left: 3px solid var(--color-primary, #6366f1);
+    animation: liveMsgSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes liveMsgSlideUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .live-stream-empty {
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-muted, rgba(255, 255, 255, 0.4));
+    font-size: 0.85rem;
+    text-align: center;
+  }
+
+  .live-stream-empty-icon {
+    font-size: 1.5rem;
   }
 </style>
