@@ -25,7 +25,11 @@
       const result = await login(username, password);
       token.set(result.token);
       currentUser.set(result.user);
-      window.location.href = '/';
+      if (window.location.hash && window.location.hash !== '#/' && window.location.hash !== '') {
+        window.location.reload();
+      } else {
+        window.location.href = '/';
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Ошибка входа';
     } finally {
@@ -35,6 +39,9 @@
 
   async function handleVkLogin() {
     if (!vkAppId) return;
+    if (window.location.hash && window.location.hash !== '#/' && window.location.hash !== '') {
+      sessionStorage.setItem('post_auth_hash', window.location.hash);
+    }
     const redirectUri = window.location.origin;
     const codeVerifier = generateCodeVerifier();
     sessionStorage.setItem('vk_code_verifier', codeVerifier);

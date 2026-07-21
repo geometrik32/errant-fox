@@ -6,6 +6,7 @@ export interface CreateCommentData {
   timestamp_ms: number;
   text: string;
   reply_to_id?: number | null;
+  drawing?: string | null;
 }
 
 export async function createComment(data: CreateCommentData): Promise<Comment> {
@@ -53,6 +54,7 @@ export interface CreateSharedCommentData {
   timestamp_ms: number;
   reply_to_id?: number | null;
   bout_id?: number | null;
+  drawing?: string | null;
 }
 
 export async function createSharedComment(data: CreateSharedCommentData): Promise<Comment> {
@@ -65,6 +67,7 @@ export async function createSharedComment(data: CreateSharedCommentData): Promis
       reply_to_id: data.reply_to_id,
       timestamp_ms: data.timestamp_ms,
       bout_id: data.bout_id,
+      drawing: data.drawing,
     }),
   });
 }

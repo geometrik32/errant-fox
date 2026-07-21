@@ -4,6 +4,7 @@
   import type { Comment, Bout } from '../api/types';
   import { createComment, updateComment, deleteComment, reactComment, deleteReact, createSharedComment } from '../api/comments';
   import ConfirmModal from '../ui/ConfirmModal.svelte';
+  import type { Stroke } from './DrawingCanvas.svelte';
 
   interface Props {
     videoId: string;
@@ -13,8 +14,13 @@
     readonly?: boolean;
     shareToken?: string;
     sharedBoutId?: number | null;
+    isDrawingMode?: boolean;
+    drawingStrokes?: Stroke[];
     onseek?: (timestamp_ms: number) => void;
     oncommentschange?: (comments: Comment[]) => void;
+    onstartdrawing?: () => void;
+    onclosedrawing?: () => void;
+    onselectcommentdrawing?: (strokes: Stroke[] | null, timestampMs?: number) => void;
     bouts?: Bout[];
   }
 
@@ -26,9 +32,14 @@
     readonly = false,
     shareToken = '',
     sharedBoutId = null,
+    isDrawingMode = false,
+    drawingStrokes = $bindable([]),
     bouts = [],
     onseek,
     oncommentschange,
+    onstartdrawing,
+    onclosedrawing,
+    onselectcommentdrawing,
   }: Props = $props();
 
   let comments = $state<Comment[]>([...untrack(() => initComments)]);
@@ -45,6 +56,7 @@
   let replyTo = $state<Comment | null>(null);
   let sending = $state(false);
   let listEl: HTMLDivElement;
+  let textareaEl = $state<HTMLTextAreaElement | null>(null);
 
   let filterByActiveBout = $state(false);
 
@@ -66,15 +78,17 @@
     let filtered = comments;
     if (sharedBout) {
       filtered = comments.filter(c => {
+        if (highlightedId && (c.id === highlightedId || c.reply_to_id === highlightedId)) return true;
         return c.timestamp_ms >= sharedBout.time_start_ms && c.timestamp_ms <= sharedBout.time_end_ms;
       });
     } else if (filterByActiveBout) {
       if (currentBout) {
         filtered = comments.filter(c => {
+          if (highlightedId && (c.id === highlightedId || c.reply_to_id === highlightedId)) return true;
           return c.timestamp_ms >= currentBout.time_start_ms && c.timestamp_ms <= currentBout.time_end_ms;
         });
       } else {
-        filtered = [];
+        filtered = highlightedId ? comments.filter(c => c.id === highlightedId || c.reply_to_id === highlightedId) : [];
       }
     }
 
@@ -119,6 +133,39 @@
     }
   }
 
+  function parseDrawing(drawingStr?: string | null): Stroke[] | null {
+    if (!drawingStr) return null;
+    try {
+      const data = JSON.parse(drawingStr);
+      if (data && Array.isArray(data.strokes)) {
+        return data.strokes;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return null;
+  }
+
+  function handleCommentClick(c: Comment) {
+    onseek?.(c.timestamp_ms);
+    const strokes = parseDrawing(c.drawing);
+    onselectcommentdrawing?.(strokes, c.timestamp_ms);
+  }
+
+  function toggleDrawingMode() {
+    if (isDrawingMode) {
+      onclosedrawing?.();
+    } else {
+      onseek?.(currentTime * 1000);
+      onstartdrawing?.();
+    }
+  }
+
+  function clearDrawing() {
+    drawingStrokes = [];
+    onclosedrawing?.();
+  }
+
   async function submit() {
     const t = text.trim();
     if (!t || sending) return;
@@ -129,6 +176,11 @@
       if (sharedBout) {
         commentTimeMs = Math.max(sharedBout.time_start_ms, Math.min(sharedBout.time_end_ms, commentTimeMs));
       }
+      let drawingDataStr: string | null = null;
+      if (drawingStrokes && drawingStrokes.length > 0) {
+        drawingDataStr = JSON.stringify({ version: 1, strokes: drawingStrokes });
+      }
+
       if (shareToken || !$currentUser) {
         created = await createSharedComment({
           videoId,
@@ -138,6 +190,7 @@
           timestamp_ms: commentTimeMs,
           reply_to_id: replyTo?.id ?? null,
           bout_id: sharedBoutId,
+          drawing: drawingDataStr,
         });
       } else {
         created = await createComment({
@@ -145,6 +198,7 @@
           timestamp_ms: commentTimeMs,
           text: t,
           reply_to_id: replyTo?.id ?? null,
+          drawing: drawingDataStr,
         });
       }
       const idx = comments.findIndex(c => c.id === created.id);
@@ -156,6 +210,8 @@
       oncommentschange?.(comments);
       text = '';
       replyTo = null;
+      drawingStrokes = [];
+      onclosedrawing?.();
       requestAnimationFrame(() => {
         if (listEl) listEl.scrollTop = listEl.scrollHeight;
       });
@@ -295,7 +351,15 @@
   <!-- Message list -->
   <div class="list" bind:this={listEl}>
     {#each sortedComments as c (c.id)}
-      <div class="msg" data-comment-id={c.id} style={c.reply_to_id !== null ? 'margin-left: 16px' : ''}>
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="msg"
+        class:highlighted={highlightedId === c.id}
+        data-comment-id={c.id}
+        style={c.reply_to_id !== null ? 'margin-left: 16px' : ''}
+        onclick={() => handleCommentClick(c)}
+      >
         <div class="msg-head">
           <div class="avatar">
             <svg class="avatar-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -305,7 +369,12 @@
             <img src={c.author.avatar_url} alt={c.author.display_name} onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
           </div>
           <span class="name">{c.author.display_name}</span>
-          <button class="ts" onclick={() => onseek?.(c.timestamp_ms)}>
+          {#if c.drawing}
+            <button class="drawing-badge" onclick={(e) => { e.stopPropagation(); handleCommentClick(c); }} title="Посмотреть рисунок">
+              🎨
+            </button>
+          {/if}
+          <button class="ts" onclick={(e) => { e.stopPropagation(); handleCommentClick(c); }}>
             {fmtMs(c.timestamp_ms)}
           </button>
         </div>
@@ -331,25 +400,25 @@
           <div class="msg-text">{c.text}</div>
         {/if}
 
-        <div class="msg-footer">
+        <div class="msg-footer" onclick={(e) => e.stopPropagation()}>
           <button
             class="react-btn"
             class:active={c.my_reaction === 'like'}
-            onclick={() => handleReact(c, 'like')}
+            onclick={(e) => { e.stopPropagation(); handleReact(c, 'like'); }}
             title="Нравится"
           >👍 {#if c.likes > 0}<span class="react-count">{c.likes}</span>{/if}</button>
           <button
             class="react-btn"
             class:active={c.my_reaction === 'dislike'}
-            onclick={() => handleReact(c, 'dislike')}
+            onclick={(e) => { e.stopPropagation(); handleReact(c, 'dislike'); }}
             title="Не нравится"
           >👎 {#if c.dislikes > 0}<span class="react-count">{c.dislikes}</span>{/if}</button>
-          <button class="reply-link" onclick={() => { replyTo = c; }}>Ответить</button>
+          <button class="reply-link" onclick={(e) => { e.stopPropagation(); replyTo = c; textareaEl?.focus(); }}>Ответить</button>
           {#if $currentUser?.id === c.author.id || ($currentUser && c.author.id === 'guest')}
             {#if $currentUser?.id === c.author.id}
-              <button class="edit-link" onclick={() => startEdit(c)}>Ред.</button>
+              <button class="edit-link" onclick={(e) => { e.stopPropagation(); startEdit(c); }}>Ред.</button>
             {/if}
-            <button class="del-link" onclick={() => promptDelete(c.id)} title="Удалить">
+            <button class="del-link" onclick={(e) => { e.stopPropagation(); promptDelete(c.id); }} title="Удалить">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -388,6 +457,7 @@
       </div>
     {/if}
     <textarea
+      bind:this={textareaEl}
       class="input-glass"
       bind:value={text}
       onkeydown={onKeydown}
@@ -395,6 +465,22 @@
       rows="2"
       disabled={sending}
     ></textarea>
+
+    <div class="input-actions-row">
+      <button
+        type="button"
+        class="pencil-btn"
+        class:active={isDrawingMode || (drawingStrokes && drawingStrokes.length > 0)}
+        onclick={toggleDrawingMode}
+        title="Нарисовать поверх кадра видео"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+        </svg>
+        <span>Рисовать</span>
+      </button>
+    </div>
   </div>
 
 </div>
@@ -527,7 +613,17 @@
     border-radius: var(--radius-sm);
     background: var(--surface-hover);
     border: 1px solid var(--border-color);
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, background 0.2s, transform 0.15s;
+    cursor: pointer;
+  }
+
+  .msg:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  .msg:active {
+    transform: scale(0.985);
   }
 
   @keyframes comment-flash {
@@ -773,4 +869,63 @@
   .guest-input:focus {
     border-color: var(--accent-yellow);
   }
+
+  .drawing-badge {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--accent-yellow, #f59e0b);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    font-size: 0.8rem;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    cursor: pointer;
+    margin-left: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    line-height: 1;
+    transition: var(--transition);
+  }
+
+  .drawing-badge:hover {
+    background: rgba(245, 158, 11, 0.35);
+    transform: scale(1.15);
+  }
+
+  .input-actions-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .pencil-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--surface-hover);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: var(--transition);
+  }
+
+  .pencil-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .pencil-btn.active {
+    color: #0f172a;
+    background: var(--accent-yellow, #f59e0b);
+    border-color: var(--accent-yellow, #f59e0b);
+    font-weight: 600;
+  }
+
+
 </style>

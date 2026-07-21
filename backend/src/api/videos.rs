@@ -98,6 +98,8 @@ pub struct CommentDto {
     pub likes: i32,
     pub dislikes: i32,
     pub my_reaction: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub drawing: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -217,6 +219,7 @@ fn build_video_full(
                 likes,
                 dislikes,
                 my_reaction,
+                drawing: c.drawing.clone(),
             }
         })
         .collect();
@@ -611,6 +614,7 @@ pub struct CreateSharedCommentRequest {
     pub reply_to_id: Option<i32>,
     pub timestamp_ms: i32,
     pub bout_id: Option<i32>,
+    pub drawing: Option<String>,
 }
 
 pub async fn create_shared_comment(
@@ -689,6 +693,7 @@ pub async fn create_shared_comment(
             reply_to_id: body.reply_to_id,
             bout_id: claims_bout_id.or(body.bout_id),
             guest_nickname: Some(nickname.clone()),
+            drawing: body.drawing.clone(),
         };
 
         use crate::db::schema::comments;
@@ -696,7 +701,9 @@ pub async fn create_shared_comment(
             diesel::insert_into(comments::table)
                 .values(&new_comment)
                 .execute(tx_conn)?;
-            comments::table.order(comments::id.desc()).first::<Comment>(tx_conn)
+            let comment_id: i32 = diesel::select(diesel::dsl::sql::<diesel::sql_types::Integer>("last_insert_rowid()"))
+                .get_result(tx_conn)?;
+            comments::table.filter(comments::id.eq(comment_id)).first::<Comment>(tx_conn)
         }).map_err(|e| AppError::Internal(e.to_string()))?;
 
         let guest_color = Some(crate::api::auth::generate_color(&nickname));
@@ -719,6 +726,7 @@ pub async fn create_shared_comment(
             dislikes: 0,
             my_reaction: None,
             bout_id: c.bout_id,
+            drawing: c.drawing.clone(),
         };
 
         // 4. Send WS Event so other watching users see it!
@@ -737,6 +745,7 @@ pub async fn create_shared_comment(
             created_at: c.created_at.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
             edited_at: None,
             bout_id: c.bout_id,
+            drawing: c.drawing.clone(),
         });
         let _ = state.ws_hub.send(ws_event);
 

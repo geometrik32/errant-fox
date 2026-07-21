@@ -14,8 +14,9 @@
     initialTimeMs?: number;
     shareToken?: string;
     sharedBoutId?: number | null;
+    highlightedCommentId?: number | null;
   }
-  let { videoId, initialTimeMs = 0, shareToken = '', sharedBoutId = null }: Props = $props();
+  let { videoId, initialTimeMs = 0, shareToken = '', sharedBoutId = null, highlightedCommentId: initialHighlightedId = null }: Props = $props();
 
   let video = $state<VideoFull | null>(null);
   let loading = $state(true);
@@ -89,6 +90,9 @@
     });
   });
 
+  // Highlighted comment ID from URL or timeline click
+  let highlightedCommentId = $state<number | null>(initialHighlightedId ?? null);
+
   // Panel visibility
   let showJudging = $state(true);
   let showChat = $state(true);
@@ -98,8 +102,24 @@
   let markingActive = $state(false);
   let markingFinishAnimationKey = $state(0);
 
-  // Comment highlight driven by timeline marker click
-  let highlightedCommentId = $state<number | null>(null);
+
+
+  // Drawing state
+  let isDrawingMode = $state(false);
+  let drawingStrokes = $state<any[]>([]);
+  let activeCommentDrawing = $state<any[] | null>(null);
+  let activeCommentTimestampMs = $state<number | null>(null);
+
+  // Clear comment drawing when currentTime moves away from the comment's timestamp
+  $effect(() => {
+    if (activeCommentDrawing && activeCommentTimestampMs !== null) {
+      const diffMs = Math.abs(currentTime * 1000 - activeCommentTimestampMs);
+      if (diffMs > 50) {
+        activeCommentDrawing = null;
+        activeCommentTimestampMs = null;
+      }
+    }
+  });
 
   let ws: WebSocket | null = null;
 
@@ -237,15 +257,25 @@
     if (e.code === keys.playPause?.code) {
       e.preventDefault(); player?.togglePlay();
     } else if (e.code === keys.stepForward?.code) {
-      e.preventDefault(); player?.stepForward();
+      e.preventDefault();
+      activeCommentDrawing = null;
+      activeCommentTimestampMs = null;
+      player?.stepForward();
     } else if (e.code === keys.stepBackward?.code) {
-      e.preventDefault(); player?.stepBackward();
+      e.preventDefault();
+      activeCommentDrawing = null;
+      activeCommentTimestampMs = null;
+      player?.stepBackward();
     } else if (e.code === keys.seekBackward?.code) {
       e.preventDefault();
+      activeCommentDrawing = null;
+      activeCommentTimestampMs = null;
       const minMs = sharedBout ? sharedBout.time_start_ms : 0;
       player?.seekTo(Math.max(minMs, (currentTime - seekStep) * 1000));
     } else if (e.code === keys.seekForward?.code) {
       e.preventDefault();
+      activeCommentDrawing = null;
+      activeCommentTimestampMs = null;
       const maxMs = sharedBout ? sharedBout.time_end_ms : (duration > 0 ? duration * 1000 : Infinity);
       player?.seekTo(Math.min(maxMs, (currentTime + seekStep) * 1000));
     } else if (e.code === keys.triggerMark?.code) {
@@ -314,20 +344,35 @@
           src={video.stream_url}
           {speed}
           {volume}
+          {playing}
           fps={video.fps ?? null}
           judgingOpen={showJudging}
           chatOpen={showChat}
           {markingActive}
           {markingFinishAnimationKey}
           activeViewers={activeViewers}
+          {isDrawingMode}
+          bind:drawingStrokes={drawingStrokes}
+          {activeCommentDrawing}
+          userColor={$currentUser?.color ?? null}
+          currentUser={$currentUser}
+          fighterA={video.fighter_a}
+          fighterB={video.fighter_b}
           ontimeupdate={(t) => { currentTime = t; }}
           ondurationchange={(d) => { duration = d; }}
-          onplayingchange={(p) => { playing = p; }}
+          onplayingchange={(p) => {
+            playing = p;
+            if (p) {
+              isDrawingMode = false;
+            }
+          }}
           onloopingchange={(l) => { looping = l; }}
           ondetectedfps={(f) => { if (fps == null) fps = f; }}
           ontogglejudging={() => { showJudging = !showJudging; }}
           ontogglechat={() => { showChat = !showChat; }}
           onspeedchange={(s) => { speed = s; player?.setSpeed(s); }}
+          onstrokeschange={(strokes) => { drawingStrokes = strokes; }}
+          onclosedrawing={() => { isDrawingMode = false; }}
         />
       </div>
 
@@ -337,14 +382,30 @@
           <Chat
             bind:this={chatComponent}
             {videoId}
-            comments={video.comments}
+            comments={liveComments}
             {currentTime}
             highlightedId={highlightedCommentId}
             bouts={liveBouts}
             {shareToken}
             {sharedBoutId}
+            {isDrawingMode}
+            bind:drawingStrokes={drawingStrokes}
+            onstartdrawing={() => {
+              isDrawingMode = true;
+              player?.pause();
+              activeCommentDrawing = null;
+            }}
+            onclosedrawing={() => { isDrawingMode = false; }}
+            onselectcommentdrawing={(strokes, timestampMs) => {
+              activeCommentDrawing = strokes;
+              activeCommentTimestampMs = timestampMs ?? null;
+              player?.pause();
+            }}
             onseek={(ms) => { player?.seekTo(ms); player?.pause(); }}
-            oncommentschange={(c) => { liveComments = c; }}
+            oncommentschange={(c) => {
+              liveComments = c;
+              if (video) video.comments = c;
+            }}
           />
         </div>
       {/if}
@@ -369,6 +430,7 @@
         {finishing}
         readonly={!!shareToken}
         onseek={(ms) => {
+          activeCommentDrawing = null;
           const targetMs = sharedBout ? ms + sharedBout.time_start_ms : ms;
           player?.seekTo(targetMs);
         }}
@@ -381,7 +443,22 @@
             player?.setLoop(b.time_start_ms, b.time_end_ms);
           }
         }}
-        oncommentclick={(id) => { highlightedCommentId = id; if (!showChat) showChat = true; }}
+        oncommentclick={(id) => {
+          highlightedCommentId = id;
+          if (!showChat) showChat = true;
+          const comm = liveComments.find(c => c.id === id);
+          if (comm && comm.drawing) {
+            try {
+              const data = JSON.parse(comm.drawing);
+              if (data && Array.isArray(data.strokes)) {
+                activeCommentDrawing = data.strokes;
+              }
+            } catch(e) {}
+          } else {
+            activeCommentDrawing = null;
+          }
+          player?.pause();
+        }}
         onplay={() => player?.togglePlay()}
         onstepback={() => player?.stepBackward()}
         onstepforward={() => player?.stepForward()}
