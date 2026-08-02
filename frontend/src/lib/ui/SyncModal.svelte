@@ -12,11 +12,14 @@
   let error = $state<string | null>(null);
   let staleVideos = $state<Video[]>([]);
   let cleaning = $state(false);
+  let importedCount = $state<number>(0);
   let successMessage = $state<string | null>(null);
 
   onMount(async () => {
     try {
-      staleVideos = await checkStaleVideos();
+      const res = await checkStaleVideos();
+      importedCount = res.imported_count;
+      staleVideos = res.stale;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Не удалось проверить базу данных';
     } finally {
@@ -82,11 +85,19 @@
       {:else if successMessage}
         <p class="msg success">{successMessage}</p>
       {:else if staleVideos.length === 0}
-        <p class="msg-info">Расхождений с Seafile не обнаружено. Все файлы видео на месте!</p>
+        {#if importedCount > 0}
+          <p class="msg-info">Импортировано новых видео из Seafile: <strong>{importedCount} шт.</strong></p>
+          <p class="msg-info" style="font-size: 0.85rem; opacity: 0.8;">Удалённых файлов не обнаружено.</p>
+        {:else}
+          <p class="msg-info">База актуальна. Новых видео не обнаружено, все файлы на месте!</p>
+        {/if}
         <div class="actions">
           <button class="btn btn-primary" onclick={onclose}>Отлично</button>
         </div>
       {:else}
+        {#if importedCount > 0}
+          <p class="msg-info" style="color: #22c55e;">Импортировано новых видео из Seafile: <strong>{importedCount} шт.</strong></p>
+        {/if}
         <p class="warning-text">
           В базе данных найдены записи видео ({staleVideos.length} шт.), файлы которых отсутствуют в Seafile.
           Они будут каскадно удалены из базы со всеми комментариями и сходами.

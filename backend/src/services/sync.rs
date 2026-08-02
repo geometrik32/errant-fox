@@ -137,7 +137,7 @@ pub async fn import_new_videos(
     seafile: &SeafileClient,
     db: &DbPool,
     ws_tx: &broadcast::Sender<WsEvent>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Vec<String>> {
     let date_re = Regex::new(r"(\d{4}[.\-]\d{2}[.\-]\d{2})").unwrap();
     import_new_videos_once(seafile, db, ws_tx, &date_re).await
 }
@@ -147,8 +147,9 @@ async fn import_new_videos_once(
     db: &DbPool,
     ws_tx: &broadcast::Sender<WsEvent>,
     date_re: &Regex,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Vec<String>> {
     let folders = seafile.list_folders().await?;
+    let mut imported_ids = Vec::new();
 
     for folder in folders {
         let date_str = match date_re.find(&folder.name) {
@@ -256,8 +257,9 @@ async fn import_new_videos_once(
                 preview_url: format!("/api/videos/{new_id}/previews/0"),
             });
             tracing::info!("synced new video: {seafile_path}");
+            imported_ids.push(new_id);
         }
     }
 
-    Ok(())
+    Ok(imported_ids)
 }
