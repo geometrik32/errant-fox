@@ -171,31 +171,30 @@ def _extract_simple_exchanges_from_faster(segments_list, wav_path: str):
     return exchanges, all_words
 
 
+from faster_whisper import WhisperModel
+
+WHISPER_MODEL_NAME = os.environ.get("WHISPER_MODEL", "medium")
+
+print(f"Loading Faster-Whisper (CTranslate2) model '{WHISPER_MODEL_NAME}' on CPU into RAM...", flush=True)
+global_whisper_model = WhisperModel(WHISPER_MODEL_NAME, device="cpu", compute_type="int8")
+print("Faster-Whisper model loaded successfully.", flush=True)
+
 def _detect_exchanges(wav_path: str):
-    from faster_whisper import WhisperModel
+    print(f"  Transcribing audio via global Faster-Whisper model...", flush=True)
+    segments, info = global_whisper_model.transcribe(
+        wav_path,
+        language="ru",
+        word_timestamps=True,
+        initial_prompt="Бой! Стоп! Удар! Разметка сходов фехтовального поединка."
+    )
+    segments_list = list(segments)
+    exchanges, all_words = _extract_simple_exchanges_from_faster(segments_list, wav_path)
 
-    print(f"  Loading Faster-Whisper (CTranslate2) model '{WHISPER_MODEL_NAME}' on CPU...", flush=True)
-    # compute_type="int8" optimized specifically for Intel CPU AVX2/AVX512 (3-4x speedup, 4x less RAM)
-    model = WhisperModel(WHISPER_MODEL_NAME, device="cpu", compute_type="int8")
+    for idx, ex in enumerate(exchanges):
+        print(f"  Exchange {idx+1}: {ex['start_ms']}ms – {ex['end_ms']}ms ('{ex.get('stop_word', '')}')", flush=True)
 
-    try:
-        segments, info = model.transcribe(
-            wav_path,
-            language="ru",
-            word_timestamps=True,
-            initial_prompt="Бой! Стоп! Удар! Разметка сходов фехтовального поединка."
-        )
-        segments_list = list(segments)
-        exchanges, all_words = _extract_simple_exchanges_from_faster(segments_list, wav_path)
+    return exchanges, all_words
 
-        for idx, ex in enumerate(exchanges):
-            print(f"  Exchange {idx+1}: {ex['start_ms']}ms – {ex['end_ms']}ms ('{ex.get('stop_word', '')}')", flush=True)
-
-        return exchanges, all_words
-    finally:
-        print("  Unloading Faster-Whisper model from RAM...", flush=True)
-        del model
-        gc.collect()
 
 
 # ── Request / Response schemas ────────────────────────────────────────────────
@@ -331,7 +330,8 @@ async def analyze(body: AnalyzeRequest):
             return {"video_id": vid, "exchanges": exchanges, "words": all_words}
         except Exception as exc:
             traceback.print_exc(file=sys.stderr)
-            return {"error": str(exc)}
+            from fastapi import HTTPException
+            raise HTTPException(status_code=500, detail=str(exc))
         finally:
             try:
                 import shutil

@@ -42,8 +42,13 @@ export async function regeneratePreview(id: string): Promise<{ status: string }>
   });
 }
 
-export async function checkStaleVideos(): Promise<Video[]> {
-  return apiFetch<Video[]>('/admin/videos/sync-check');
+export interface AdminSyncCheckResult {
+  imported_count: number;
+  stale: Video[];
+}
+
+export async function checkStaleVideos(): Promise<AdminSyncCheckResult> {
+  return apiFetch<AdminSyncCheckResult>('/admin/videos/sync-check');
 }
 
 export async function cleanStaleVideos(ids: string[]): Promise<{ status: string; deleted_count: number }> {

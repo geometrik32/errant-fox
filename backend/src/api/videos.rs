@@ -1250,19 +1250,32 @@ pub async fn regenerate_preview(
 
 // ── Admin Database Sync ───────────────────────────────────────────────────────
 
+#[derive(Serialize)]
+pub struct AdminSyncCheckResult {
+    pub imported_count: usize,
+    pub stale: Vec<crate::db::models::Video>,
+}
+
 pub async fn admin_sync_check(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
-) -> Result<Json<Vec<crate::db::models::Video>>, AppError> {
+) -> Result<Json<AdminSyncCheckResult>, AppError> {
     if !user.is_admin {
         return Err(AppError::Forbidden);
     }
+
+    let imported_ids = crate::services::sync::import_new_videos(&state.seafile, &state.db, &state.ws_hub)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
     let stale = crate::services::sync::check_stale_videos(&state.seafile, &state.db)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    Ok(Json(stale))
+    Ok(Json(AdminSyncCheckResult {
+        imported_count: imported_ids.len(),
+        stale,
+    }))
 }
 
 #[derive(Deserialize)]
@@ -1334,6 +1347,7 @@ async fn check_admin_token(
 pub struct AdminImportQuery {
     pub key: Option<String>,
     pub token: Option<String>,
+    pub ai_label: Option<bool>,
 }
 
 pub async fn admin_import_videos(
@@ -1365,12 +1379,41 @@ pub async fn admin_import_videos(
     }
 
     // 3. Trigger video import
-    crate::services::sync::import_new_videos(&state.seafile, &state.db, &state.ws_hub)
+    let imported_ids = crate::services::sync::import_new_videos(&state.seafile, &state.db, &state.ws_hub)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
+    let mut ai_queued_count = 0;
+    if query.ai_label == Some(true) && !imported_ids.is_empty() {
+        let db_batch = state.db.clone();
+        let target_ids = imported_ids.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            use crate::db::schema::videos;
+            if let Ok(mut conn) = db_batch.get() {
+                let _ = diesel::update(videos::table.filter(videos::id.eq_any(&target_ids)))
+                    .set(videos::is_queued.eq(true))
+                    .execute(&mut conn);
+            }
+        }).await;
+
+        for vid in &imported_ids {
+            let _ = state.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoAiLabeled {
+                video_id: vid.clone(),
+                is_ai_labeled: false,
+                is_analyzing: false,
+                is_queued: true,
+                has_transcript: None,
+            });
+            let _ = state.ai_queue_tx.send(vid.clone());
+        }
+        ai_queued_count = imported_ids.len();
+    }
+
     Ok(Json(serde_json::json!({
-        "status": "ok"
+        "status": "ok",
+        "imported_count": imported_ids.len(),
+        "imported_ids": imported_ids,
+        "ai_queued_count": ai_queued_count
     })))
 }
 
