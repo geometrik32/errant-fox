@@ -1538,16 +1538,29 @@ pub async fn execute_ai_label_for_video(state: AppState, video_id: String) -> Re
             .map_err(|e| format!("Seafile error: {}", e))?;
 
         let client = reqwest::Client::new();
-        let resp = client
-            .post(format!("{}/analyze", whisper_url))
-            .json(&serde_json::json!({
-                "audio_url": download_url,
-                "video_id": video_id_worker
-            }))
-            .timeout(std::time::Duration::from_secs(900))
-            .send()
-            .await
-            .map_err(|e| format!("Whisper service unreachable: {}", e))?;
+        let mut retry_count = 0;
+        let resp = loop {
+            match client
+                .post(format!("{}/analyze", whisper_url))
+                .json(&serde_json::json!({
+                    "audio_url": download_url,
+                    "video_id": video_id_worker
+                }))
+                .timeout(std::time::Duration::from_secs(900))
+                .send()
+                .await
+            {
+                Ok(r) => break r,
+                Err(e) => {
+                    if e.is_timeout() || retry_count >= 12 {
+                        return Err(format!("Whisper service unreachable: {}", e));
+                    }
+                    retry_count += 1;
+                    println!("Whisper service not ready, waiting 5s... ({}/12)", retry_count);
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                }
+            }
+        };
 
         let raw_json = resp
             .text()
@@ -2143,3 +2156,269 @@ pub async fn og_share_video(
     axum::response::Html(html)
 }
 
+pub async fn get_trim_ui(
+    State(state): State<AppState>,
+    Path(video_id): Path<String>,
+    Query(query): Query<TranscriptQuery>,
+) -> Result<axum::response::Response, AppError> {
+    let token = query.token.unwrap_or_default();
+    let is_admin = match crate::api::auth::verify_token(&token, &state.jwt_secret) {
+        Ok(claims) => {
+            let db = state.db.clone();
+            let uid = claims.sub;
+            tokio::task::spawn_blocking(move || {
+                use crate::db::schema::users;
+                if let Ok(mut conn) = db.get() {
+                    users::table
+                        .filter(users::id.eq(&uid))
+                        .first::<crate::db::models::User>(&mut conn)
+                        .map(|u| u.is_admin)
+                        .unwrap_or(false)
+                } else {
+                    false
+                }
+            })
+            .await
+            .unwrap_or(false)
+        }
+        Err(_) => false,
+    };
+
+    if !is_admin {
+        return Err(AppError::Forbidden);
+    }
+
+    let template_paths = [
+        "scratch/video_trimmer_target.html",
+        "data/video_trimmer_target.html",
+        "backend/video_trimmer_target.html",
+        "video_trimmer_target.html"
+    ];
+    let mut template = String::new();
+    for p in template_paths {
+        if let Ok(t) = tokio::fs::read_to_string(p).await {
+            template = t;
+            break;
+        }
+    }
+
+    if template.is_empty() {
+        return Ok(axum::response::Response::builder()
+            .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+            .body(axum::body::Body::from("<h1>Шаблон video_trimmer_target.html не найден</h1>"))
+            .unwrap());
+    }
+
+    let json_path = format!("{}/{}.json", state.transcripts_dir, video_id);
+    let exchanges_json = match tokio::fs::read_to_string(&json_path).await {
+        Ok(raw_json) => {
+            let parsed: serde_json::Value = serde_json::from_str(&raw_json).unwrap_or(serde_json::Value::Null);
+            if let Some(ex_arr) = parsed.get("exchanges").and_then(|v| v.as_array()) {
+                let mut formatted = Vec::new();
+                for (idx, ex) in ex_arr.iter().enumerate() {
+                    let start_sec = ex.get("start_ms").and_then(|v| v.as_f64()).map(|m| m / 1000.0)
+                        .or_else(|| ex.get("start_time_sec").and_then(|v| v.as_f64())).unwrap_or(0.0);
+                    let end_sec = ex.get("end_ms").and_then(|v| v.as_f64()).map(|m| m / 1000.0)
+                        .or_else(|| ex.get("end_time_sec").and_then(|v| v.as_f64())).unwrap_or(0.0);
+                    formatted.push(serde_json::json!({
+                        "exchange_id": idx + 1,
+                        "start_time_sec": start_sec,
+                        "end_time_sec": end_sec,
+                    }));
+                }
+                serde_json::to_string(&formatted).unwrap_or_else(|_| "[]".to_string())
+            } else {
+                "[]".to_string()
+            }
+        },
+        Err(_) => {
+            "[]".to_string()
+        }
+    };
+
+    let stream_url = format!("/api/videos/{}/stream?token={}", video_id, token);
+    
+    let html = template
+        .replace("let EMBEDDED_EXCHANGES = [];", &format!("let EMBEDDED_EXCHANGES = {};", exchanges_json))
+        .replace("let streamUrl = \"\";", &format!("let streamUrl = \"{}\";", stream_url))
+        .replace("let videoId = \"\";", &format!("let videoId = \"{}\";", video_id))
+        .replace("let tokenStr = \"\";", &format!("let tokenStr = \"{}\";", token));
+
+    let response = axum::response::Response::builder()
+        .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+        .body(axum::body::Body::from(html))
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    Ok(response)
+}
+
+#[derive(serde::Deserialize)]
+pub struct TrimVideoPayload {
+    pub start_sec: f64,
+    pub end_sec: f64,
+}
+
+pub async fn trim_video(
+    State(state): State<AppState>,
+    crate::api::auth::AdminUser(_user): crate::api::auth::AdminUser,
+    Path(video_id): Path<String>,
+    axum::Json(payload): axum::Json<TrimVideoPayload>,
+) -> Result<impl axum::response::IntoResponse, AppError> {
+    let db = state.db.clone();
+    
+    // 1. Get video
+    let video = tokio::task::spawn_blocking({
+        let vid = video_id.clone();
+        let db = db.clone();
+        move || {
+            use crate::db::schema::videos;
+            use diesel::prelude::*;
+            let mut conn = db.get()?;
+            videos::table
+                .filter(videos::id.eq(&vid))
+                .first::<Video>(&mut conn)
+        }
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    let seafile_path = match video.seafile_path {
+        Some(p) => p,
+        None => return Err(AppError::Internal("No seafile path".to_string()))
+    };
+    
+    let download_url = state.seafile.get_download_url(&seafile_path).await.map_err(|e| AppError::Internal(e.to_string()))?;
+    
+    let temp_output = format!("data/temp/temp_trim_{}.mp4", video_id);
+    
+    let status = tokio::process::Command::new("ffmpeg")
+        .arg("-i")
+        .arg(&download_url)
+        .arg("-ss")
+        .arg(payload.start_sec.to_string())
+        .arg("-to")
+        .arg(payload.end_sec.to_string())
+        .arg("-c")
+        .arg("copy")
+        .arg("-y")
+        .arg(&temp_output)
+        .status()
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    if !status.success() {
+        let _ = tokio::fs::remove_file(&temp_output).await;
+        return Err(AppError::Internal("FFmpeg trim failed".to_string()));
+    }
+
+    let file_bytes = tokio::fs::read(&temp_output).await.map_err(|e| AppError::Internal(e.to_string()))?;
+    state.seafile.upload_file(&seafile_path, file_bytes).await.map_err(|e| AppError::Internal(format!("Seafile upload failed: {}", e)))?;
+    let _ = tokio::fs::remove_file(&temp_output).await;
+
+    let start_ms = (payload.start_sec * 1000.0) as i32;
+    
+    tokio::task::spawn_blocking({
+        let vid = video_id.clone();
+        let db = db.clone();
+        let new_duration_ms = ((payload.end_sec - payload.start_sec) * 1000.0) as i32;
+        move || -> Result<(), diesel::result::Error> {
+            use crate::db::schema::{bouts, comments};
+            use diesel::prelude::*;
+            let mut conn = db.get().map_err(|_| diesel::result::Error::NotFound)?;
+            
+            diesel::update(bouts::table.filter(bouts::video_id.eq(&vid)))
+                .set((
+                    bouts::time_start_ms.eq(bouts::time_start_ms - start_ms),
+                    bouts::time_end_ms.eq(bouts::time_end_ms - start_ms),
+                ))
+                .execute(&mut conn)?;
+
+            // Delete bouts that fall entirely into the cut or cross the boundaries
+            diesel::delete(
+                bouts::table.filter(
+                    bouts::video_id.eq(&vid)
+                        .and(bouts::time_start_ms.lt(0).or(bouts::time_end_ms.gt(new_duration_ms)))
+                )
+            ).execute(&mut conn)?;
+
+            diesel::update(comments::table.filter(comments::video_id.eq(&vid)))
+                .set(comments::timestamp_ms.eq(comments::timestamp_ms - start_ms))
+                .execute(&mut conn)?;
+
+            // Delete comments that fall out of bounds
+            diesel::delete(
+                comments::table.filter(
+                    comments::video_id.eq(&vid)
+                        .and(comments::timestamp_ms.lt(0).or(comments::timestamp_ms.gt(new_duration_ms)))
+                )
+            ).execute(&mut conn)?;
+
+            Ok(())
+        }
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))?
+    .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let json_path = format!("{}/{}.json", state.transcripts_dir, video_id);
+    let _ = tokio::fs::remove_file(&json_path).await;
+
+    // Reset video flags in DB (is_analyzing, is_ai_labeled) maybe? Wait, deleting json is enough, it will show "Расшифровка ИИ отсутствует".
+    // Also, we can set is_ai_labeled to false since the transcript is gone, but maybe it's human labeled.
+    // Let's just leave it, since `has_transcript` will be returned dynamically based on the json file.
+    tokio::task::spawn_blocking({
+        let vid = video_id.clone();
+        let db = db.clone();
+        move || -> Result<(), diesel::result::Error> {
+            use crate::db::schema::videos;
+            use diesel::prelude::*;
+            let mut conn = db.get().map_err(|_| diesel::result::Error::NotFound)?;
+            diesel::update(videos::table.filter(videos::id.eq(&vid)))
+                .set(videos::is_ai_labeled.eq(false))
+                .execute(&mut conn)?;
+            Ok(())
+        }
+    }).await.unwrap_or(Ok(())).unwrap_or(());
+
+    Ok(axum::Json(serde_json::json!({ "success": true })))
+}
+
+pub async fn get_trim_impact(
+    State(state): State<AppState>,
+    crate::api::auth::AdminUser(_user): crate::api::auth::AdminUser,
+    Path(video_id): Path<String>,
+    Query(payload): Query<TrimVideoPayload>,
+) -> Result<impl axum::response::IntoResponse, AppError> {
+    let db = state.db.clone();
+    
+    let start_ms = (payload.start_sec * 1000.0) as i32;
+    let end_ms = (payload.end_sec * 1000.0) as i32;
+    
+    let impact = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::{bouts, comments};
+        use diesel::prelude::*;
+        let mut conn = db.get().map_err(|_| diesel::result::Error::NotFound)?;
+        
+        let deleted_bouts = bouts::table
+            .filter(bouts::video_id.eq(&video_id))
+            .filter(bouts::time_start_ms.lt(start_ms).or(bouts::time_end_ms.gt(end_ms)))
+            .count()
+            .get_result::<i64>(&mut conn)? as i32;
+
+        let deleted_comments = comments::table
+            .filter(comments::video_id.eq(&video_id))
+            .filter(comments::timestamp_ms.lt(start_ms).or(comments::timestamp_ms.gt(end_ms)))
+            .count()
+            .get_result::<i64>(&mut conn)? as i32;
+            
+        Ok::<_, diesel::result::Error>((deleted_bouts, deleted_comments))
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))?
+    .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    Ok(axum::Json(serde_json::json!({
+        "deleted_bouts": impact.0,
+        "deleted_comments": impact.1
+    })))
+}

@@ -15,6 +15,7 @@ mod state;
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
+    let _ = tokio::fs::create_dir_all("data/temp").await;
 
     let config = config::Config::from_env();
 
