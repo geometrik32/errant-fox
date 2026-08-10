@@ -2258,6 +2258,41 @@ pub struct TrimVideoPayload {
     pub end_sec: f64,
 }
 
+#[derive(Clone, serde::Serialize)]
+pub struct TrimStatusResponse {
+    pub status: String,
+    pub error: Option<String>,
+}
+
+static TRIM_JOBS: std::sync::LazyLock<std::sync::Arc<tokio::sync::RwLock<HashMap<String, TrimStatusResponse>>>> =
+    std::sync::LazyLock::new(|| std::sync::Arc::new(tokio::sync::RwLock::new(HashMap::new())));
+
+pub async fn get_trim_status(
+    State(_state): State<AppState>,
+    crate::middleware::auth::CurrentUser(user): crate::middleware::auth::CurrentUser,
+    Path(video_id): Path<String>,
+) -> Result<impl axum::response::IntoResponse, AppError> {
+    if !user.is_admin {
+        return Err(AppError::Forbidden);
+    }
+    let jobs = TRIM_JOBS.read().await;
+    let status = jobs.get(&video_id).cloned().unwrap_or(TrimStatusResponse {
+        status: "idle".to_string(),
+        error: None,
+    });
+    Ok(axum::Json(status))
+}
+
+async fn get_temp_dir() -> String {
+    let candidates = ["/data/temp", "data/temp", "/tmp/errant_fox_temp"];
+    for candidate in candidates {
+        if tokio::fs::create_dir_all(candidate).await.is_ok() {
+            return candidate.to_string();
+        }
+    }
+    std::env::temp_dir().to_string_lossy().to_string()
+}
+
 pub async fn trim_video(
     State(state): State<AppState>,
     crate::middleware::auth::CurrentUser(user): crate::middleware::auth::CurrentUser,
@@ -2268,6 +2303,44 @@ pub async fn trim_video(
         return Err(AppError::Forbidden);
     }
     
+    {
+        let mut jobs = TRIM_JOBS.write().await;
+        if let Some(job) = jobs.get(&video_id) {
+            if job.status == "processing" {
+                return Ok(axum::Json(serde_json::json!({ "status": "processing", "message": "Already processing" })));
+            }
+        }
+        jobs.insert(video_id.clone(), TrimStatusResponse {
+            status: "processing".to_string(),
+            error: None,
+        });
+    }
+
+    let vid = video_id.clone();
+    tokio::spawn(async move {
+        let res = run_trim_task(state, vid.clone(), payload).await;
+        let mut jobs = TRIM_JOBS.write().await;
+        match res {
+            Ok(()) => {
+                jobs.insert(vid, TrimStatusResponse {
+                    status: "success".to_string(),
+                    error: None,
+                });
+            }
+            Err(e) => {
+                tracing::error!("Trim background task failed: {:?}", e);
+                jobs.insert(vid, TrimStatusResponse {
+                    status: "error".to_string(),
+                    error: Some(e.to_string()),
+                });
+            }
+        }
+    });
+
+    Ok(axum::Json(serde_json::json!({ "status": "processing" })))
+}
+
+async fn run_trim_task(state: AppState, video_id: String, payload: TrimVideoPayload) -> Result<(), anyhow::Error> {
     let db = state.db.clone();
     
     // 1. Get video
@@ -2283,35 +2356,28 @@ pub async fn trim_video(
                 .first::<Video>(&mut conn)
         }
     })
-    .await
-    .map_err(|e| AppError::Internal(e.to_string()))?
-    .map_err(|e| AppError::Internal(e.to_string()))?;
+    .await??;
 
     let seafile_path = video.seafile_path.clone();
     
-    let download_url = state.seafile.get_download_url(&seafile_path).await
-        .map_err(|e| AppError::Internal(format!("Failed to get download URL: {}", e)))?;
+    let download_url = state.seafile.get_download_url(&seafile_path).await?;
     
-    let temp_dir = if std::path::Path::new("/data").exists() { "/data/temp" } else { "data/temp" };
-    let _ = tokio::fs::create_dir_all(temp_dir).await;
+    let temp_dir = get_temp_dir().await;
     let temp_input = format!("{}/input_{}.mp4", temp_dir, video_id);
     let temp_output = format!("{}/trimmed_{}.mp4", temp_dir, video_id);
     
     // Step 1: Download the original video via reqwest (works reliably with Seafile HTTPS)
     // Stream to disk to avoid loading multi-GB files into RAM
-    tracing::info!("Trim: downloading video {} from Seafile...", video_id);
-    let response = reqwest::get(&download_url).await
-        .map_err(|e| AppError::Internal(format!("Failed to download video: {}", e)))?;
+    tracing::info!("Trim: downloading video {} from Seafile to {}...", video_id, temp_input);
+    let response = reqwest::get(&download_url).await?;
     {
         use tokio::io::AsyncWriteExt;
-        let mut file = tokio::fs::File::create(&temp_input).await
-            .map_err(|e| AppError::Internal(format!("Failed to create temp input file: {}", e)))?;
+        let mut file = tokio::fs::File::create(&temp_input).await?;
         let mut stream = response.bytes_stream();
         use futures_util::StreamExt;
         while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|e| AppError::Internal(format!("Download stream error: {}", e)))?;
-            file.write_all(&chunk).await
-                .map_err(|e| AppError::Internal(format!("Failed to write chunk: {}", e)))?;
+            let chunk = chunk?;
+            file.write_all(&chunk).await?;
         }
     }
     tracing::info!("Trim: download complete, running ffmpeg...");
@@ -2331,8 +2397,7 @@ pub async fn trim_video(
         .arg("-y")
         .arg(&temp_output)
         .output()
-        .await
-        .map_err(|e| AppError::Internal(format!("Failed to run ffmpeg: {}", e)))?;
+        .await?;
 
     let _ = tokio::fs::remove_file(&temp_input).await;
 
@@ -2340,15 +2405,13 @@ pub async fn trim_video(
         let stderr = String::from_utf8_lossy(&output.stderr);
         tracing::error!("FFmpeg failed: {}", stderr);
         let _ = tokio::fs::remove_file(&temp_output).await;
-        return Err(AppError::Internal(format!("FFmpeg trim failed: {}", stderr)));
+        return Err(anyhow::anyhow!("FFmpeg trim failed: {}", stderr));
     }
     tracing::info!("Trim: ffmpeg done, uploading to Seafile...");
 
     // Step 3: Upload trimmed file back to Seafile
-    let file_bytes = tokio::fs::read(&temp_output).await
-        .map_err(|e| AppError::Internal(format!("Failed to read trimmed file: {}", e)))?;
-    state.seafile.upload_file(&seafile_path, file_bytes).await
-        .map_err(|e| AppError::Internal(format!("Seafile upload failed: {}", e)))?;
+    let file_bytes = tokio::fs::read(&temp_output).await?;
+    state.seafile.upload_file(&seafile_path, file_bytes).await?;
     let _ = tokio::fs::remove_file(&temp_output).await;
     tracing::info!("Trim: upload done, updating DB...");
 
@@ -2393,16 +2456,11 @@ pub async fn trim_video(
             Ok(())
         }
     })
-    .await
-    .map_err(|e| AppError::Internal(e.to_string()))?
-    .map_err(|e| AppError::Internal(e.to_string()))?;
+    .await??;
 
     let json_path = format!("{}/{}.json", state.transcripts_dir, video_id);
     let _ = tokio::fs::remove_file(&json_path).await;
 
-    // Reset video flags in DB (is_analyzing, is_ai_labeled) maybe? Wait, deleting json is enough, it will show "Расшифровка ИИ отсутствует".
-    // Also, we can set is_ai_labeled to false since the transcript is gone, but maybe it's human labeled.
-    // Let's just leave it, since `has_transcript` will be returned dynamically based on the json file.
     tokio::task::spawn_blocking({
         let vid = video_id.clone();
         let db = db.clone();
@@ -2417,7 +2475,7 @@ pub async fn trim_video(
         }
     }).await.unwrap_or(Ok(())).unwrap_or(());
 
-    Ok(axum::Json(serde_json::json!({ "success": true })))
+    Ok(())
 }
 
 pub async fn get_trim_impact(

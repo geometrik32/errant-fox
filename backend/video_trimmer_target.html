@@ -413,6 +413,7 @@
     }
 
     overlay.style.display = 'flex';
+    document.getElementById('overlayText').textContent = "Выполняется обрезка видео на сервере... Это может занять пару минут. Пожалуйста, подождите.";
 
     try {
       const res = await fetch(`/api/videos/${videoId}/trim?token=${tokenStr}`, {
@@ -426,8 +427,27 @@
         throw new Error(text);
       }
 
-      alert("Видео успешно обрезано! Перезагрузите главную страницу, чтобы увидеть изменения.");
-      window.close();
+      // Poll trim_status every 2 seconds
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`/api/videos/${videoId}/trim_status?token=${tokenStr}`);
+          if (!statusRes.ok) return;
+          const statusData = await statusRes.json();
+          if (statusData.status === 'success') {
+            clearInterval(pollInterval);
+            alert("Видео успешно обрезано! Перезагрузите главную страницу, чтобы увидеть изменения.");
+            window.close();
+          } else if (statusData.status === 'error') {
+            clearInterval(pollInterval);
+            alert("Ошибка при обрезке: " + (statusData.error || "Неизвестная ошибка"));
+            overlay.style.display = 'none';
+            trimBtn.disabled = false;
+          }
+        } catch (pollErr) {
+          console.error("Polling error", pollErr);
+        }
+      }, 2000);
+
     } catch (e) {
       alert("Ошибка при обрезке: " + e.message);
       overlay.style.display = 'none';
