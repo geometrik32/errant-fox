@@ -2289,37 +2289,59 @@ pub async fn trim_video(
 
     let seafile_path = video.seafile_path.clone();
     
-    let download_url = state.seafile.get_download_url(&seafile_path).await.map_err(|e| AppError::Internal(e.to_string()))?;
+    let download_url = state.seafile.get_download_url(&seafile_path).await
+        .map_err(|e| AppError::Internal(format!("Failed to get download URL: {}", e)))?;
     
     let temp_dir = if std::path::Path::new("/data").exists() { "/data/temp" } else { "data/temp" };
     let _ = tokio::fs::create_dir_all(temp_dir).await;
-    let temp_output = format!("{}/temp_trim_{}.mp4", temp_dir, video_id);
+    let temp_input = format!("{}/input_{}.mp4", temp_dir, video_id);
+    let temp_output = format!("{}/trimmed_{}.mp4", temp_dir, video_id);
     
+    // Step 1: Download the original video via reqwest (works reliably with Seafile HTTPS)
+    tracing::info!("Trim: downloading video {} from Seafile...", video_id);
+    let response = reqwest::get(&download_url).await
+        .map_err(|e| AppError::Internal(format!("Failed to download video: {}", e)))?;
+    let video_bytes = response.bytes().await
+        .map_err(|e| AppError::Internal(format!("Failed to read video bytes: {}", e)))?;
+    tokio::fs::write(&temp_input, &video_bytes).await
+        .map_err(|e| AppError::Internal(format!("Failed to write temp input: {}", e)))?;
+    tracing::info!("Trim: downloaded {} bytes, running ffmpeg...", video_bytes.len());
+    
+    // Step 2: Run ffmpeg on local files
     let duration = payload.end_sec - payload.start_sec;
     
-    let status = tokio::process::Command::new("ffmpeg")
+    let output = tokio::process::Command::new("ffmpeg")
         .arg("-ss")
         .arg(payload.start_sec.to_string())
         .arg("-i")
-        .arg(&download_url)
+        .arg(&temp_input)
         .arg("-t")
         .arg(duration.to_string())
         .arg("-c")
         .arg("copy")
         .arg("-y")
         .arg(&temp_output)
-        .status()
+        .output()
         .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+        .map_err(|e| AppError::Internal(format!("Failed to run ffmpeg: {}", e)))?;
 
-    if !status.success() {
+    let _ = tokio::fs::remove_file(&temp_input).await;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        tracing::error!("FFmpeg failed: {}", stderr);
         let _ = tokio::fs::remove_file(&temp_output).await;
-        return Err(AppError::Internal("FFmpeg trim failed".to_string()));
+        return Err(AppError::Internal(format!("FFmpeg trim failed: {}", stderr)));
     }
+    tracing::info!("Trim: ffmpeg done, uploading to Seafile...");
 
-    let file_bytes = tokio::fs::read(&temp_output).await.map_err(|e| AppError::Internal(e.to_string()))?;
-    state.seafile.upload_file(&seafile_path, file_bytes).await.map_err(|e| AppError::Internal(format!("Seafile upload failed: {}", e)))?;
+    // Step 3: Upload trimmed file back to Seafile
+    let file_bytes = tokio::fs::read(&temp_output).await
+        .map_err(|e| AppError::Internal(format!("Failed to read trimmed file: {}", e)))?;
+    state.seafile.upload_file(&seafile_path, file_bytes).await
+        .map_err(|e| AppError::Internal(format!("Seafile upload failed: {}", e)))?;
     let _ = tokio::fs::remove_file(&temp_output).await;
+    tracing::info!("Trim: upload done, updating DB...");
 
     let start_ms = (payload.start_sec * 1000.0) as i32;
     
