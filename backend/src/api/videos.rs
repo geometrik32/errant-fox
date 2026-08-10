@@ -2295,13 +2295,15 @@ pub async fn trim_video(
     let _ = tokio::fs::create_dir_all(temp_dir).await;
     let temp_output = format!("{}/temp_trim_{}.mp4", temp_dir, video_id);
     
+    let duration = payload.end_sec - payload.start_sec;
+    
     let status = tokio::process::Command::new("ffmpeg")
-        .arg("-i")
-        .arg(&download_url)
         .arg("-ss")
         .arg(payload.start_sec.to_string())
-        .arg("-to")
-        .arg(payload.end_sec.to_string())
+        .arg("-i")
+        .arg(&download_url)
+        .arg("-t")
+        .arg(duration.to_string())
         .arg("-c")
         .arg("copy")
         .arg("-y")
