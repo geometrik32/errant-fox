@@ -144,11 +144,12 @@ impl SeafileClient {
     }
 
     /// Get a temporary upload URL for a directory.
-    pub async fn get_upload_link(&self) -> Result<String> {
+    pub async fn get_upload_link(&self, parent_dir: &str) -> Result<String> {
         let url = format!("{}/api/v2.1/via-repo-token/upload-link/", self.url);
         let upload_url: String = self
             .client
             .get(&url)
+            .query(&[("path", parent_dir)])
             .header("Authorization", self.auth_header())
             .send()
             .await?
@@ -161,12 +162,12 @@ impl SeafileClient {
     /// Upload a file, replacing it if it exists.
     /// `path` is the full relative path (e.g. "Folder/video.mp4").
     pub async fn upload_file(&self, path: &str, file_bytes: Vec<u8>) -> Result<()> {
-        let upload_url = self.get_upload_link().await?;
-        
         let path = if path.starts_with('/') { path.to_string() } else { format!("/{}", path) };
         let path_obj = std::path::Path::new(&path);
         let parent_dir = path_obj.parent().unwrap_or(std::path::Path::new("/")).to_string_lossy().to_string();
         let file_name = path_obj.file_name().unwrap_or_default().to_string_lossy().to_string();
+
+        let upload_url = self.get_upload_link(&parent_dir).await?;
 
         let part = reqwest::multipart::Part::bytes(file_bytes)
             .file_name(file_name.clone());
