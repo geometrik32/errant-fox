@@ -91,6 +91,10 @@ pub fn router(state: AppState) -> Router {
             "/api/videos/{id}/trim",
             post(videos::trim_video),
         )
+        .route(
+            "/api/videos/{id}/trim_status",
+            get(videos::get_trim_status),
+        )
         // Admin Videos Sync
         .route(
             "/api/admin/videos/sync-check",
