@@ -171,17 +171,60 @@ def _extract_simple_exchanges_from_faster(segments_list, wav_path: str):
     return exchanges, all_words
 
 
+import time
+import asyncio
 from faster_whisper import WhisperModel
 
 WHISPER_MODEL_NAME = os.environ.get("WHISPER_MODEL", "medium")
 
-print(f"Loading Faster-Whisper (CTranslate2) model '{WHISPER_MODEL_NAME}' on CPU into RAM...", flush=True)
-global_whisper_model = WhisperModel(WHISPER_MODEL_NAME, device="cpu", compute_type="int8")
-print("Faster-Whisper model loaded successfully.", flush=True)
+
+class DynamicWhisperModel:
+    def __init__(self, model_name: str, idle_timeout_sec: float = 300.0):
+        self.model_name = model_name
+        self.idle_timeout_sec = idle_timeout_sec
+        self.model = None
+        self.last_used = 0.0
+
+    def get_model(self) -> WhisperModel:
+        self.last_used = time.time()
+        if self.model is None:
+            print(f"[WhisperModel] Loading Faster-Whisper model '{self.model_name}' (from disk cache into RAM)...", flush=True)
+            t0 = time.time()
+            self.model = WhisperModel(self.model_name, device="cpu", compute_type="int8")
+            print(f"[WhisperModel] Model loaded successfully in {time.time() - t0:.2f}s.", flush=True)
+        return self.model
+
+    def check_unload(self):
+        if self.model is not None and (time.time() - self.last_used) > self.idle_timeout_sec:
+            print(f"[WhisperModel] Inactivity timeout ({self.idle_timeout_sec}s) reached. Unloading model from RAM...", flush=True)
+            del self.model
+            self.model = None
+            gc.collect()
+            print("[WhisperModel] Model unloaded. RAM freed.", flush=True)
+
+
+model_manager = DynamicWhisperModel(WHISPER_MODEL_NAME, idle_timeout_sec=300.0)
+
+
+async def _auto_unload_loop():
+    while True:
+        await asyncio.sleep(30)
+        try:
+            model_manager.check_unload()
+        except Exception as e:
+            print(f"[WhisperModel] Error in auto-unload loop: {e}", flush=True)
+
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(_auto_unload_loop())
+    print("[WhisperModel] Background auto-unload task started.", flush=True)
+
 
 def _detect_exchanges(wav_path: str):
-    print(f"  Transcribing audio via global Faster-Whisper model...", flush=True)
-    segments, info = global_whisper_model.transcribe(
+    print(f"  Transcribing audio via Faster-Whisper model...", flush=True)
+    model = model_manager.get_model()
+    segments, info = model.transcribe(
         wav_path,
         language="ru",
         word_timestamps=True,
@@ -196,7 +239,6 @@ def _detect_exchanges(wav_path: str):
     return exchanges, all_words
 
 
-
 # ── Request / Response schemas ────────────────────────────────────────────────
 
 class AnalyzeRequest(BaseModel):
@@ -208,10 +250,8 @@ class AnalyzeRequest(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "model_loaded": model_manager.model is not None}
 
-
-import asyncio
 
 analyze_lock = asyncio.Lock()
 cancelled_video_ids: set[str] = set()
@@ -257,50 +297,13 @@ def _download_and_convert_audio(audio_url: str, tmpdir: str) -> str:
             text=True,
             timeout=180,
         )
-        if result.returncode == 0:
-            return wav_path
-    except subprocess.TimeoutExpired:
-        print("  Direct ffmpeg stream timed out after 180s, falling back to HTTP stream download...", flush=True)
-    except Exception as e:
-        print(f"  Direct ffmpeg stream error ({e}), falling back to HTTP stream download...", flush=True)
-
-    # Fallback: if direct HTTP ffmpeg input fails, download raw file & convert
-    print("  Executing fallback stream download via requests...", flush=True)
-    raw_path = os.path.join(tmpdir, "raw_audio")
-    try:
-        with requests.get(audio_url, stream=True, timeout=120) as r:
-            r.raise_for_status()
-            with open(raw_path, "wb") as f:
-                for chunk in r.iter_content(chunk_size=65536):
-                    f.write(chunk)
-
-        result_fb = subprocess.run(
-            [
-                "ffmpeg", "-y",
-                "-vn",
-                "-i", raw_path,
-                "-ar", "16000",
-                "-ac", "1",
-                "-f", "wav",
-                wav_path,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=180,
-        )
-        if result_fb.returncode != 0:
-            msg = result_fb.stderr[-2000:] if result_fb.stderr else "ffmpeg failed"
-            raise RuntimeError(f"ffmpeg error: {msg}")
+        if result.returncode != 0:
+            err_msg = result.stderr[-1000:] if result.stderr else "ffmpeg exited with non-zero code"
+            print(f"  ffmpeg error:\n{err_msg}", flush=True)
+            raise RuntimeError(f"ffmpeg failed to stream audio from URL: {err_msg}")
+        return wav_path
     except subprocess.TimeoutExpired:
         raise RuntimeError("ffmpeg conversion timed out after 180 seconds")
-    finally:
-        if os.path.exists(raw_path):
-            try:
-                os.remove(raw_path)
-            except Exception:
-                pass
-
-    return wav_path
 
 
 @app.post("/analyze")
