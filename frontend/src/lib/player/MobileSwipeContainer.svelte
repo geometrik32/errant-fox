@@ -110,7 +110,7 @@
       {#if left}{@render left()}{:else}<div class="panel-placeholder">Судейство</div>{/if}
     </div>
 
-    {#if hasCenter}
+    {#if center}
       <div class="swipe-panel">
         {@render center()}
       </div>

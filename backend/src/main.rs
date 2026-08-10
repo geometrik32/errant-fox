@@ -106,8 +106,21 @@ async fn main() {
 
     services::ai_queue::start_ai_queue_processor(app_state.clone(), ai_queue_rx);
 
+    let allowed_origin = config.frontend_origin.parse::<header::HeaderValue>().ok();
+
     let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::any())
+        .allow_origin(AllowOrigin::predicate(move |origin, _| {
+            if let Some(ref allowed) = allowed_origin {
+                if origin == allowed {
+                    return true;
+                }
+            }
+            let bytes = origin.as_bytes();
+            bytes.starts_with(b"http://localhost")
+                || bytes.starts_with(b"http://127.0.0.1")
+                || bytes.starts_with(b"capacitor://")
+                || bytes.starts_with(b"https://localhost")
+        }))
         .allow_methods([
             Method::GET,
             Method::POST,

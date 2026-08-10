@@ -1,4 +1,5 @@
 <script lang="ts">
+  import DOMPurify from 'dompurify';
   import { techniques, currentUser } from '../../stores';
   import { createTechnique, patchTechnique, deleteTechnique } from '../api/techniques';
   import ConfirmModal from '../ui/ConfirmModal.svelte';
@@ -190,7 +191,7 @@
                   <!-- Description panel -->
                   <div class="desc-panel">
                     <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                    {@html t.description}
+                    {@html DOMPurify.sanitize(t.description)}
                   </div>
                 {/if}
               {/if}

@@ -1,6 +1,8 @@
+import os
+import sys
 import sqlite3
 
-db_path = 'e:/00_Curent project/Errant Fox/backend/errant_fox.sqlite'
+db_path = sys.argv[1] if len(sys.argv) > 1 else os.environ.get('DATABASE_URL', 'backend/errant_fox.sqlite')
 try:
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()

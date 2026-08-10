@@ -1,4 +1,5 @@
 <script lang="ts">
+  import DOMPurify from 'dompurify';
   import { untrack } from 'svelte';
   import { techniques } from '../../stores';
   import type { Bout, VideoFighter } from '../api/types';
@@ -515,7 +516,7 @@
           style="top: {tooltipPos.top}px; left: {tooltipPos.left}px;"
         >
           <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-          {@html desc}
+          {@html DOMPurify.sanitize(desc)}
         </div>
       {/if}
     {/if}

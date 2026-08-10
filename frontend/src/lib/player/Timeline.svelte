@@ -29,6 +29,7 @@
     onlooptoggle?: () => void;
     fps?: number | null;
     startTime?: number | null;
+    onstartclick?: () => void;
     finishing?: boolean;
     onfinishclick?: () => void;
     onshare?: () => void;

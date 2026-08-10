@@ -536,10 +536,12 @@ pub async fn search_comments(
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
 
-        // Load all comments with author and video info to filter in memory (for unicode case-insensitivity)
+        let query_pattern = format!("%{}%", params.q.trim());
+
         let rows = comments::table
             .inner_join(users::table.on(comments::author_id.eq(users::id)))
             .inner_join(videos::table.on(comments::video_id.eq(videos::id)))
+            .filter(comments::text.like(&query_pattern))
             .select((
                 comments::id,
                 comments::text,
@@ -551,37 +553,31 @@ pub async fn search_comments(
                 videos::fighter_a_id,
                 videos::fighter_b_id,
             ))
+            .limit(50)
             .load::<(i32, String, i32, String, String, String, chrono::NaiveDate, Option<String>, Option<String>)>(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        let query_lower = params.q.to_lowercase();
-        let mut out = Vec::new();
+        let mut out = Vec::with_capacity(rows.len());
         for (cid, ctext, ts, vid, uid, uname, vdate, fa_id, fb_id) in rows {
-            if ctext.to_lowercase().contains(&query_lower) {
-                // Resolve fighter display names
-                let fa_name = if let Some(ref id) = fa_id {
-                    users::table.filter(users::id.eq(id)).select(users::display_name).first::<String>(&mut conn).ok()
-                } else { None };
-                let fb_name = if let Some(ref id) = fb_id {
-                    users::table.filter(users::id.eq(id)).select(users::display_name).first::<String>(&mut conn).ok()
-                } else { None };
+            // Resolve fighter display names
+            let fa_name = if let Some(ref id) = fa_id {
+                users::table.filter(users::id.eq(id)).select(users::display_name).first::<String>(&mut conn).ok()
+            } else { None };
+            let fb_name = if let Some(ref id) = fb_id {
+                users::table.filter(users::id.eq(id)).select(users::display_name).first::<String>(&mut conn).ok()
+            } else { None };
 
-                out.push(SearchResult {
-                    comment_id: cid,
-                    comment_text: ctext,
-                    author_id: uid,
-                    author_name: uname,
-                    timestamp_ms: ts,
-                    video_id: vid,
-                    video_date: vdate.to_string(),
-                    fighter_a_name: fa_name,
-                    fighter_b_name: fb_name,
-                });
-
-                if out.len() >= 50 {
-                    break;
-                }
-            }
+            out.push(SearchResult {
+                comment_id: cid,
+                comment_text: ctext,
+                author_id: uid,
+                author_name: uname,
+                timestamp_ms: ts,
+                video_id: vid,
+                video_date: vdate.to_string(),
+                fighter_a_name: fa_name,
+                fighter_b_name: fb_name,
+            });
         }
 
         Ok::<_, AppError>(out)
