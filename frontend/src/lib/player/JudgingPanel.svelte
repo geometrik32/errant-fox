@@ -276,8 +276,6 @@
             requestAnimationFrame(() => scrollBoutToTop(currentActiveId, 'smooth'));
           });
         }
-      } else {
-        expandedBoutId = null;
       }
     }
   });
