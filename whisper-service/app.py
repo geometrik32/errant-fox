@@ -225,7 +225,20 @@ async def cancel_video(video_id: str):
     return {"status": "cancelled", "video_id": video_id}
 
 
+from urllib.parse import urlparse
+
+def _validate_url(url: str):
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Invalid URL scheme '{parsed.scheme}'. Only http and https are allowed.")
+    allowed_hosts = os.environ.get("ALLOWED_AUDIO_HOSTS", "").strip()
+    if allowed_hosts:
+        allowed_list = [h.strip() for h in allowed_hosts.split(",") if h.strip()]
+        if parsed.hostname not in allowed_list and parsed.netloc not in allowed_list:
+            raise ValueError(f"Host '{parsed.hostname}' is not in ALLOWED_AUDIO_HOSTS list.")
+
 def _download_and_convert_audio(audio_url: str, tmpdir: str) -> str:
+    _validate_url(audio_url)
     wav_path = os.path.join(tmpdir, "audio.wav")
 
     print(f"  Streaming audio directly via ffmpeg from URL...", flush=True)

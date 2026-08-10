@@ -53,7 +53,7 @@
     if (!el) return;
     if (!document.fullscreenElement) {
       await el.requestFullscreen();
-      try { await screen.orientation.lock('landscape'); } catch {}
+      try { await (screen.orientation as any).lock('landscape'); } catch {}
       await setLandscapeOrientation(true);
       isPlayerFullscreen = true;
     } else {

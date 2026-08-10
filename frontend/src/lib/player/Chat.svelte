@@ -444,14 +444,16 @@
             </div>
           {/if}
           {#each topLevelComments as c (c.id)}
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
               class="msg"
               class:highlighted={highlightedId === c.id}
               class:hovered={hoveredCommentId === c.id}
               data-comment-id={c.id}
+              role="button"
+              tabindex="0"
+              aria-label="Комментарий от {c.author.display_name}"
               onclick={() => handleCommentClick(c)}
+              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCommentClick(c); } }}
               onmouseenter={() => oncommenthover?.(c.id)}
               onmouseleave={() => oncommentleave?.()}
             >

@@ -26,6 +26,16 @@ services:
       - whisper_cache:/root/.cache/whisper
     networks:
       - default
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 4096M
 
   frontend:
     image: ghcr.io/geometrik32/errant-fox-frontend:latest
@@ -33,7 +43,10 @@ services:
     ports:
       - "8081:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_started
+      whisper-service:
+        condition: service_started
     networks:
       - default
       - proxy

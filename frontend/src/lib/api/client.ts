@@ -78,8 +78,15 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   }
 
   if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`Ошибка ${response.status}: ${text || response.statusText}`);
+    let errorMsg = '';
+    try {
+      const body = await response.json();
+      errorMsg = body.detail || body.error || body.title || '';
+    } catch {
+      const text = await response.text().catch(() => '');
+      errorMsg = text || response.statusText;
+    }
+    throw new Error(errorMsg ? (errorMsg.startsWith('Ошибка') ? errorMsg : `${errorMsg}`) : `Ошибка ${response.status}`);
   }
 
   return response.json() as Promise<T>;
