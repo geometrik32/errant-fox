@@ -1562,6 +1562,16 @@ pub async fn execute_ai_label_for_video(state: AppState, video_id: String) -> Re
             }
         };
 
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            let detail = serde_json::from_str::<serde_json::Value>(&text)
+                .ok()
+                .and_then(|v| v.get("detail").and_then(|d| d.as_str()).map(|s| s.to_string()))
+                .unwrap_or(text);
+            return Err(format!("Whisper service error (HTTP {}): {}", status, detail));
+        }
+
         let raw_json = resp
             .text()
             .await
@@ -2394,6 +2404,8 @@ async fn run_trim_task(state: AppState, video_id: String, payload: TrimVideoPayl
         .arg(duration.to_string())
         .arg("-c")
         .arg("copy")
+        .arg("-movflags")
+        .arg("+faststart")
         .arg("-y")
         .arg(&temp_output)
         .output()
