@@ -385,6 +385,153 @@
     window.addEventListener('mouseup', onUp);
   }
 
+  // ── Touch Gestures & Mobile Controls ────────────────────────────────────
+
+  let touchTapTimer: number | null = null;
+  let lastTapTime = 0;
+  let lastTapX = 0;
+  let seekIndicator = $state<{ text: string; side: 'left' | 'right' } | null>(null);
+  let seekIndicatorTimer: number | null = null;
+
+  let isSlowMoHolding = $state(false);
+  let slowMoTimer: number | null = null;
+  let preSlowMoSpeed = 1;
+
+  let initialPinchDistance = 0;
+  let initialPinchZoom = 1;
+  let isPinching = false;
+
+  let showMobileControls = $state(false);
+  let mobileControlsTimer: number | null = null;
+
+  function triggerMobileControls() {
+    showMobileControls = true;
+    if (mobileControlsTimer) clearTimeout(mobileControlsTimer);
+    mobileControlsTimer = window.setTimeout(() => {
+      showMobileControls = false;
+    }, 3000);
+  }
+
+  function triggerSeekIndicator(text: string, side: 'left' | 'right') {
+    seekIndicator = { text, side };
+    if (seekIndicatorTimer) clearTimeout(seekIndicatorTimer);
+    seekIndicatorTimer = window.setTimeout(() => {
+      seekIndicator = null;
+    }, 800);
+  }
+
+  function getTouchDistance(t1: Touch, t2: Touch): number {
+    return Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+  }
+
+  function handleTouchStart(e: TouchEvent) {
+    if (isDrawingMode) return;
+
+    if (e.touches.length === 2) {
+      isPinching = true;
+      initialPinchDistance = getTouchDistance(e.touches[0], e.touches[1]);
+      initialPinchZoom = zoom;
+      return;
+    }
+
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      const now = Date.now();
+      const rect = wrapEl?.getBoundingClientRect();
+
+      // Check long press for slow motion
+      if (slowMoTimer) clearTimeout(slowMoTimer);
+      slowMoTimer = window.setTimeout(() => {
+        if (!isPinching && videoEl) {
+          isSlowMoHolding = true;
+          preSlowMoSpeed = speed;
+          videoEl.playbackRate = 0.25;
+          if ('vibrate' in navigator) navigator.vibrate(40);
+        }
+      }, 400);
+
+      if (zoom > 1.05) {
+        startPan(touch.clientX, touch.clientY);
+      }
+    }
+  }
+
+  function handleTouchMove(e: TouchEvent) {
+    if (isDrawingMode) return;
+
+    if (slowMoTimer) {
+      clearTimeout(slowMoTimer);
+      slowMoTimer = null;
+    }
+
+    if (isPinching && e.touches.length === 2) {
+      const dist = getTouchDistance(e.touches[0], e.touches[1]);
+      const factor = dist / (initialPinchDistance || 1);
+      const newZoom = Math.max(1, Math.min(4, initialPinchZoom * factor));
+      zoom = newZoom;
+      if (zoom === 1) { panX = 0; panY = 0; }
+      return;
+    }
+
+    if (panning && e.touches.length === 1) {
+      updatePan(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  }
+
+  function handleTouchEnd(e: TouchEvent) {
+    if (slowMoTimer) {
+      clearTimeout(slowMoTimer);
+      slowMoTimer = null;
+    }
+
+    if (isSlowMoHolding) {
+      isSlowMoHolding = false;
+      if (videoEl) videoEl.playbackRate = preSlowMoSpeed;
+    }
+
+    if (isPinching && e.touches.length < 2) {
+      isPinching = false;
+    }
+
+    if (panning) {
+      endPan();
+    }
+
+    if (e.changedTouches.length === 1 && !isPinching && !panning) {
+      const touch = e.changedTouches[0];
+      const now = Date.now();
+      const delta = now - lastTapTime;
+      const rect = wrapEl?.getBoundingClientRect();
+
+      if (rect && delta < 300 && Math.abs(touch.clientX - lastTapX) < 40) {
+        // Double tap gesture
+        if (touchTapTimer) clearTimeout(touchTapTimer);
+        touchTapTimer = null;
+
+        const relX = (touch.clientX - rect.left) / rect.width;
+        if (relX > 0.6) {
+          // Double tap right: seek +5s
+          seekTo(Math.min((videoEl?.duration || 0) * 1000, (videoEl?.currentTime || 0) * 1000 + 5000));
+          triggerSeekIndicator('+5s »', 'right');
+        } else if (relX < 0.4) {
+          // Double tap left: seek -5s
+          seekTo(Math.max(0, (videoEl?.currentTime || 0) * 1000 - 5000));
+          triggerSeekIndicator('« -5s', 'left');
+        } else {
+          togglePlay();
+        }
+      } else {
+        lastTapTime = now;
+        lastTapX = touch.clientX;
+        if (touchTapTimer) clearTimeout(touchTapTimer);
+        touchTapTimer = window.setTimeout(() => {
+          triggerMobileControls();
+          touchTapTimer = null;
+        }, 300);
+      }
+    }
+  }
+
   function handleClick(e: MouseEvent) {
     if (e.button !== 0) return;
     togglePlay();
@@ -397,7 +544,42 @@
   }
 </script>
 
-<div class="vp-wrap" bind:this={wrapEl}>
+<div
+  class="vp-wrap"
+  bind:this={wrapEl}
+  ontouchstart={handleTouchStart}
+  ontouchmove={handleTouchMove}
+  ontouchend={handleTouchEnd}
+  ontouchcancel={handleTouchEnd}
+>
+  <!-- Double tap seek indicator -->
+  {#if seekIndicator}
+    <div class="seek-indicator seek-indicator--{seekIndicator.side}">
+      {seekIndicator.text}
+    </div>
+  {/if}
+
+  <!-- Mobile Overlay Controls -->
+  {#if showMobileControls && !isDrawingMode}
+    <div class="mobile-overlay" onclick={() => showMobileControls = false}>
+      <button
+        class="mobile-center-play"
+        onclick={(e) => { e.stopPropagation(); togglePlay(); }}
+        aria-label={playing ? 'Пауза' : 'Воспроизвести'}
+      >
+        {#if playing}
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="4" width="4" height="16" rx="1"/>
+            <rect x="14" y="4" width="4" height="16" rx="1"/>
+          </svg>
+        {:else}
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5,3 19,12 5,21"/>
+          </svg>
+        {/if}
+      </button>
+    </div>
+  {/if}
 
   {#if activeViewers.length > 0}
     <div class="viewers-bar">
@@ -680,4 +862,76 @@
     object-fit: cover;
   }
 
+  /* Mobile Badges and Overlays */
+  .slowmo-badge {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(245, 158, 11, 0.9);
+    color: #000;
+    font-weight: 700;
+    font-size: 0.85rem;
+    padding: 6px 14px;
+    border-radius: var(--radius-pill);
+    z-index: 30;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+    animation: fadeIn 0.2s ease;
+  }
+
+  .seek-indicator {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.75);
+    color: #fff;
+    font-weight: 700;
+    font-size: 1.1rem;
+    padding: 14px 20px;
+    border-radius: var(--radius-pill);
+    z-index: 30;
+    pointer-events: none;
+    animation: scaleFade 0.8s ease-out forwards;
+  }
+
+  .seek-indicator--left { left: 15%; }
+  .seek-indicator--right { right: 15%; }
+
+  @keyframes scaleFade {
+    0% { transform: translateY(-50%) scale(0.7); opacity: 0; }
+    30% { transform: translateY(-50%) scale(1.1); opacity: 1; }
+    100% { transform: translateY(-50%) scale(1); opacity: 0; }
+  }
+
+  .mobile-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 25;
+    animation: fadeIn 0.2s ease;
+  }
+
+  .mobile-center-play {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.45);
+    border: none;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: none;
+  }
+
+  @media (max-width: 768px) {
+    .panel-dot {
+      display: none;
+    }
+  }
 </style>

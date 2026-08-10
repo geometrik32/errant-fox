@@ -1,4 +1,4 @@
-import { apiFetch } from './client';
+import { apiFetch, getApiBaseUrl } from './client';
 import type { User } from './types';
 
 export interface LoginResponse {
@@ -39,7 +39,8 @@ export async function uploadMyAvatar(file: File): Promise<{ avatar_url: string }
   const token = localStorage.getItem('ef_token');
   const form = new FormData();
   form.append('avatar', file);
-  const res = await fetch('/api/users/me/avatar', {
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}/users/me/avatar`, {
     method: 'POST',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: form,

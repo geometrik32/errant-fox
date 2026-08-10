@@ -8,6 +8,8 @@
   import JudgingPanel from '../lib/player/JudgingPanel.svelte';
   import Chat from '../lib/player/Chat.svelte';
   import Timeline from '../lib/player/Timeline.svelte';
+  import MobileSwipeContainer from '../lib/player/MobileSwipeContainer.svelte';
+  import { isMobile } from '../lib/stores/isMobile';
 
   interface Props {
     videoId: string;
@@ -41,6 +43,34 @@
   let judgingPanel: any = $state(null);
 
   let layoutEl: HTMLElement | null = $state(null);
+
+  import { setLandscapeOrientation } from '../lib/utils/push';
+
+  let isPlayerFullscreen = $state(false);
+
+  async function toggleFullscreenMobile() {
+    const el = document.querySelector('.mobile-layout');
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      await el.requestFullscreen();
+      try { await screen.orientation.lock('landscape'); } catch {}
+      await setLandscapeOrientation(true);
+      isPlayerFullscreen = true;
+    } else {
+      document.exitFullscreen();
+      await setLandscapeOrientation(false);
+      isPlayerFullscreen = false;
+    }
+  }
+
+  $effect(() => {
+    function onFsChange() {
+      isPlayerFullscreen = !!document.fullscreenElement;
+      setLandscapeOrientation(isPlayerFullscreen);
+    }
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  });
 
   async function toggleFullscreen() {
     if (document.fullscreenElement) {
@@ -107,6 +137,7 @@
   let showJudging = $state(true);
   let showChat = $state(true);
   let chatComponent = $state<any>(null);
+  let mobileActivePanel = $state(0);
 
   // Marking state for video outline feedback
   let markingActive = $state(false);
@@ -326,6 +357,180 @@
 {:else if loadError}
   <div class="state-msg error">{loadError}</div>
 {:else if video}
+{#if $isMobile}
+  <div class="mobile-layout">
+    <div class="mobile-video-section">
+      <div class="mobile-player-area">
+        <VideoPlayer
+          bind:this={player}
+          src={video!.stream_url}
+          {speed}
+          {volume}
+          {playing}
+          fps={video!.fps ?? null}
+          judgingOpen={showJudging}
+          chatOpen={showChat}
+          {markingActive}
+          {markingFinishAnimationKey}
+          activeViewers={activeViewers}
+          {isDrawingMode}
+          bind:drawingStrokes={drawingStrokes}
+          {activeCommentDrawing}
+          userColor={$currentUser?.color ?? null}
+          currentUser={$currentUser}
+          fighterA={video!.fighter_a}
+          fighterB={video!.fighter_b}
+          ontimeupdate={(t) => { currentTime = t; }}
+          ondurationchange={(d) => { duration = d; }}
+          onplayingchange={(p) => {
+            playing = p;
+            if (p) {
+              isDrawingMode = false;
+            }
+          }}
+          onloopingchange={(l) => { looping = l; }}
+          ondetectedfps={(f) => { if (fps == null) fps = f; }}
+          ontogglejudging={() => { showJudging = !showJudging; }}
+          ontogglechat={() => { showChat = !showChat; }}
+          onspeedchange={(s) => { speed = s; player?.setSpeed(s); }}
+          onstrokeschange={(strokes) => { drawingStrokes = strokes; }}
+          onclosedrawing={() => { isDrawingMode = false; }}
+        />
+      </div>
+      <div class="mobile-timeline-area">
+        <Timeline
+          currentTime={sharedBout ? timelineCurrentTime : currentTime}
+          duration={sharedBout ? timelineDuration : duration}
+          bouts={sharedBout ? [sharedBout] : liveBouts}
+          comments={sharedBout ? timelineComments : liveComments}
+          fighterA={video!.fighter_a}
+          fighterB={video!.fighter_b}
+          {playing}
+          {looping}
+          {speed}
+          {volume}
+          {fps}
+          {startTime}
+          {finishing}
+          readonly={!!shareToken}
+          {isDrawingMode}
+          {hoveredCommentId}
+          {activeFlashingCommentId}
+          onfullscreen={toggleFullscreenMobile}
+          oncommenthover={(id) => { hoveredCommentId = id; }}
+          oncommentleave={() => { hoveredCommentId = null; }}
+          onseek={(ms) => {
+            activeCommentDrawing = null;
+            const targetMs = sharedBout ? ms + sharedBout.time_start_ms : ms;
+            player?.seekTo(targetMs);
+          }}
+          onloop={({ start, end }) => { player?.seekTo(start); player?.setLoop(start, end); }}
+          onboutclick={(id) => {
+            judgingPanel?.expandBout(id);
+            const b = liveBouts.find(x => x.id === id);
+            if (b) {
+              player?.seekTo(b.time_start_ms);
+              player?.setLoop(b.time_start_ms, b.time_end_ms);
+            }
+          }}
+          oncommentclick={(id) => {
+            triggerFlashingComment(id);
+            if (!showChat) showChat = true;
+            const comm = liveComments.find(c => c.id === id);
+            if (comm) {
+              player?.seekTo(comm.timestamp_ms);
+              if (comm.drawing) {
+                try {
+                  const data = JSON.parse(comm.drawing);
+                  if (data && Array.isArray(data.strokes)) {
+                    activeCommentDrawing = data.strokes;
+                    activeCommentTimestampMs = comm.timestamp_ms;
+                    pendingCommentSeek = true;
+                  }
+                } catch(e) {}
+              } else {
+                activeCommentDrawing = null;
+                activeCommentTimestampMs = null;
+              }
+            }
+            player?.pause();
+          }}
+          onplay={() => player?.togglePlay()}
+          onstepback={() => player?.stepBackward()}
+          onstepforward={() => player?.stepForward()}
+          onspeedchange={(s) => { speed = s; player?.setSpeed(s); }}
+          onvolumechange={(v) => { volume = v; player?.setVolume(v); }}
+          onlooptoggle={() => player?.toggleLoop()}
+          onstartclick={() => judgingPanel?.handleStart()}
+          onfinishclick={() => judgingPanel?.handleFinish()}
+        />
+      </div>
+    </div>
+
+    <div class="mobile-panels-section">
+      <MobileSwipeContainer bind:activePanel={mobileActivePanel} locked={isDrawingMode}>
+        {#snippet left()}
+          <JudgingPanel
+            bind:this={judgingPanel}
+            video={video!}
+            {currentTime}
+            {playing}
+            {shareToken}
+            {sharedBoutId}
+            readonly={!!shareToken}
+            bind:startTime={startTime}
+            bind:finishing={finishing}
+            onboutschange={(b) => { liveBouts = b; }}
+            onseekrequest={(ms, endMs) => { player?.setLoop(ms, endMs, playing); }}
+            onpauserequest={() => { player?.pause(); }}
+            onmarkingchange={(active) => { markingActive = active; }}
+            onmarkingfinish={() => {
+              markingActive = false;
+              markingFinishAnimationKey += 1;
+            }}
+            onboutdelete={() => { player?.toggleLoop(); }}
+            onpresenceupdate={(users) => { onlineUsers = users; }}
+          />
+        {/snippet}
+
+        {#snippet right()}
+          <Chat
+            bind:this={chatComponent}
+            {videoId}
+            comments={liveComments}
+            {currentTime}
+            highlightedId={highlightedCommentId}
+            {hoveredCommentId}
+            oncommenthover={(id) => { hoveredCommentId = id; }}
+            oncommentleave={() => { hoveredCommentId = null; }}
+            bouts={liveBouts}
+            {shareToken}
+            {sharedBoutId}
+            {isDrawingMode}
+            bind:drawingStrokes={drawingStrokes}
+            onstartdrawing={() => {
+              isDrawingMode = true;
+              player?.pause();
+              activeCommentDrawing = null;
+            }}
+            onclosedrawing={() => { isDrawingMode = false; }}
+            onselectcommentdrawing={(strokes, timestampMs) => {
+              activeCommentDrawing = strokes;
+              activeCommentTimestampMs = timestampMs ?? null;
+              pendingCommentSeek = true;
+              player?.pause();
+            }}
+            onseek={(ms) => { player?.seekTo(ms); player?.pause(); }}
+            oncommentschange={(c) => {
+              liveComments = c;
+              if (video) video.comments = c;
+            }}
+          />
+        {/snippet}
+      </MobileSwipeContainer>
+    </div>
+  </div>
+{:else}
   <div class="layout" class:no-header={!!shareToken} bind:this={layoutEl}>
 
     <div class="cols">
@@ -505,6 +710,7 @@
 
   </div>
 {/if}
+{/if}
 
 <style>
   .layout {
@@ -579,6 +785,75 @@
   }
 
   .state-msg.error { color: #ef4444; }
+
+  /* Mobile Layout */
+  .mobile-layout {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: var(--bg-base);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .mobile-video-section {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: #000;
+    position: relative;
+  }
+
+  .mobile-panels-section {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    position: relative;
+  }
+
+  .mobile-player-area {
+    width: 100%;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    min-height: 0;
+  }
+
+  .mobile-timeline-area {
+    width: 100%;
+    background: var(--bg-base);
+    border-top: 1px solid var(--border-color);
+    padding-bottom: 6px;
+    z-index: 15;
+    flex-shrink: 0;
+  }
+
+  .mobile-layout:fullscreen {
+    background: #000;
+  }
+  .mobile-layout:fullscreen .mobile-video-section {
+    flex: 1;
+  }
+  .mobile-layout:fullscreen .mobile-video-section .mobile-player-area {
+    aspect-ratio: unset;
+    flex: 1;
+  }
+  .mobile-layout:fullscreen .mobile-panels-section {
+    display: none;
+  }
+  .mobile-layout:fullscreen .mobile-timeline-area {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+    border-top: none;
+    z-index: 20;
+  }
 
   @media (max-width: 1024px) {
     .cols {

@@ -1128,4 +1128,26 @@
     border-radius: 6px;
     z-index: -1;
   }
+
+  @media (max-width: 520px) {
+    .fighters-grid,
+    .time-row {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    .grid-divider {
+      display: none;
+    }
+    .adj {
+      width: 36px;
+      height: 36px;
+      font-size: 1.1rem;
+    }
+    .btn-delete,
+    .btn-download,
+    .btn-share {
+      width: 36px;
+      height: 36px;
+    }
+  }
 </style>

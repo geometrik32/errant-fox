@@ -254,4 +254,24 @@
     color: var(--text-muted);
     padding: 10px;
   }
+
+  @media (max-width: 768px) {
+    .backdrop {
+      align-items: flex-end;
+      padding: 0;
+    }
+    .modal {
+      width: 100%;
+      max-width: 100%;
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      padding: 20px 16px;
+      margin-top: auto;
+    }
+    .link-field {
+      flex-direction: column;
+    }
+    .copy-btn {
+      width: 100%;
+    }
+  }
 </style>

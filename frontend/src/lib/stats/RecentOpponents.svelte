@@ -230,4 +230,43 @@
     width: 100%;
     padding: 40px 0;
   }
+
+  @media (max-width: 768px) {
+    .recent-opponents {
+      height: auto;
+      padding: 14px 16px;
+      justify-content: center;
+    }
+    .card-header {
+      margin-bottom: 10px;
+    }
+    .opponents-list {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      overflow-x: auto;
+      overflow-y: hidden;
+      gap: 12px;
+      padding-bottom: 4px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .opponents-list::-webkit-scrollbar {
+      display: none;
+    }
+    .opp-item {
+      flex-shrink: 0;
+      width: 105px;
+      padding: 4px 2px;
+    }
+    .opp-score {
+      white-space: nowrap;
+      font-size: 0.68rem;
+      padding: 3px 6px;
+      letter-spacing: 0;
+      width: 100%;
+      box-sizing: border-box;
+      text-align: center;
+    }
+  }
 </style>

@@ -585,4 +585,29 @@
     color: #0f172a;
     border-color: #f59e0b;
   }
+
+  @media (max-width: 768px) {
+    .drawing-toolbar {
+      bottom: 8px;
+      padding: 6px 10px;
+      gap: 6px;
+      max-width: 95vw;
+    }
+    .slot-swatch {
+      width: 32px;
+      height: 32px;
+    }
+    .popover-swatch,
+    .popover-avatar-swatch {
+      width: 32px;
+      height: 32px;
+    }
+    .size-slider {
+      width: 90px;
+    }
+    .btn-tool {
+      padding: 8px 10px;
+      min-height: 36px;
+    }
+  }
 </style>

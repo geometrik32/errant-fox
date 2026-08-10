@@ -93,6 +93,17 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    device_tokens (id) {
+        id         -> Integer,
+        user_id    -> Text,
+        fcm_token  -> Text,
+        platform   -> Text,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
 // Unambiguous FK joins (multi-FK paths use manual aliases in queries)
 diesel::joinable!(bouts             -> videos   (video_id));
 diesel::joinable!(comments          -> videos   (video_id));
@@ -101,6 +112,7 @@ diesel::joinable!(comment_reactions -> comments (comment_id));
 diesel::joinable!(comment_reactions -> users    (user_id));
 diesel::joinable!(bout_history      -> bouts    (bout_id));
 diesel::joinable!(bout_history      -> users    (user_id));
+diesel::joinable!(device_tokens     -> users    (user_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     users,
@@ -110,4 +122,5 @@ diesel::allow_tables_to_appear_in_same_query!(
     comments,
     comment_reactions,
     bout_history,
+    device_tokens,
 );

@@ -173,4 +173,13 @@ select.input-glass option, select.filter-input option {
     padding: 1rem;
     border-radius: var(--radius-sm);
   }
+  html, body, div, main, section, article, nav, aside {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+  ::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
 }

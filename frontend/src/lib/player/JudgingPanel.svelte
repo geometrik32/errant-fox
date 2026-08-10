@@ -250,6 +250,38 @@
     });
   }
 
+  // ── Auto-expand bout when currentTime enters a bout range ─────────────
+  let activeBoutByTime = $derived.by(() => {
+    const curMs = Math.round(currentTime * 1000);
+    return bouts.find(b => curMs >= b.time_start_ms && curMs <= b.time_end_ms) ?? null;
+  });
+
+  let previousActiveBoutId = $state<number | null>(null);
+
+  $effect(() => {
+    const currentActive = activeBoutByTime;
+    const currentActiveId = currentActive?.id ?? null;
+
+    if (currentActiveId !== previousActiveBoutId) {
+      previousActiveBoutId = currentActiveId;
+
+      if (expandedBoutId !== null && dirtyBoutIds.has(expandedBoutId)) {
+        return;
+      }
+
+      if (currentActiveId !== null) {
+        if (expandedBoutId !== currentActiveId) {
+          expandedBoutId = currentActiveId;
+          void tick().then(() => {
+            requestAnimationFrame(() => scrollBoutToTop(currentActiveId, 'smooth'));
+          });
+        }
+      } else {
+        expandedBoutId = null;
+      }
+    }
+  });
+
   // ── Derived lists & scores ───────────────────────────────────────────────
 
   let sortedBouts = $derived([...bouts].sort((a, b) => a.time_start_ms - b.time_start_ms));

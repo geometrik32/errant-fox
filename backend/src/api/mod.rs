@@ -22,6 +22,7 @@ pub fn router(state: AppState) -> Router {
         // Current user profile
         .route("/api/users/me", get(auth::get_me).patch(users::patch_me))
         .route("/api/users/me/avatar", post(users::upload_avatar))
+        .route("/api/users/me/devices", post(users::register_device).delete(users::delete_device))
         .route("/api/users/{id}/avatar", get(users::get_avatar))
         // Fighters
         .route("/api/fighters", get(users::list_fighters))

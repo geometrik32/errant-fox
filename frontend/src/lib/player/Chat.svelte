@@ -111,7 +111,6 @@
       });
     } else if (filterByTimeline) {
       filtered = filtered.filter(c => {
-        if (highlightedId && c.id === highlightedId) return true;
         const diff = currentTimeMs - c.timestamp_ms;
         return diff >= -500 && diff <= 15000;
       });

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Errant Fox</string>
+    <string name="title_activity_main">Errant Fox</string>
+    <string name="package_name">ru.aatterra.errantfox</string>
+    <string name="custom_url_scheme">ru.aatterra.errantfox</string>
+</resources>

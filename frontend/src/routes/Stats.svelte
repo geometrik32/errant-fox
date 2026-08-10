@@ -12,6 +12,7 @@
   import RecentOpponents from '../lib/stats/RecentOpponents.svelte';
   import HistoryTable from '../lib/stats/HistoryTable.svelte';
   import RadarChart from '../lib/stats/RadarChart.svelte';
+  import MobileCarousel from '../lib/ui/MobileCarousel.svelte';
   import type { TableFilters } from '../lib/stats/HistoryTable.svelte';
   import type { Fighter, FighterBout } from '../lib/api/types';
 
@@ -34,10 +35,14 @@
     sort_col: 'video_date', sort_dir: 'desc'
   };
 
+  import { isMobile } from '../lib/stores/isMobile';
+
   let tableFilters = $state<TableFilters>({ ...defaultFilters });
   let zoneFilter = $state('');
-  let chartXAxisMode = $state<'overview' | 'detail'>('overview');
-  let chartScrollRatio = $state(0);
+  let chartXAxisMode = $state<'overview' | 'detail'>('detail');
+  let chartScrollRatio = $state(1);
+
+
 
   function getISOWeek(dateStr: string): string {
     if (!dateStr) return '';
@@ -316,6 +321,8 @@
     rawBouts = [];
     tableFilters = { ...defaultFilters };
     zoneFilter = '';
+    chartXAxisMode = 'detail';
+    chartScrollRatio = 1;
     loading = true;
     errorMsg = '';
     try {
@@ -365,15 +372,11 @@
     {:else if errorMsg}
       <div class="error">{errorMsg}</div>
     {:else}
-      <!-- ===== MAIN TWO COLUMNS ===== -->
-      <div class="main-cols">
-
-        <!-- LEFT COLUMN -->
-        <div class="left-col">
-
-          <!-- Top area: Hero card + KPI grid -->
+      {#if $isMobile}
+        <!-- MOBILE LAYOUT WITH TABBED/SWIPE CAROUSELS -->
+        <div class="mobile-stats-flow">
+          <!-- Hero Card & KPI -->
           <div class="top-area">
-            <!-- Hero Card -->
             <!-- svelte-ignore a11y_interactive_supports_focus -->
             <div class="fighter-hero glass-card"
               role="button" tabindex="0"
@@ -456,8 +459,13 @@
             </div>
           </div>
 
-          <!-- Chart slots -->
-          <div class="chart-slot">
+          <!-- 1. Radar Chart FIRST -->
+          <div class="mobile-card-slot">
+            <RadarChart bouts={filteredBouts} />
+          </div>
+
+          <!-- 2. Frequency Chart SECOND -->
+          <div class="mobile-card-slot">
             <FrequencyChart 
               bouts={boutsForCharts} 
               rawVideos={videosForFrequencyChart} 
@@ -465,92 +473,277 @@
               isDrillDown={!!(tableFilters.my_technique || tableFilters.opponent_technique)}
               onfilter={(week, additive) => {
                 const nextWeek = toggleWeekSelection(tableFilters.date_week, week, additive);
-                chartScrollRatio = 0;
+                chartScrollRatio = 1;
                 if (nextWeek) chartXAxisMode = 'detail';
                 handleFilter({...tableFilters, date_week: nextWeek, video_id: ''});
               }} 
             />
           </div>
-          <div class="chart-slot">
+
+          <!-- 3. Dynamics Charts (Динамика боёв / Динамика очков) -->
+          <div class="mobile-card-slot">
             <ResultsChart
               bouts={boutsForTimelineCharts}
               selectedVideoId={tableFilters.video_id}
               selectedWeeks={activeWeeks}
               xAxisMode={chartXAxisMode}
               scrollRatio={chartScrollRatio}
-              onmodechange={(mode) => { chartXAxisMode = mode; chartScrollRatio = 0; }}
+              onmodechange={(mode) => { chartXAxisMode = mode; chartScrollRatio = 1; }}
               onscrollsync={(ratio) => chartScrollRatio = ratio}
               onfilter={(vid) => handleFilter({...tableFilters, video_id: vid, date_week: ''})}
             />
-          </div>
-          <div class="chart-slot">
             <ScoreChart
               bouts={boutsForTimelineCharts}
               selectedVideoId={tableFilters.video_id}
               selectedWeeks={activeWeeks}
               xAxisMode={chartXAxisMode}
               scrollRatio={chartScrollRatio}
-              onmodechange={(mode) => { chartXAxisMode = mode; chartScrollRatio = 0; }}
+              onmodechange={(mode) => { chartXAxisMode = mode; chartScrollRatio = 1; }}
               onscrollsync={(ratio) => chartScrollRatio = ratio}
               onfilter={(vid) => handleFilter({...tableFilters, video_id: vid, date_week: ''})}
             />
           </div>
-        </div>
 
-        <!-- RIGHT COLUMN -->
-        <div class="right-col">
-          <!-- Large top card: Radar -->
-          <div class="right-large">
-            <RadarChart bouts={filteredBouts} />
+          <!-- 4. Techniques Carousel (Мои техники / Техники оппонентов) -->
+          <div class="mobile-card-slot">
+            <MobileCarousel>
+              {#snippet slide1()}
+                <TopTechniques 
+                  bouts={boutsForMyTechniques} 
+                  type="my" 
+                  selectedTechnique={tableFilters.my_technique}
+                  onfilter={(tech) => handleFilter({...tableFilters, my_technique: tech === tableFilters.my_technique ? '' : tech})} 
+                />
+              {/snippet}
+              {#snippet slide2()}
+                <TopTechniques 
+                  bouts={boutsForOpponentTechniques} 
+                  type="opponent" 
+                  selectedTechnique={tableFilters.opponent_technique}
+                  onfilter={(tech) => handleFilter({...tableFilters, opponent_technique: tech === tableFilters.opponent_technique ? '' : tech})} 
+                />
+              {/snippet}
+            </MobileCarousel>
           </div>
 
-          <!-- Two narrow cards: Techniques -->
-          <div class="right-narrow-row">
-            <div class="right-narrow">
-              <TopTechniques 
-                bouts={boutsForMyTechniques} 
-                type="my" 
-                selectedTechnique={tableFilters.my_technique}
-                onfilter={(tech) => handleFilter({...tableFilters, my_technique: tech === tableFilters.my_technique ? '' : tech})} 
-              />
-            </div>
-            <div class="right-narrow">
-              <TopTechniques 
-                bouts={boutsForOpponentTechniques} 
-                type="opponent" 
-                selectedTechnique={tableFilters.opponent_technique}
-                onfilter={(tech) => handleFilter({...tableFilters, opponent_technique: tech === tableFilters.opponent_technique ? '' : tech})} 
-              />
-            </div>
-          </div>
-
-          <!-- Wide right card: Opponents -->
-          <div class="right-wide">
+          <!-- 5. Opponents -->
+          <div class="mobile-card-slot">
             <RecentOpponents bouts={filteredBouts} currentFighterId={selectedFighter.id} selectedOpponentId={tableFilters.opponent_id || ''} onfilter={(oppId) => handleFilter({...tableFilters, opponent_id: oppId})} />
           </div>
-        </div>
-      </div>
 
-      <!-- ===== BOTTOM: Silhouettes ===== -->
-      <div class="bottom-cols">
-        <div class="bottom-card">
-          <BodySilhouette bouts={filteredBouts} type="dealt" selectedZone={zoneFilter} onzoneclick={(z) => { zoneFilter = z; }} />
-        </div>
-        <div class="bottom-card">
-          <BodySilhouette bouts={filteredBouts} type="received" selectedZone={zoneFilter} onzoneclick={(z) => { zoneFilter = z; }} />
-        </div>
-      </div>
+          <!-- 6. Silhouettes Carousel (Нанесенный урон / Полученный урон) -->
+          <div class="mobile-card-slot">
+            <MobileCarousel>
+              {#snippet slide1()}
+                <BodySilhouette bouts={filteredBouts} type="dealt" selectedZone={zoneFilter} onzoneclick={(z) => { zoneFilter = z; }} />
+              {/snippet}
+              {#snippet slide2()}
+                <BodySilhouette bouts={filteredBouts} type="received" selectedZone={zoneFilter} onzoneclick={(z) => { zoneFilter = z; }} />
+              {/snippet}
+            </MobileCarousel>
+          </div>
 
-      <div class="table-slot">
-        <HistoryTable
-          bouts={tableBouts}
-          filters={tableFilters}
-          {opponents}
-          fightDates={new Set(tableBouts.map(b => b.video_date.slice(0, 10)))}
-          onfilter={handleFilter}
-          onnavigate={handleNavigate}
-        />
-      </div>
+          <!-- 7. History Table -->
+          <div class="mobile-card-slot">
+            <HistoryTable
+              bouts={tableBouts}
+              filters={tableFilters}
+              {opponents}
+              fightDates={new Set(tableBouts.map(b => b.video_date.slice(0, 10)))}
+              onfilter={handleFilter}
+              onnavigate={handleNavigate}
+            />
+          </div>
+        </div>
+      {:else}
+        <!-- DESKTOP UNCHANGED -->
+        <!-- ===== MAIN TWO COLUMNS ===== -->
+        <div class="main-cols">
+
+          <!-- LEFT COLUMN -->
+          <div class="left-col">
+
+            <!-- Top area: Hero card + KPI grid -->
+            <div class="top-area">
+              <!-- Hero Card -->
+              <!-- svelte-ignore a11y_interactive_supports_focus -->
+              <div class="fighter-hero glass-card"
+                role="button" tabindex="0"
+                onclick={() => showFighterDropdown = !showFighterDropdown}
+                onkeydown={(e) => e.key === 'Enter' && (showFighterDropdown = !showFighterDropdown)}
+              >
+                <div class="avatar-wrap" style:background={resolveColor(selectedFighter.id, selectedFighter.color)}>
+                  <svg class="avatar-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="2.5" opacity="0.6"/>
+                    <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.6"/>
+                  </svg>
+                  <img class="avatar-img" src={selectedFighter.avatar_url} alt={selectedFighter.display_name}
+                    onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                </div>
+                <div class="fighter-info">
+                  <div class="greeting">Статистика бойца</div>
+                  <div class="fighter-name">
+                    {selectedFighter.display_name}
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="vertical-align: middle; margin-left: 4px; transform: {showFighterDropdown ? 'rotate(180deg)' : 'none'}; transition: transform 0.2s;">
+                      <path d="M6 9l6 6 6-6"/>
+                    </svg>
+                  </div>
+                  {#if firstBoutDate}
+                    <div class="fighter-since">с {formatDate(firstBoutDate)}</div>
+                  {/if}
+                </div>
+                {#if showFighterDropdown}
+                  <!-- svelte-ignore a11y_click_events_have_key_events -->
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <div class="fighter-dropdown" onclick={(e) => e.stopPropagation()}>
+                    <div class="dropdown-header">Выберите бойца</div>
+                    <div class="dropdown-list">
+                      {#each activeFighters as f (f.id)}
+                        <button class="fighter-opt" class:selected={selectedFighter.id === f.id} onclick={() => { selectFighter(f); showFighterDropdown = false; }}>
+                          <div class="opt-avatar" style:background={resolveColor(f.id, f.color)}>
+                            <svg class="opt-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                              <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="1.5"/>
+                              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+                            </svg>
+                            {#if f.avatar_url}
+                              <img class="opt-img" src={f.avatar_url} alt={f.display_name}
+                                onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                            {/if}
+                          </div>
+                          <span class="opt-name">{f.display_name}</span>
+                        </button>
+                      {/each}
+
+                      {#if retiredFighters.length > 0}
+                        <div class="dropdown-divider-wrap">
+                          <span class="dropdown-divider-line"></span>
+                          <span class="dropdown-divider-text">На пенсии</span>
+                          <span class="dropdown-divider-line"></span>
+                        </div>
+
+                        {#each retiredFighters as f (f.id)}
+                          <button class="fighter-opt fighter-opt--retired" class:selected={selectedFighter.id === f.id} onclick={() => { selectFighter(f); showFighterDropdown = false; }}>
+                            <div class="opt-avatar" style:background={resolveColor(f.id, f.color)}>
+                              <svg class="opt-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="1.5"/>
+                                <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+                              </svg>
+                              {#if f.avatar_url}
+                                <img class="opt-img" src={f.avatar_url} alt={f.display_name}
+                                  onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                              {/if}
+                            </div>
+                            <span class="opt-name">{f.display_name}</span>
+                          </button>
+                        {/each}
+                      {/if}
+                    </div>
+                  </div>
+                {/if}
+              </div>
+
+              <!-- KPI Grid -->
+              <div class="kpis-area">
+                <QuickStats bouts={filteredBouts} {totalVideos} />
+              </div>
+            </div>
+
+            <!-- Chart slots -->
+            <div class="chart-slot">
+              <FrequencyChart 
+                bouts={boutsForCharts} 
+                rawVideos={videosForFrequencyChart} 
+                selectedWeeks={activeWeeks} 
+                isDrillDown={!!(tableFilters.my_technique || tableFilters.opponent_technique)}
+                onfilter={(week, additive) => {
+                  const nextWeek = toggleWeekSelection(tableFilters.date_week, week, additive);
+                  chartScrollRatio = 1;
+                  if (nextWeek) chartXAxisMode = 'detail';
+                  handleFilter({...tableFilters, date_week: nextWeek, video_id: ''});
+                }} 
+              />
+            </div>
+            <div class="chart-slot">
+              <ResultsChart
+                bouts={boutsForTimelineCharts}
+                selectedVideoId={tableFilters.video_id}
+                selectedWeeks={activeWeeks}
+                xAxisMode={chartXAxisMode}
+                scrollRatio={chartScrollRatio}
+                onmodechange={(mode) => { chartXAxisMode = mode; chartScrollRatio = 1; }}
+                onscrollsync={(ratio) => chartScrollRatio = ratio}
+                onfilter={(vid) => handleFilter({...tableFilters, video_id: vid, date_week: ''})}
+              />
+            </div>
+            <div class="chart-slot">
+              <ScoreChart
+                bouts={boutsForTimelineCharts}
+                selectedVideoId={tableFilters.video_id}
+                selectedWeeks={activeWeeks}
+                xAxisMode={chartXAxisMode}
+                scrollRatio={chartScrollRatio}
+                onmodechange={(mode) => { chartXAxisMode = mode; chartScrollRatio = 1; }}
+                onscrollsync={(ratio) => chartScrollRatio = ratio}
+                onfilter={(vid) => handleFilter({...tableFilters, video_id: vid, date_week: ''})}
+              />
+            </div>
+          </div>
+
+          <!-- RIGHT COLUMN -->
+          <div class="right-col">
+            <!-- Large top card: Radar -->
+            <div class="right-large">
+              <RadarChart bouts={filteredBouts} />
+            </div>
+
+            <!-- Two narrow cards: Techniques -->
+            <div class="right-narrow-row">
+              <div class="right-narrow">
+                <TopTechniques 
+                  bouts={boutsForMyTechniques} 
+                  type="my" 
+                  selectedTechnique={tableFilters.my_technique}
+                  onfilter={(tech) => handleFilter({...tableFilters, my_technique: tech === tableFilters.my_technique ? '' : tech})} 
+                />
+              </div>
+              <div class="right-narrow">
+                <TopTechniques 
+                  bouts={boutsForOpponentTechniques} 
+                  type="opponent" 
+                  selectedTechnique={tableFilters.opponent_technique}
+                  onfilter={(tech) => handleFilter({...tableFilters, opponent_technique: tech === tableFilters.opponent_technique ? '' : tech})} 
+                />
+              </div>
+            </div>
+
+            <!-- Wide right card: Opponents -->
+            <div class="right-wide">
+              <RecentOpponents bouts={filteredBouts} currentFighterId={selectedFighter.id} selectedOpponentId={tableFilters.opponent_id || ''} onfilter={(oppId) => handleFilter({...tableFilters, opponent_id: oppId})} />
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== BOTTOM: Silhouettes ===== -->
+        <div class="bottom-cols">
+          <div class="bottom-card">
+            <BodySilhouette bouts={filteredBouts} type="dealt" selectedZone={zoneFilter} onzoneclick={(z) => { zoneFilter = z; }} />
+          </div>
+          <div class="bottom-card">
+            <BodySilhouette bouts={filteredBouts} type="received" selectedZone={zoneFilter} onzoneclick={(z) => { zoneFilter = z; }} />
+          </div>
+        </div>
+
+        <div class="table-slot">
+          <HistoryTable
+            bouts={tableBouts}
+            filters={tableFilters}
+            {opponents}
+            fightDates={new Set(tableBouts.map(b => b.video_date.slice(0, 10)))}
+            onfilter={handleFilter}
+            onnavigate={handleNavigate}
+          />
+        </div>
+      {/if}
     {/if}
   </div>
 </div>
@@ -772,6 +965,49 @@
     .right-narrow { height: 450px; }
   }
 
+  @media (max-width: 768px) {
+    .dashboard {
+      padding: 8px;
+      gap: 12px;
+    }
+    .chart-slot {
+      height: 300px;
+    }
+    .right-large {
+      height: 320px;
+    }
+    .right-narrow {
+      height: 320px;
+    }
+    .right-wide {
+      height: auto;
+    }
+    .bottom-card {
+      height: auto;
+    }
+    .fighter-hero {
+      padding: 16px 12px;
+    }
+    .avatar-wrap {
+      width: 70px;
+      height: 70px;
+    }
+    .fighter-name {
+      font-size: 1.3rem;
+    }
+  }
 
+  .mobile-stats-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+  }
 
+  .mobile-card-slot {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
 </style>

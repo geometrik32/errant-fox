@@ -1,0 +1,311 @@
+:root {
+    --bg-color: #0b0f19;
+    --card-bg: #151c2c;
+    --card-border: #232d42;
+    --text-main: #f1f5f9;
+    --text-muted: #94a3b8;
+    
+    --accent-blue: #38bdf8;
+    --accent-blue-glow: rgba(56, 189, 248, 0.4);
+    --accent-orange: #f97316;
+    --accent-orange-glow: rgba(249, 115, 22, 0.4);
+    --accent-green: #4ade80;
+    --accent-purple: #c084fc;
+    
+    --wheel-ray-idle: #334155;
+    --wheel-ray-active-blue: #38bdf8;
+    --wheel-ray-active-orange: #f97316;
+    
+    --radius-lg: 16px;
+    --radius-md: 10px;
+    --font-family: 'Inter', system-ui, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    font-family: var(--font-family);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.app-container {
+    width: 100%;
+    max-width: 1150px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.app-header {
+    text-align: center;
+}
+
+.app-header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #38bdf8 0%, #c084fc 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 6px;
+}
+
+.app-header .subtitle {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+}
+
+/* Workspace Layout - Fixed Heights to Prevent Jumps */
+.workspace {
+    display: grid;
+    grid-template-columns: 600px 1fr;
+    gap: 26px;
+    align-items: stretch;
+}
+
+@media (max-width: 980px) {
+    .workspace {
+        grid-template-columns: 1fr;
+        justify-items: center;
+    }
+}
+
+/* SVG Wheel Container */
+.wheel-wrapper {
+    background-color: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    padding: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    user-select: none;
+    height: 620px;
+}
+
+#wheel-svg {
+    cursor: pointer;
+    overflow: visible;
+}
+
+/* Interactive SVG Element Styles */
+.ray-line {
+    stroke-width: 4px;
+    stroke-linecap: round;
+    transition: stroke 0.3s ease, opacity 0.3s ease, stroke-width 0.3s ease;
+}
+
+.ray-line.idle {
+    stroke: var(--wheel-ray-idle);
+    opacity: 0.6;
+}
+
+/* Thrust Ray States (Orange Theme) */
+.ray-line.thrust-pending {
+    stroke: var(--accent-orange);
+    opacity: 0.35; /* Еле заметный оранжевый цвет при вызове уколов */
+    stroke-width: 3.5px;
+}
+
+.ray-line.thrust-faded {
+    stroke: var(--accent-orange);
+    opacity: 0.25; /* Остается еле заметным оранжевым для неактивных лучей укола */
+    stroke-width: 2.5px;
+}
+
+.ray-line.thrust-active {
+    stroke: var(--accent-orange);
+    stroke-width: 6px;
+    opacity: 1;
+    filter: drop-shadow(0 0 8px var(--accent-orange-glow));
+}
+
+/* Cut Ray States (Blue Theme) */
+.ray-line.cut-faded {
+    stroke: var(--accent-blue);
+    opacity: 0.25; /* Остается еле заметным синим для неактивных лучей удара */
+    stroke-width: 2.5px;
+}
+
+.ray-line.cut-active {
+    stroke: var(--wheel-ray-active-blue);
+    stroke-width: 6px;
+    opacity: 1;
+    filter: drop-shadow(0 0 8px var(--accent-blue-glow));
+}
+
+/* Control Panel - Fixed Layout & No Shifts */
+.control-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+    height: 620px;
+}
+
+.card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    padding: 18px 20px;
+}
+
+.status-card {
+    height: 330px;
+    display: flex;
+    flex-direction: column;
+}
+
+.instructions-card {
+    height: 210px;
+    overflow-y: auto;
+}
+
+.card h2 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text-main);
+    border-bottom: 1px solid var(--card-border);
+    padding-bottom: 8px;
+    flex-shrink: 0;
+}
+
+/* Status Card Items */
+.status-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 36px;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.05);
+}
+
+.status-item .label {
+    color: var(--text-muted);
+    font-size: 0.88rem;
+}
+
+.status-item .value {
+    font-weight: 600;
+    font-size: 0.88rem;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    white-space: nowrap;
+}
+
+.status-item .value.empty {
+    color: #64748b;
+    font-weight: 400;
+}
+
+.status-item .value.active {
+    color: var(--accent-blue);
+    background: rgba(56, 189, 248, 0.15);
+}
+
+.status-summary {
+    margin-top: auto;
+    height: 105px;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    box-sizing: border-box;
+}
+
+.summary-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+}
+
+.summary-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--accent-green);
+    margin-bottom: 4px;
+    line-height: 1.2;
+}
+
+.summary-desc {
+    font-size: 0.8rem;
+    color: #cbd5e1;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Instructions Card */
+.steps-list {
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
+
+.steps-list strong {
+    color: var(--text-main);
+}
+
+.tip-box {
+    margin-top: 10px;
+    padding: 8px 10px;
+    background: rgba(251, 146, 60, 0.1);
+    border-left: 3px solid var(--accent-orange);
+    border-radius: 4px;
+    font-size: 0.78rem;
+    color: #fdba74;
+    line-height: 1.3;
+}
+
+/* Buttons */
+.actions-group {
+    display: flex;
+    gap: 12px;
+    height: 48px;
+}
+
+.btn {
+    width: 100%;
+    padding: 12px 18px;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 0.92rem;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s ease;
+}
+
+.btn-secondary {
+    background-color: #1e293b;
+    color: var(--text-main);
+    border: 1px solid var(--card-border);
+}
+
+.btn-secondary:hover {
+    background-color: #334155;
+    color: #ffffff;
+}
