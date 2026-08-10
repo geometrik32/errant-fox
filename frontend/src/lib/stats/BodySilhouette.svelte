@@ -510,4 +510,72 @@
   .left-legend .legend-count { text-align: left; }
   .right-legend .legend-count { text-align: right; }
 
+  @media (max-width: 768px) {
+    .silhouette-card {
+      padding: 16px 10px;
+      height: auto;
+      box-sizing: border-box;
+    }
+    .header-zones {
+      padding: 10px 8px;
+      margin-bottom: 16px;
+      gap: 4px;
+      position: relative;
+      z-index: 2;
+    }
+    .header-group--left {
+      padding-left: 0;
+    }
+    .header-group--right {
+      padding-right: 0;
+    }
+    .header-zone {
+      width: auto;
+      padding: 2px 4px;
+    }
+    .hz-name {
+      font-size: 0.72rem;
+    }
+    .hz-count {
+      font-size: 0.95rem;
+    }
+    .total-num {
+      font-size: 1.4rem;
+    }
+    .silhouette-wrap {
+      gap: 4px;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+    }
+    .legend {
+      min-width: 80px;
+      padding: 0;
+      height: 420px;
+      justify-content: space-around;
+    }
+    .left-legend {
+      margin-left: 0;
+    }
+    .right-legend {
+      margin-right: 0;
+    }
+    .legend-group {
+      gap: 12px;
+    }
+    .legend-zone {
+      font-size: 0.72rem;
+    }
+    .legend-count {
+      font-size: 0.9rem;
+      width: 18px;
+    }
+    .svg {
+      width: 150px;
+      height: 450px;
+      max-height: 480px;
+      flex-shrink: 0;
+      margin: 0 auto;
+    }
+  }
 </style>

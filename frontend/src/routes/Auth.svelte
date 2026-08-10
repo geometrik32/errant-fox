@@ -9,6 +9,19 @@
   let loading = $state(false);
   let vkAppId = $state<string | null>(null);
 
+  // Dev settings
+  let showDevSettings = $state(false);
+  let devApiUrl = $state(typeof window !== 'undefined' ? localStorage.getItem('DEV_API_URL') || '' : '');
+
+  function saveDevSettings() {
+    if (devApiUrl.trim()) {
+      localStorage.setItem('DEV_API_URL', devApiUrl.trim());
+    } else {
+      localStorage.removeItem('DEV_API_URL');
+    }
+    window.location.reload();
+  }
+
   $effect(() => {
     getVkConfig().then(cfg => {
       vkAppId = cfg.client_id;
@@ -89,6 +102,29 @@
           Войти через VK ID
         </button>
       {/if}
+      
+      <div class="dev-settings-toggle">
+        <button type="button" class="btn-text" onclick={() => showDevSettings = !showDevSettings}>
+          {showDevSettings ? 'Скрыть настройки разработчика' : 'Настройки разработчика ⚙️'}
+        </button>
+      </div>
+
+      {#if showDevSettings}
+        <div class="dev-settings">
+          <label>
+            DEV_API_URL (Переопределение URL бэкенда)
+            <input 
+              class="input-glass" 
+              type="text" 
+              bind:value={devApiUrl} 
+              placeholder="Например, http://192.168.1.100:3000/api" 
+            />
+          </label>
+          <button type="button" class="btn btn-secondary" onclick={saveDevSettings}>
+            Сохранить и перезагрузить
+          </button>
+        </div>
+      {/if}
     </form>
   </div>
 </div>
@@ -144,6 +180,36 @@
   .btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+  }
+
+  .dev-settings-toggle {
+    text-align: center;
+    margin-top: 10px;
+  }
+
+  .btn-text {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    cursor: pointer;
+    text-decoration: underline;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+  }
+
+  .btn-text:hover {
+    opacity: 1;
+  }
+
+  .dev-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-md);
+    border: 1px dashed rgba(255, 255, 255, 0.1);
   }
 
   .vk-divider {
@@ -211,5 +277,15 @@
     background: rgba(239, 68, 68, 0.1);
     border-radius: var(--radius-sm);
     border: 1px solid rgba(239, 68, 68, 0.2);
+  }
+
+  @media (max-width: 768px) {
+    .auth-wrap {
+      padding: 16px;
+    }
+    .auth-card {
+      padding: 24px 16px;
+      gap: 24px;
+    }
   }
 </style>

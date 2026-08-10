@@ -800,6 +800,31 @@
     word-break: break-all;
   }
 
+  .mobile-menu-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: var(--text-primary);
+    font-size: 1.2rem;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+    transition: var(--transition);
+  }
+
+  .mobile-menu-btn:hover {
+    background: rgba(31, 41, 55, 0.9);
+    border-color: var(--accent-yellow);
+  }
+
   .info-table tr:last-child td {
     border-bottom: none;
   }

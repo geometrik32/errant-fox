@@ -30,9 +30,9 @@
     fps?: number | null;
     startTime?: number | null;
     finishing?: boolean;
-    onstartclick?: () => void;
     onfinishclick?: () => void;
     onshare?: () => void;
+    onfullscreen?: () => void;
     readonly?: boolean;
     isDrawingMode?: boolean;
   }
@@ -70,6 +70,7 @@
     onstartclick,
     onfinishclick,
     onshare,
+    onfullscreen,
   }: Props = $props();
 
   const SPEEDS = [0.15, 0.2, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5];
@@ -143,7 +144,7 @@
 
   let progressEl: HTMLDivElement | null = $state(null);
 
-  function seekAt(e: MouseEvent, el: HTMLElement) {
+  function seekAt(e: MouseEvent | Touch, el: HTMLElement) {
     if (isDrawingMode) return;
     const r = el.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
@@ -163,6 +164,28 @@
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', up);
     e.preventDefault();
+  }
+
+  function startTouchDrag(e: TouchEvent) {
+    if (isDrawingMode) return;
+    if (!progressEl || e.touches.length === 0) return;
+    seekAt(e.touches[0], progressEl);
+    const el = progressEl;
+    const move = (ev: TouchEvent) => {
+      if (ev.touches.length > 0) {
+        seekAt(ev.touches[0], el);
+      }
+      if (ev.cancelable) ev.preventDefault();
+    };
+    const end = () => {
+      window.removeEventListener('touchmove', move);
+      window.removeEventListener('touchend', end);
+      window.removeEventListener('touchcancel', end);
+    };
+    window.addEventListener('touchmove', move, { passive: false });
+    window.addEventListener('touchend', end);
+    window.addEventListener('touchcancel', end);
+    if (e.cancelable) e.preventDefault();
   }
 
   let pct = $derived(
@@ -210,6 +233,7 @@
     class="track track--progress"
     bind:this={progressEl}
     onmousedown={startDrag}
+    ontouchstart={startTouchDrag}
     role="slider"
     aria-valuenow={Math.round(currentTime)}
     aria-valuemin={0}
@@ -361,6 +385,14 @@
       <time class="time-disp" datetime="PT{Math.round(currentTime)}S">
         {fmtWithFrame(currentTime)} / {fmtDuration(duration)}
       </time>
+
+      {#if onfullscreen}
+        <button class="ctrl-btn fullscreen-btn" onclick={onfullscreen} aria-label="Полноэкранный режим">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+          </svg>
+        </button>
+      {/if}
 
     </div>
   </div>
@@ -554,6 +586,10 @@
     color: var(--text-primary);
   }
 
+  .fullscreen-btn {
+    display: none;
+  }
+
   .loop-btn {
     width: auto;
     padding: 0 12px;
@@ -714,5 +750,57 @@
     white-space: nowrap;
     min-width: 130px;
     text-align: right;
+  }
+
+  @media (max-width: 768px) {
+    .timeline {
+      padding: 4px 8px;
+      background: transparent;
+    }
+    .track--progress {
+      height: 12px;
+    }
+    .prog-thumb {
+      width: 20px;
+      height: 20px;
+    }
+    .c-dot {
+      width: 10px;
+      height: 10px;
+    }
+    .controls {
+      height: 40px;
+      padding: 0 4px;
+      background: transparent;
+      justify-content: flex-end;
+    }
+    .ctrl-group {
+      display: none !important;
+    }
+    .ctrl-group.ctrl-group--right {
+      display: flex !important;
+      gap: 4px;
+    }
+    .start-btn,
+    .finish-btn,
+    .vol-slider,
+    .vol-icon-btn,
+    .vol-wrap {
+      display: none !important;
+    }
+    .ctrl-group--right .ctrl-btn:not(.fullscreen-btn) {
+      display: none !important;
+    }
+    .ctrl-btn {
+      width: 36px;
+      height: 36px;
+    }
+    .fullscreen-btn {
+      display: flex !important;
+    }
+    .time-disp {
+      font-size: 0.8rem;
+      min-width: auto;
+    }
   }
 </style>

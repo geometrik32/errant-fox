@@ -17,8 +17,8 @@
     bouts,
     selectedVideoId = '',
     selectedWeeks = [],
-    xAxisMode = 'overview',
-    scrollRatio = 0,
+    xAxisMode = 'detail',
+    scrollRatio = 1,
     onfilter,
     onmodechange,
     onscrollsync
@@ -326,6 +326,14 @@
           },
         },
       });
+
+      requestAnimationFrame(() => {
+        if (!scrollEl || !canToggleAxisMode || effectiveXAxisMode !== 'detail') return;
+        const maxScroll = scrollEl.scrollWidth - scrollEl.clientWidth;
+        if (maxScroll > 0) {
+          scrollEl.scrollLeft = maxScroll * scrollRatio;
+        }
+      });
     });
 
     return () => { 
@@ -509,5 +517,12 @@
     display: block;
     width: 100% !important;
     height: 100% !important;
+  }
+
+  @media (max-width: 768px) {
+    .chart-card {
+      height: 300px;
+      padding: 12px;
+    }
   }
 </style>

@@ -246,11 +246,27 @@
     .gallery {
       grid-template-columns: 1fr !important;
       gap: 16px;
+      margin-top: 0;
     }
     .sidebar-island {
-      position: static;
-      width: 100%;
+      position: fixed;
+      top: 64px;
+      left: 0;
+      bottom: 0;
+      width: 85vw;
+      max-width: 320px;
+      z-index: 500;
+      border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+      box-shadow: var(--shadow-lg);
+      background: var(--surface-solid);
+      overflow-y: auto;
+      animation: slideInDrawer 0.25s ease-out;
     }
+  }
+
+  @keyframes slideInDrawer {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
   }
 
   .state {

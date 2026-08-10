@@ -2,7 +2,7 @@ use chrono::{NaiveDate, NaiveDateTime};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use super::schema::{bouts, comment_reactions, comments, techniques, users, videos, bout_history};
+use super::schema::{bouts, comment_reactions, comments, device_tokens, techniques, users, videos, bout_history};
 
 // ── users ─────────────────────────────────────────────────────────────────────
 
@@ -185,3 +185,25 @@ pub struct NewBoutHistory {
     pub action: String,
     pub details: Option<String>,
 }
+
+// ── device_tokens ─────────────────────────────────────────────────────────────
+
+#[derive(Queryable, Identifiable, Serialize, Deserialize, Debug)]
+#[diesel(table_name = device_tokens)]
+pub struct DeviceToken {
+    pub id: i32,
+    pub user_id: String,
+    pub fcm_token: String,
+    pub platform: String,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+#[derive(Insertable, Deserialize, Debug)]
+#[diesel(table_name = device_tokens)]
+pub struct NewDeviceToken {
+    pub user_id: String,
+    pub fcm_token: String,
+    pub platform: String,
+}
+

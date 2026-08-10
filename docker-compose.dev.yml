@@ -11,7 +11,7 @@ services:
       dockerfile: Dockerfile
     environment:
       SEAFILE_URL: https://seafile.aat-terra.ru
-      FRONTEND_ORIGIN: http://localhost:8081
+      FRONTEND_ORIGIN: http://localhost
     networks:
       - default
 
@@ -20,7 +20,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "8081:80"
+      - "80:80"
     labels: []
     networks:
       - default

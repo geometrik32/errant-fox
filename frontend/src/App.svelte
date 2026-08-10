@@ -14,6 +14,12 @@
 
 
 
+  import { initCapacitorApp, initPushNotifications } from './lib/utils/push';
+
+  $effect(() => {
+    initCapacitorApp();
+  });
+
   $effect(() => {
     const onHashChange = () => {
       hash = window.location.hash || '#/gallery';
@@ -26,6 +32,7 @@
     if ($token && !initialized) {
       initStores().finally(() => {
         initialized = true;
+        initPushNotifications();
       });
     }
     if (!$token) {

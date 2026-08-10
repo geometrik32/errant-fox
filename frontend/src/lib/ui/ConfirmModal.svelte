@@ -153,4 +153,23 @@
     from { transform: scale(0.95); opacity: 0; }
     to { transform: scale(1); opacity: 1; }
   }
+
+  @media (max-width: 768px) {
+    .backdrop {
+      display: flex;
+      align-items: flex-end;
+    }
+    .modal {
+      width: 100%;
+      max-width: 100%;
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      padding: 20px 16px;
+    }
+    .footer-row {
+      flex-direction: column-reverse;
+    }
+    .footer-row button {
+      width: 100%;
+    }
+  }
 </style>

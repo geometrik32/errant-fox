@@ -624,3 +624,81 @@ pub async fn list_admin_users(
 
     Ok(Json(all_users.iter().map(to_me_dto).collect()))
 }
+
+#[derive(Deserialize)]
+pub struct RegisterDeviceDto {
+    pub fcm_token: String,
+    pub platform: Option<String>,
+}
+
+pub async fn register_device(
+    State(state): State<AppState>,
+    CurrentUser(current): CurrentUser,
+    Json(payload): Json<RegisterDeviceDto>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    use crate::db::schema::device_tokens::dsl::*;
+
+    let db = state.db.clone();
+    let user_id_val = current.id.clone();
+    let platform_val = payload.platform.unwrap_or_else(|| "android".to_string());
+    let token_val = payload.fcm_token.trim().to_string();
+
+    if token_val.is_empty() {
+        return Err(AppError::BadRequest("FCM token empty".into()));
+    }
+
+    tokio::task::spawn_blocking(move || {
+        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+        
+        // Upsert device token
+        diesel::insert_into(device_tokens)
+            .values((
+                user_id.eq(&user_id_val),
+                fcm_token.eq(&token_val),
+                platform.eq(&platform_val),
+            ))
+            .on_conflict(fcm_token)
+            .do_update()
+            .set((
+                user_id.eq(&user_id_val),
+                platform.eq(&platform_val),
+            ))
+            .execute(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Ok::<(), AppError>(())
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+pub struct DeleteDeviceDto {
+    pub fcm_token: String,
+}
+
+pub async fn delete_device(
+    State(state): State<AppState>,
+    CurrentUser(_current): CurrentUser,
+    Json(payload): Json<DeleteDeviceDto>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    use crate::db::schema::device_tokens::dsl::*;
+
+    let db = state.db.clone();
+    let token_val = payload.fcm_token.trim().to_string();
+
+    tokio::task::spawn_blocking(move || {
+        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+        diesel::delete(device_tokens.filter(fcm_token.eq(&token_val)))
+            .execute(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+        Ok::<(), AppError>(())
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+

@@ -844,4 +844,26 @@
     background: rgba(156, 163, 175, 0.15) !important;
     color: #9ca3af !important;
   }
+
+  .table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  @media (max-width: 768px) {
+    .table-container {
+      padding: 8px;
+    }
+    .history-table th,
+    .history-table td {
+      padding: 6px 8px;
+      font-size: 0.78rem;
+    }
+    .filter-input,
+    .filter-select {
+      font-size: 0.75rem;
+      padding: 4px 6px;
+    }
+  }
 </style>

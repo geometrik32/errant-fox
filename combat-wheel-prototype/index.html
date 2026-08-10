@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Прототип колеса боя — Школа HEMA</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1>Колесо боевых приёмов (HEMA / Немецкая школа)</h1>
+            <p class="subtitle">Полный классификатор ударов, мастерских приемов (Meisterhau) и уколов</p>
+        </header>
+
+        <!-- Main Workspace -->
+        <main class="workspace">
+            <!-- SVG Wheel Canvas -->
+            <div class="wheel-wrapper">
+                <svg id="wheel-svg" viewBox="0 0 600 600" width="600" height="600">
+                    <!-- SVG elements generated dynamically by JS -->
+                </svg>
+            </div>
+
+            <!-- Side Status & Control Panel -->
+            <aside class="control-panel">
+                <div class="card status-card">
+                    <h2>Текущий статус</h2>
+                    
+                    <div class="status-item">
+                        <span class="label">Направление:</span>
+                        <span id="status-direction" class="value empty">Не выбрано</span>
+                    </div>
+
+                    <div class="status-item">
+                        <span class="label">Оппозиция:</span>
+                        <span id="status-opposition" class="value empty">Не выбрано</span>
+                    </div>
+
+                    <div class="status-item">
+                        <span class="label">Сторона лезвия:</span>
+                        <span id="status-edge" class="value empty">Не выбрано</span>
+                    </div>
+
+                    <div class="status-summary">
+                        <span class="summary-label">Итоговый приём:</span>
+                        <div id="status-title" class="summary-title">Выберите приём</div>
+                        <div id="status-desc" class="summary-desc">Кликните на луч (удар) или центр (укол)</div>
+                    </div>
+                </div>
+
+                <div class="card instructions-card">
+                    <h2>Управление</h2>
+                    <ol class="steps-list">
+                        <li><strong>Удары (8 лучей):</strong> 1-й клик — выбор луча, 2-й клик — оппозиция и лезвие.</li>
+                        <li><strong>Укол (Центральная точка):</strong> 1-й клик по центру — выбор укола. 2-й клик ближе к центру — <em>вогнутый ромб</em> (с оппозицией / Absetzen), ближе к кольцу — <em>кружок</em> (без оппозиции).</li>
+                    </ol>
+                    <div class="tip-box">
+                        🔄 Клик по любому другому лучу или центру сразу переключает действие.
+                    </div>
+                </div>
+
+                <div class="actions-group">
+                    <button id="btn-reset" class="btn btn-secondary">🔄 Сбросить выбор</button>
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

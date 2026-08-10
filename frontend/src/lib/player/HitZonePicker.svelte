@@ -245,4 +245,10 @@
   .zone:hover {
     filter: brightness(1.4);
   }
+
+  @media (max-width: 520px) {
+    .svg {
+      width: 160px;
+    }
+  }
 </style>

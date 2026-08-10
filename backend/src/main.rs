@@ -106,13 +106,8 @@ async fn main() {
 
     services::ai_queue::start_ai_queue_processor(app_state.clone(), ai_queue_rx);
 
-    let origin = config
-        .frontend_origin
-        .parse::<axum::http::HeaderValue>()
-        .expect("FRONTEND_ORIGIN must be a valid HTTP origin");
-
     let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::exact(origin))
+        .allow_origin(AllowOrigin::any())
         .allow_methods([
             Method::GET,
             Method::POST,

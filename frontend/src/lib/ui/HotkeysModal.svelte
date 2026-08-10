@@ -459,4 +459,21 @@
   .btn-close:hover {
     background: var(--accent-yellow-hover, #D97706);
   }
+
+  @media (max-width: 768px) {
+    .modal-backdrop {
+      align-items: flex-end;
+      padding: 0;
+    }
+    .modal {
+      width: 100%;
+      max-width: 100%;
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      max-height: 90vh;
+    }
+    .modal-header, .modal-body, .modal-footer {
+      padding-left: 16px;
+      padding-right: 16px;
+    }
+  }
 </style>
