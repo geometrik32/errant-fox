@@ -16,8 +16,7 @@ RUN touch src/main.rs && cargo build --release
 # Stage 2: Runtime
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates ffmpeg && \
-    addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN apk add --no-cache ca-certificates ffmpeg
 
 WORKDIR /app
 
@@ -25,8 +24,6 @@ COPY --from=builder /app/target/release/errant_fox ./errant_fox
 COPY exchange_viewer_target.html ./exchange_viewer_target.html
 COPY video_trimmer_target.html ./video_trimmer_target.html
 
-USER appuser
-
 EXPOSE 8080
 
-CMD ["./errant_fox"]
+CMD ["sh", "-c", "mkdir -p /data/db /data/previews /data/avatars /data/transcripts /data/temp && ./errant_fox"]
