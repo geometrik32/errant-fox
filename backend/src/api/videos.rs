@@ -2298,14 +2298,23 @@ pub async fn trim_video(
     let temp_output = format!("{}/trimmed_{}.mp4", temp_dir, video_id);
     
     // Step 1: Download the original video via reqwest (works reliably with Seafile HTTPS)
+    // Stream to disk to avoid loading multi-GB files into RAM
     tracing::info!("Trim: downloading video {} from Seafile...", video_id);
     let response = reqwest::get(&download_url).await
         .map_err(|e| AppError::Internal(format!("Failed to download video: {}", e)))?;
-    let video_bytes = response.bytes().await
-        .map_err(|e| AppError::Internal(format!("Failed to read video bytes: {}", e)))?;
-    tokio::fs::write(&temp_input, &video_bytes).await
-        .map_err(|e| AppError::Internal(format!("Failed to write temp input: {}", e)))?;
-    tracing::info!("Trim: downloaded {} bytes, running ffmpeg...", video_bytes.len());
+    {
+        use tokio::io::AsyncWriteExt;
+        let mut file = tokio::fs::File::create(&temp_input).await
+            .map_err(|e| AppError::Internal(format!("Failed to create temp input file: {}", e)))?;
+        let mut stream = response.bytes_stream();
+        use futures_util::StreamExt;
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| AppError::Internal(format!("Download stream error: {}", e)))?;
+            file.write_all(&chunk).await
+                .map_err(|e| AppError::Internal(format!("Failed to write chunk: {}", e)))?;
+        }
+    }
+    tracing::info!("Trim: download complete, running ffmpeg...");
     
     // Step 2: Run ffmpeg on local files
     let duration = payload.end_sec - payload.start_sec;
