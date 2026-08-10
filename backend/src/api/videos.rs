@@ -2260,10 +2260,14 @@ pub struct TrimVideoPayload {
 
 pub async fn trim_video(
     State(state): State<AppState>,
-    crate::api::auth::AdminUser(_user): crate::api::auth::AdminUser,
+    crate::middleware::auth::CurrentUser(user): crate::middleware::auth::CurrentUser,
     Path(video_id): Path<String>,
     axum::Json(payload): axum::Json<TrimVideoPayload>,
 ) -> Result<impl axum::response::IntoResponse, AppError> {
+    if !user.is_admin {
+        return Err(AppError::Forbidden);
+    }
+    
     let db = state.db.clone();
     
     // 1. Get video
@@ -2273,19 +2277,17 @@ pub async fn trim_video(
         move || {
             use crate::db::schema::videos;
             use diesel::prelude::*;
-            let mut conn = db.get()?;
+            let mut conn = db.get().map_err(|_| diesel::result::Error::NotFound)?;
             videos::table
                 .filter(videos::id.eq(&vid))
                 .first::<Video>(&mut conn)
         }
     })
     .await
-    .map_err(|e| AppError::Internal(e.to_string()))??;
+    .map_err(|e| AppError::Internal(e.to_string()))?
+    .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    let seafile_path = match video.seafile_path {
-        Some(p) => p,
-        None => return Err(AppError::Internal("No seafile path".to_string()))
-    };
+    let seafile_path = video.seafile_path.clone();
     
     let download_url = state.seafile.get_download_url(&seafile_path).await.map_err(|e| AppError::Internal(e.to_string()))?;
     
@@ -2385,10 +2387,14 @@ pub async fn trim_video(
 
 pub async fn get_trim_impact(
     State(state): State<AppState>,
-    crate::api::auth::AdminUser(_user): crate::api::auth::AdminUser,
+    crate::middleware::auth::CurrentUser(user): crate::middleware::auth::CurrentUser,
     Path(video_id): Path<String>,
     Query(payload): Query<TrimVideoPayload>,
 ) -> Result<impl axum::response::IntoResponse, AppError> {
+    if !user.is_admin {
+        return Err(AppError::Forbidden);
+    }
+    
     let db = state.db.clone();
     
     let start_ms = (payload.start_sec * 1000.0) as i32;
