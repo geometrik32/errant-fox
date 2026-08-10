@@ -2458,18 +2458,68 @@ async fn run_trim_task(state: AppState, video_id: String, payload: TrimVideoPayl
     })
     .await??;
 
+    // 4. Update transcript JSON timestamps instead of deleting it
     let json_path = format!("{}/{}.json", state.transcripts_dir, video_id);
-    let _ = tokio::fs::remove_file(&json_path).await;
+    if let Ok(raw_json) = tokio::fs::read_to_string(&json_path).await {
+        if let Ok(mut parsed) = serde_json::from_str::<serde_json::Value>(&raw_json) {
+            let start_sec = payload.start_sec;
+            let new_duration_sec = payload.end_sec - payload.start_sec;
+            let start_ms = (start_sec * 1000.0) as i64;
+            let new_duration_ms = (new_duration_sec * 1000.0) as i64;
 
+            if let Some(exchanges) = parsed.get_mut("exchanges").and_then(|v| v.as_array_mut()) {
+                let mut updated_exchanges = Vec::new();
+                for ex in exchanges.iter_mut() {
+                    let cur_start_ms = ex.get("start_ms").and_then(|v| v.as_i64())
+                        .or_else(|| ex.get("start_time_sec").and_then(|v| v.as_f64()).map(|s| (s * 1000.0) as i64))
+                        .unwrap_or(0);
+                    let cur_end_ms = ex.get("end_ms").and_then(|v| v.as_i64())
+                        .or_else(|| ex.get("end_time_sec").and_then(|v| v.as_f64()).map(|s| (s * 1000.0) as i64))
+                        .unwrap_or(0);
+
+                    let new_start_ms = cur_start_ms - start_ms;
+                    let new_end_ms = cur_end_ms - start_ms;
+
+                    // Keep only if exchange is inside trimmed range
+                    if new_end_ms > 0 && new_start_ms < new_duration_ms {
+                        if let Some(obj) = ex.as_object_mut() {
+                            obj.insert("start_ms".to_string(), serde_json::json!(new_start_ms));
+                            obj.insert("end_ms".to_string(), serde_json::json!(new_end_ms));
+                            obj.insert("start_time_sec".to_string(), serde_json::json!((new_start_ms as f64) / 1000.0));
+                            obj.insert("end_time_sec".to_string(), serde_json::json!((new_end_ms as f64) / 1000.0));
+                            if let Some(peak) = obj.get("peak_time_sec").and_then(|v| v.as_f64()) {
+                                obj.insert("peak_time_sec".to_string(), serde_json::json!(peak - start_sec));
+                            }
+                        }
+                        updated_exchanges.push(ex.clone());
+                    }
+                }
+                parsed["exchanges"] = serde_json::json!(updated_exchanges);
+            }
+
+            if let Ok(updated_json) = serde_json::to_string_pretty(&parsed) {
+                let _ = tokio::fs::write(&json_path, &updated_json).await;
+            }
+        }
+    }
+
+    // 5. Recalculate is_ai_labeled based on remaining AI bouts
     tokio::task::spawn_blocking({
         let vid = video_id.clone();
         let db = db.clone();
         move || -> Result<(), diesel::result::Error> {
-            use crate::db::schema::videos;
+            use crate::db::schema::{bouts, videos};
             use diesel::prelude::*;
             let mut conn = db.get().map_err(|_| diesel::result::Error::NotFound)?;
+            let ai_bouts_count: i64 = bouts::table
+                .filter(bouts::video_id.eq(&vid))
+                .filter(bouts::is_ai.eq(true))
+                .count()
+                .get_result(&mut conn)?;
+            
+            let is_ai = ai_bouts_count > 0;
             diesel::update(videos::table.filter(videos::id.eq(&vid)))
-                .set(videos::is_ai_labeled.eq(false))
+                .set(videos::is_ai_labeled.eq(is_ai))
                 .execute(&mut conn)?;
             Ok(())
         }
