@@ -22,6 +22,7 @@ WORKDIR /app
 
 COPY --from=builder /app/target/release/errant_fox ./errant_fox
 COPY exchange_viewer_target.html ./exchange_viewer_target.html
+COPY video_trimmer_target.html ./video_trimmer_target.html
 
 EXPOSE 8080
 
