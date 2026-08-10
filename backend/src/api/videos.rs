@@ -2291,7 +2291,9 @@ pub async fn trim_video(
     
     let download_url = state.seafile.get_download_url(&seafile_path).await.map_err(|e| AppError::Internal(e.to_string()))?;
     
-    let temp_output = format!("data/temp/temp_trim_{}.mp4", video_id);
+    let temp_dir = if std::path::Path::new("/data").exists() { "/data/temp" } else { "data/temp" };
+    let _ = tokio::fs::create_dir_all(temp_dir).await;
+    let temp_output = format!("{}/temp_trim_{}.mp4", temp_dir, video_id);
     
     let status = tokio::process::Command::new("ffmpeg")
         .arg("-i")
