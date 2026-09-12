@@ -36,6 +36,11 @@
     onfullscreen?: () => void;
     readonly?: boolean;
     isDrawingMode?: boolean;
+    currentCodec?: 'hevc' | 'h264';
+    isTranscoding?: boolean;
+    isH264Ready?: boolean;
+    ontogglecodec?: () => void;
+    onselectcodec?: (codec: 'hevc' | 'h264') => void;
   }
 
   let {
@@ -72,6 +77,11 @@
     onfinishclick,
     onshare,
     onfullscreen,
+    currentCodec = 'hevc',
+    isTranscoding = false,
+    isH264Ready = false,
+    ontogglecodec,
+    onselectcodec,
   }: Props = $props();
 
   const SPEEDS = [0.15, 0.2, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5];
@@ -84,6 +94,16 @@
       onvolumechange?.(0);
     } else {
       onvolumechange?.(preMuteVolume > 0.01 ? preMuteVolume : 1);
+    }
+  }
+
+  function handleSelectCodec(target: 'hevc' | 'h264') {
+    if (isTranscoding) return;
+    if (currentCodec === target) return;
+    if (onselectcodec) {
+      onselectcodec(target);
+    } else if (ontogglecodec) {
+      ontogglecodec();
     }
   }
 
@@ -386,6 +406,44 @@
       <time class="time-disp" datetime="PT{Math.round(currentTime)}S">
         {fmtWithFrame(currentTime)} / {fmtDuration(duration)}
       </time>
+
+      {#if onselectcodec || ontogglecodec}
+        <div
+          class="codec-switch"
+          class:is-transcoding={isTranscoding}
+          role="group"
+          aria-label="Переключение видеокодека"
+        >
+          <button
+            type="button"
+            class="codec-tab"
+            class:active={currentCodec === 'hevc'}
+            disabled={isTranscoding}
+            onclick={() => handleSelectCodec('hevc')}
+            title="Оригинал HEVC"
+          >
+            HEVC
+          </button>
+          <button
+            type="button"
+            class="codec-tab codec-tab--h264"
+            class:active={currentCodec === 'h264'}
+            class:has-cache={isH264Ready}
+            disabled={isTranscoding}
+            onclick={() => handleSelectCodec('h264')}
+            title={isTranscoding
+              ? 'Идёт подготовка H.264…'
+              : (isH264Ready ? 'Версия H.264 готова в кэше' : 'H.264 (нажмите для подготовки)')}
+          >
+            {#if isTranscoding}
+              <span class="codec-spinner"></span>
+            {:else if isH264Ready}
+              <span class="cache-indicator" title="Версия H.264 готова в кэше"></span>
+            {/if}
+            <span>H.264</span>
+          </button>
+        </div>
+      {/if}
 
       {#if onfullscreen}
         <button class="ctrl-btn fullscreen-btn" onclick={onfullscreen} aria-label="Полноэкранный режим">
@@ -792,6 +850,10 @@
     .ctrl-group--right .ctrl-btn:not(.fullscreen-btn) {
       display: none !important;
     }
+    .codec-switch {
+      display: inline-flex !important;
+      height: 26px !important;
+    }
     .ctrl-btn {
       width: 36px;
       height: 36px;
@@ -803,5 +865,86 @@
       font-size: 0.8rem;
       min-width: auto;
     }
+  }
+
+  .codec-switch {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15));
+    border-radius: 999px;
+    padding: 2px;
+    height: 25px;
+    box-sizing: border-box;
+    user-select: none;
+    transition: border-color 0.2s ease;
+  }
+
+  .codec-switch.is-transcoding {
+    border-color: rgba(245, 158, 11, 0.5);
+  }
+
+  .codec-tab {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-secondary, #9ca3af);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    padding: 1px 9px;
+    height: 100%;
+    border-radius: 999px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.18s ease;
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  .codec-tab:hover:not(:disabled) {
+    color: var(--text-primary, #ffffff);
+  }
+
+  .codec-tab.active {
+    background: var(--surface-hover, rgba(255, 255, 255, 0.18));
+    color: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    font-weight: 700;
+  }
+
+  .codec-tab--h264.active {
+    background: rgba(16, 185, 129, 0.22);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+  }
+
+  .codec-tab:disabled {
+    cursor: wait;
+    opacity: 0.8;
+  }
+
+  .cache-indicator {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #10b981;
+    box-shadow: 0 0 5px #10b981;
+    flex-shrink: 0;
+  }
+
+  .codec-spinner {
+    width: 9px;
+    height: 9px;
+    border: 2px solid rgba(245, 158, 11, 0.2);
+    border-top-color: var(--accent-yellow);
+    border-radius: 50%;
+    animation: codec-spin 0.8s linear infinite;
+  }
+
+  @keyframes codec-spin {
+    to { transform: rotate(360deg); }
   }
 </style>

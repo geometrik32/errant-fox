@@ -8,6 +8,8 @@
   import SearchPanel from './SearchPanel.svelte';
   import SyncModal from './SyncModal.svelte';
   import BatchAiModal from './BatchAiModal.svelte';
+  import BatchOptimizeModal from './BatchOptimizeModal.svelte';
+  import { onMount } from 'svelte';
 
   interface Props {
     hash: string;
@@ -22,6 +24,15 @@
   let showHotkeys = $state(false);
   let showSyncDatabase = $state(false);
   let showBatchAi = $state(false);
+  let showBatchOptimize = $state(false);
+
+  onMount(() => {
+    const handleOpenBatch = () => { showBatchOptimize = true; };
+    window.addEventListener('ef-open-batch-optimize', handleOpenBatch);
+    return () => {
+      window.removeEventListener('ef-open-batch-optimize', handleOpenBatch);
+    };
+  });
 
   let activeNav = $derived(
     hash === '#/stats' ? 'stats' : hash === '#/search' ? 'search' : 'gallery'
@@ -167,6 +178,9 @@
           <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showBatchAi = true; }}>
             ИИ-разметка видео
           </button>
+          <button class="dropdown-item" role="menuitem" onclick={() => { dropdownOpen = false; showBatchOptimize = true; }}>
+            Оптимизация видео
+          </button>
         {/if}
 
         <div class="dropdown-divider"></div>
@@ -204,6 +218,10 @@
 
 {#if showBatchAi}
   <BatchAiModal onclose={() => { showBatchAi = false; }} />
+{/if}
+
+{#if showBatchOptimize}
+  <BatchOptimizeModal onclose={() => { showBatchOptimize = false; }} />
 {/if}
 
 <style>

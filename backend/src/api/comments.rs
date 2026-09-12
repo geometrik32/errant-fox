@@ -478,28 +478,35 @@ pub async fn react_comment(
     let user_id = user.id.clone();
     let kind = body.kind.clone();
 
-    tokio::task::spawn_blocking(move || {
+    let (video_id, likes, dislikes) = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{comment_reactions, comments};
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
 
-        let exists: bool = diesel::select(diesel::dsl::exists(
-            comments::table.filter(comments::id.eq(id)),
-        ))
-        .get_result(&mut conn)
-        .map_err(|e| AppError::Internal(e.to_string()))?;
-        if !exists {
-            return Err(AppError::NotFound);
-        }
+        let comment: Comment = comments::table
+            .filter(comments::id.eq(id))
+            .first::<Comment>(&mut conn)
+            .optional()
+            .map_err(|e| AppError::Internal(e.to_string()))?
+            .ok_or(AppError::NotFound)?;
 
         diesel::replace_into(comment_reactions::table)
             .values(&CommentReaction { comment_id: id, user_id, kind })
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        Ok(())
+        let (likes, dislikes, _) = load_reactions(id, "", &mut conn)?;
+
+        Ok::<_, AppError>((comment.video_id, likes, dislikes))
     })
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    let _ = state.ws_hub.send(crate::services::ws::WsEvent::UpdateCommentReaction {
+        comment_id: id,
+        video_id,
+        likes,
+        dislikes,
+    });
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -596,9 +603,16 @@ pub async fn delete_react(
     let db = state.db.clone();
     let user_id = user.id.clone();
 
-    tokio::task::spawn_blocking(move || {
-        use crate::db::schema::comment_reactions;
+    let (video_id, likes, dislikes) = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::{comment_reactions, comments};
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let comment: Comment = comments::table
+            .filter(comments::id.eq(id))
+            .first::<Comment>(&mut conn)
+            .optional()
+            .map_err(|e| AppError::Internal(e.to_string()))?
+            .ok_or(AppError::NotFound)?;
 
         diesel::delete(
             comment_reactions::table
@@ -608,10 +622,19 @@ pub async fn delete_react(
         .execute(&mut conn)
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        Ok(())
+        let (likes, dislikes, _) = load_reactions(id, "", &mut conn)?;
+
+        Ok::<_, AppError>((comment.video_id, likes, dislikes))
     })
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    let _ = state.ws_hub.send(crate::services::ws::WsEvent::UpdateCommentReaction {
+        comment_id: id,
+        video_id,
+        likes,
+        dislikes,
+    });
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

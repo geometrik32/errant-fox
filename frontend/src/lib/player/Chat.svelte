@@ -317,26 +317,52 @@
     oncommentschange?.(comments);
   }
 
-  async function handleReact(c: (typeof comments)[0], kind: 'like' | 'dislike') {
-    const prev = c.my_reaction;
-    if (prev === kind) {
-      await deleteReact(c.id);
-      comments = comments.map(x => x.id !== c.id ? x : {
-        ...x,
-        my_reaction: null,
-        likes:    kind === 'like'    ? x.likes    - 1 : x.likes,
-        dislikes: kind === 'dislike' ? x.dislikes - 1 : x.dislikes,
-      });
-    } else {
-      await reactComment(c.id, kind);
-      comments = comments.map(x => x.id !== c.id ? x : {
-        ...x,
-        my_reaction: kind,
-        likes:    x.likes    + (kind === 'like'    ? 1 : 0) - (prev === 'like'    ? 1 : 0),
-        dislikes: x.dislikes + (kind === 'dislike' ? 1 : 0) - (prev === 'dislike' ? 1 : 0),
-      });
-    }
+  let pendingReactCommentIds = $state<Set<number>>(new Set());
+
+  async function handleReact(commentId: number, kind: 'like' | 'dislike') {
+    const target = comments.find(x => x.id === commentId);
+    if (!target) return;
+    if (pendingReactCommentIds.has(commentId)) return;
+
+    const prev = target.my_reaction;
+    const isRemoving = prev === kind;
+    const nextReaction: 'like' | 'dislike' | null = isRemoving ? null : kind;
+
+    const likesDiff = (nextReaction === 'like' ? 1 : 0) - (prev === 'like' ? 1 : 0);
+    const dislikesDiff = (nextReaction === 'dislike' ? 1 : 0) - (prev === 'dislike' ? 1 : 0);
+
+    // Optimistic update
+    comments = comments.map(x => x.id !== commentId ? x : {
+      ...x,
+      my_reaction: nextReaction,
+      likes: Math.max(0, x.likes + likesDiff),
+      dislikes: Math.max(0, x.dislikes + dislikesDiff),
+    });
     oncommentschange?.(comments);
+
+    pendingReactCommentIds = new Set(pendingReactCommentIds).add(commentId);
+
+    try {
+      if (isRemoving) {
+        await deleteReact(commentId);
+      } else {
+        await reactComment(commentId, kind);
+      }
+    } catch (err) {
+      // Revert optimistic update on failure
+      comments = comments.map(x => x.id !== commentId ? x : {
+        ...x,
+        my_reaction: prev,
+        likes: Math.max(0, x.likes - likesDiff),
+        dislikes: Math.max(0, x.dislikes - dislikesDiff),
+      });
+      oncommentschange?.(comments);
+      console.error('Failed to update reaction:', err);
+    } finally {
+      const nextSet = new Set(pendingReactCommentIds);
+      nextSet.delete(commentId);
+      pendingReactCommentIds = nextSet;
+    }
   }
 
   function onKeydown(e: KeyboardEvent, isThreadSubmit: boolean = false) {
@@ -406,6 +432,12 @@
       }
       comments = comments.filter(c => c.id !== id);
       oncommentschange?.(comments);
+    } else if (msg.type === 'update_comment_reaction' && msg.video_id === videoId) {
+      const commentId = msg.comment_id as number;
+      const likes = msg.likes as number;
+      const dislikes = msg.dislikes as number;
+      comments = comments.map(c => c.id === commentId ? { ...c, likes, dislikes } : c);
+      oncommentschange?.(comments);
     }
   }
 </script>
@@ -453,7 +485,7 @@
               tabindex="0"
               aria-label="Комментарий от {c.author.display_name}"
               onclick={() => handleCommentClick(c)}
-              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCommentClick(c); } }}
+              onkeydown={(e) => { if (e.target !== e.currentTarget) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCommentClick(c); } }}
               onmouseenter={() => oncommenthover?.(c.id)}
               onmouseleave={() => oncommentleave?.()}
             >
@@ -473,12 +505,22 @@
               </div>
 
               {#if editingId === c.id}
-                <div class="edit-area" onclick={(e) => e.stopPropagation()}>
+                <div class="edit-area" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
                   <textarea
                     class="input-glass edit-inp"
                     bind:value={editText}
                     rows="2"
-                    onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitEdit(c.id); } if (e.key === 'Escape') cancelEdit(); }}
+                    onkeydown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        submitEdit(c.id);
+                      }
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        cancelEdit();
+                      }
+                    }}
                   ></textarea>
                   <div class="edit-actions-row">
                     <button class="btn btn-primary btn-sm edit-btn" onclick={() => submitEdit(c.id)}>Сохранить</button>
@@ -507,13 +549,13 @@
                   <button
                     class="react-btn"
                     class:active={c.my_reaction === 'like'}
-                    onclick={(e) => { e.stopPropagation(); handleReact(c, 'like'); }}
+                    onclick={(e) => { e.stopPropagation(); handleReact(c.id, 'like'); }}
                     title="Нравится"
                   >👍 {#if c.likes > 0}<span class="react-count">{c.likes}</span>{/if}</button>
                   <button
                     class="react-btn"
                     class:active={c.my_reaction === 'dislike'}
-                    onclick={(e) => { e.stopPropagation(); handleReact(c, 'dislike'); }}
+                    onclick={(e) => { e.stopPropagation(); handleReact(c.id, 'dislike'); }}
                     title="Не нравится"
                   >👎 {#if c.dislikes > 0}<span class="react-count">{c.dislikes}</span>{/if}</button>
 
@@ -637,12 +679,22 @@
               </div>
 
               {#if editingId === activeThreadParent.id}
-                <div class="edit-area" onclick={(e) => e.stopPropagation()}>
+                <div class="edit-area" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
                   <textarea
                     class="input-glass edit-inp"
                     bind:value={editText}
                     rows="2"
-                    onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitEdit(activeThreadParent!.id); } if (e.key === 'Escape') cancelEdit(); }}
+                    onkeydown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        submitEdit(activeThreadParent!.id);
+                      }
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        cancelEdit();
+                      }
+                    }}
                   ></textarea>
                   <div class="edit-actions-row">
                     <button class="btn btn-primary btn-sm edit-btn" onclick={() => submitEdit(activeThreadParent!.id)}>Сохранить</button>
@@ -671,13 +723,13 @@
                   <button
                     class="react-btn"
                     class:active={activeThreadParent.my_reaction === 'like'}
-                    onclick={(e) => { e.stopPropagation(); handleReact(activeThreadParent!, 'like'); }}
+                    onclick={(e) => { e.stopPropagation(); handleReact(activeThreadParent!.id, 'like'); }}
                     title="Нравится"
                   >👍 {#if activeThreadParent.likes > 0}<span class="react-count">{activeThreadParent.likes}</span>{/if}</button>
                   <button
                     class="react-btn"
                     class:active={activeThreadParent.my_reaction === 'dislike'}
-                    onclick={(e) => { e.stopPropagation(); handleReact(activeThreadParent!, 'dislike'); }}
+                    onclick={(e) => { e.stopPropagation(); handleReact(activeThreadParent!.id, 'dislike'); }}
                     title="Не нравится"
                   >👎 {#if activeThreadParent.dislikes > 0}<span class="react-count">{activeThreadParent.dislikes}</span>{/if}</button>
                   {#if $currentUser?.id === activeThreadParent.author.id || ($currentUser && activeThreadParent.author.id === 'guest')}
@@ -733,12 +785,22 @@
                 </div>
 
                 {#if editingId === r.id}
-                  <div class="edit-area" onclick={(e) => e.stopPropagation()}>
+                  <div class="edit-area" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
                     <textarea
                       class="input-glass edit-inp"
                       bind:value={editText}
                       rows="2"
-                      onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitEdit(r.id); } if (e.key === 'Escape') cancelEdit(); }}
+                      onkeydown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          submitEdit(r.id);
+                        }
+                        if (e.key === 'Escape') {
+                          e.preventDefault();
+                          cancelEdit();
+                        }
+                      }}
                     ></textarea>
                     <div class="edit-actions-row">
                       <button class="btn btn-primary btn-sm edit-btn" onclick={() => submitEdit(r.id)}>Сохранить</button>
@@ -767,13 +829,13 @@
                     <button
                       class="react-btn"
                       class:active={r.my_reaction === 'like'}
-                      onclick={(e) => { e.stopPropagation(); handleReact(r, 'like'); }}
+                      onclick={(e) => { e.stopPropagation(); handleReact(r.id, 'like'); }}
                       title="Нравится"
                     >👍 {#if r.likes > 0}<span class="react-count">{r.likes}</span>{/if}</button>
                     <button
                       class="react-btn"
                       class:active={r.my_reaction === 'dislike'}
-                      onclick={(e) => { e.stopPropagation(); handleReact(r, 'dislike'); }}
+                      onclick={(e) => { e.stopPropagation(); handleReact(r.id, 'dislike'); }}
                       title="Не нравится"
                     >👎 {#if r.dislikes > 0}<span class="react-count">{r.dislikes}</span>{/if}</button>
 
@@ -1133,7 +1195,7 @@
 
   .msg-text {
     font-size: 0.85rem;
-    color: var(--text-secondary);
+    color: var(--text-primary);
     line-height: 1.4;
     white-space: pre-wrap;
     word-break: break-word;

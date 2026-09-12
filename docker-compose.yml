@@ -2,8 +2,11 @@ services:
   backend:
     image: ghcr.io/geometrik32/errant-fox-backend:latest
     restart: unless-stopped
+    devices:
+      - /dev/dri:/dev/dri
     volumes:
       - ./data:/data
+      - ./execution:/app/execution
     env_file:
       - .env
     environment:

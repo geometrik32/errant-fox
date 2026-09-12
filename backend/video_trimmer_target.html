@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Errant Fox — Обрезка видео</title>
+  <title>Errant Fox — Высокоточная обрезка видео</title>
   <style>
     :root {
       --bg: #0f0f13;
@@ -15,8 +15,8 @@
       --accent3: #43d18a;
       --text: #e4e4f0;
       --text-muted: #8888aa;
-      --exchange-color: rgba(108, 99, 255, 0.35);
-      --exchange-border: #6c63ff;
+      --exchange-color: rgba(108, 99, 255, 0.4);
+      --exchange-border: #8179ff;
       --danger: #ef4444;
       --danger-hover: #dc2626;
     }
@@ -35,16 +35,25 @@
     header {
       display: flex;
       align-items: center;
-      gap: 16px;
-      padding: 14px 24px;
+      justify-content: space-between;
+      padding: 12px 24px;
       background: var(--surface);
       border-bottom: 1px solid var(--border);
     }
-    header h1 { font-size: 18px; font-weight: 600; }
+    header h1 { font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .badge-precision {
+      background: rgba(67, 209, 138, 0.15);
+      border: 1px solid var(--accent3);
+      color: var(--accent3);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 12px;
+    }
 
     .main {
       display: grid;
-      grid-template-columns: 1fr 340px;
+      grid-template-columns: 1fr 360px;
       gap: 0;
       flex: 1;
       overflow: hidden;
@@ -53,7 +62,6 @@
     .video-panel {
       display: flex;
       flex-direction: column;
-      gap: 0;
       background: #000;
       position: relative;
     }
@@ -63,12 +71,13 @@
       aspect-ratio: 16/9;
       background: #000;
       display: block;
+      outline: none;
     }
 
     .timeline-wrap {
       background: var(--surface);
       border-top: 1px solid var(--border);
-      padding: 16px 20px 12px;
+      padding: 14px 20px 10px;
       flex-shrink: 0;
     }
 
@@ -76,29 +85,37 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       font-size: 12px;
       color: var(--text-muted);
     }
 
+    .timeline-header strong {
+      color: #fff;
+      font-variant-numeric: tabular-nums;
+      font-size: 13px;
+    }
+
     #timeline {
       position: relative;
-      height: 60px;
+      height: 64px;
       background: var(--surface2);
       border-radius: 8px;
       border: 1px solid var(--border);
       cursor: pointer;
       overflow: hidden;
+      user-select: none;
     }
 
     .tl-exchange {
       position: absolute;
-      top: 8px;
-      height: calc(100% - 16px);
+      top: 6px;
+      height: calc(100% - 12px);
       background: var(--exchange-color);
       border: 1px solid var(--exchange-border);
       border-radius: 4px;
       pointer-events: none;
+      z-index: 2;
     }
 
     .tl-cursor {
@@ -106,9 +123,11 @@
       top: 0;
       width: 2px;
       height: 100%;
-      background: rgba(255,255,255,0.7);
+      background: #fff;
+      box-shadow: 0 0 4px rgba(255,255,255,0.8);
       transform: translateX(-1px);
       pointer-events: none;
+      z-index: 10;
     }
 
     /* Trim regions */
@@ -116,19 +135,57 @@
       position: absolute;
       top: 0;
       height: 100%;
-      background: rgba(239, 68, 68, 0.4); /* Red tint for trimmed areas */
+      background: rgba(239, 68, 68, 0.45);
+      border-bottom: 2px solid var(--danger);
+      pointer-events: none;
+      z-index: 6;
+      transition: width 0.05s ease;
+    }
+    #trimStartRegion { left: 0; width: 0; border-right: 2px solid var(--danger); }
+    #trimEndRegion { right: 0; width: 0; border-left: 2px solid var(--danger); }
+
+    .keyframe-tick {
+      position: absolute;
+      top: 0;
+      width: 2px;
+      height: 100%;
+      background: rgba(56, 189, 248, 0.45);
       pointer-events: none;
       z-index: 5;
+      box-shadow: 0 0 2px rgba(56, 189, 248, 0.6);
     }
-    #trimStartRegion { left: 0; width: 0; }
-    #trimEndRegion { right: 0; width: 0; }
+
+    .kf-badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    .step-btn.kf-btn {
+      background: rgba(56, 189, 248, 0.12);
+      border-color: rgba(56, 189, 248, 0.35);
+      color: #38bdf8;
+      font-weight: 600;
+    }
+    .step-btn.kf-btn:hover {
+      background: rgba(56, 189, 248, 0.28);
+      color: #ffffff;
+    }
 
     .tl-labels {
       display: flex;
       justify-content: space-between;
       margin-top: 4px;
-      font-size: 10px;
+      font-size: 11px;
       color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
     }
 
     /* ── Sidebar ── */
@@ -137,82 +194,161 @@
       border-left: 1px solid var(--border);
       display: flex;
       flex-direction: column;
-      padding: 20px;
-      gap: 20px;
+      padding: 18px;
+      gap: 16px;
+      overflow-y: auto;
     }
 
     .control-group {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 6px;
+      background: var(--surface2);
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
     }
 
     .control-group label {
       font-size: 13px;
       font-weight: 600;
       color: var(--text);
+      display: flex;
+      justify-content: space-between;
     }
 
     .control-group .desc {
       font-size: 11px;
       color: var(--text-muted);
-      line-height: 1.4;
+      line-height: 1.35;
     }
 
     .input-row {
       display: flex;
-      gap: 8px;
+      gap: 6px;
+      margin-top: 4px;
     }
 
     input[type="number"] {
       flex: 1;
-      background: var(--surface2);
+      background: var(--bg);
       border: 1px solid var(--border);
-      color: var(--text);
-      padding: 8px 12px;
+      color: #fff;
+      padding: 7px 10px;
       border-radius: 6px;
       font-family: inherit;
+      font-size: 13px;
       font-variant-numeric: tabular-nums;
+    }
+    input[type="number"]:focus {
+      border-color: var(--accent);
+      outline: none;
     }
 
     .btn {
       background: var(--surface2);
       border: 1px solid var(--border);
       color: var(--text);
-      padding: 8px 12px;
+      padding: 7px 11px;
       border-radius: 6px;
       cursor: pointer;
-      font-size: 13px;
+      font-size: 12px;
+      font-weight: 500;
       transition: all 0.15s;
+      white-space: nowrap;
+      user-select: none;
     }
     .btn:hover:not(:disabled) { background: var(--border); }
     .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
     .btn.primary:hover:not(:disabled) { background: #5a52d5; border-color: #5a52d5; }
-    .btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 600; margin-top: auto; }
+    .btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 600; padding: 12px; font-size: 14px; margin-top: auto; }
     .btn.danger:hover:not(:disabled) { background: var(--danger-hover); border-color: var(--danger-hover); }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .step-btns {
+      display: flex;
+      gap: 4px;
+      margin-top: 4px;
+    }
+    .step-btn {
+      flex: 1;
+      font-size: 11px;
+      padding: 4px 6px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-muted);
+      cursor: pointer;
+      text-align: center;
+    }
+    .step-btn:hover {
+      background: var(--surface);
+      color: #fff;
+    }
+
+    .hotkeys-card {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+    .hotkeys-card kbd {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 1px 5px;
+      border-radius: 4px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 10px;
+    }
+
+    .summary-card {
+      background: rgba(108, 99, 255, 0.08);
+      border: 1px solid rgba(108, 99, 255, 0.3);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12px;
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .summary-card span {
+      display: flex;
+      justify-content: space-between;
+    }
+    .summary-card strong {
+      font-variant-numeric: tabular-nums;
+      color: #fff;
+    }
 
     #overlay {
       position: absolute;
       inset: 0;
-      background: rgba(0,0,0,0.8);
+      background: rgba(0,0,0,0.85);
       z-index: 100;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       display: none;
+      backdrop-filter: blur(4px);
     }
     #overlay p {
       margin-top: 16px;
       font-weight: 600;
+      font-size: 15px;
+      color: #fff;
     }
     .spinner {
-      width: 40px; height: 40px;
-      border: 4px solid rgba(255,255,255,0.1);
+      width: 44px; height: 44px;
+      border: 4px solid rgba(255,255,255,0.15);
       border-top-color: var(--accent);
       border-radius: 50%;
-      animation: spin 1s linear infinite;
+      animation: spin 0.9s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
@@ -221,6 +357,7 @@
 
 <header>
   <h1>✂️ Errant Fox — Обрезка видео</h1>
+  <span class="badge-precision">⚡ HEVC Stream Copy (~1 сек) • Без перекодирования</span>
 </header>
 
 <div class="main">
@@ -229,14 +366,14 @@
       <video id="vid" preload="metadata" controls></video>
       <div id="overlay">
         <div class="spinner"></div>
-        <p id="overlayText">Видео обрабатывается, пожалуйста, подождите...</p>
+        <p id="overlayText">Выполняется быстрая потоковая обрезка на сервере... Пожалуйста, подождите.</p>
       </div>
     </div>
 
     <div class="timeline-wrap">
       <div class="timeline-header">
-        <span>Временная шкала (красным выделены зоны обрезки)</span>
-        <span id="timeDisplay">0:00 / 0:00</span>
+        <span>Временная шкала (фиолетовые — сходы, голубые риски — ключевые I-кадры)</span>
+        <strong id="timeDisplay">00:00.00 / 00:00.00</strong>
       </div>
       <div id="timeline">
         <div class="trim-region" id="trimStartRegion"></div>
@@ -244,40 +381,70 @@
         <div class="tl-cursor" id="tlCursor" style="left:0%"></div>
       </div>
       <div class="tl-labels">
-        <span>0:00</span>
-        <span id="tlEnd"></span>
+        <span>00:00.00</span>
+        <span id="tlEnd">00:00.00</span>
       </div>
     </div>
   </div>
 
   <div class="sidebar">
     <div class="control-group">
-      <label>Обрезать начало</label>
-      <div class="desc">Удалить видео до этой секунды.</div>
+      <label>
+        <span>Обрезать начало <span class="kf-badge" id="startKfBadge">I-кадр</span></span>
+        <span id="startFormatted" style="color:var(--accent3)">00:00.00</span>
+      </label>
+      <div class="desc">Удалить видео до этой секунды (привязка к ключевому I-кадру).</div>
       <div class="input-row">
-        <input type="number" id="startInput" value="0" min="0" step="0.1">
-        <button class="btn" onclick="setStart()">Установить текущее время</button>
+        <input type="number" id="startInput" value="0.00" min="0" step="0.01">
+        <button class="btn" onclick="setStart()" title="Установить текущую позицию с привязкой к I-кадру (Клавиша I)">[ I ] Текущее</button>
+      </div>
+      <div class="step-btns">
+        <button class="step-btn kf-btn" onclick="stepKeyframeStart(-1)" title="Предыдущий ключевой кадр">◄ I-кадр</button>
+        <button class="step-btn" onclick="nudgeStart(-0.04)">-1к</button>
+        <button class="step-btn" onclick="nudgeStart(0.04)">+1к</button>
+        <button class="step-btn kf-btn" onclick="stepKeyframeStart(1)" title="Следующий ключевой кадр">I-кадр ►</button>
       </div>
     </div>
 
     <div class="control-group">
-      <label>Обрезать конец</label>
-      <div class="desc">Удалить видео после этой секунды. (Оставьте равным длительности видео, если не нужно обрезать конец).</div>
+      <label>
+        <span>Обрезать конец <span class="kf-badge" id="endKfBadge">I-кадр</span></span>
+        <span id="endFormatted" style="color:var(--accent3)">00:00.00</span>
+      </label>
+      <div class="desc">Удалить видео после этой секунды (привязка к ключевому I-кадру).</div>
       <div class="input-row">
-        <input type="number" id="endInput" value="0" min="0" step="0.1">
-        <button class="btn" onclick="setEnd()">Установить текущее время</button>
+        <input type="number" id="endInput" value="0.00" min="0" step="0.01">
+        <button class="btn" onclick="setEnd()" title="Установить текущую позицию с привязкой к I-кадру (Клавиша O)">[ O ] Текущее</button>
+      </div>
+      <div class="step-btns">
+        <button class="step-btn kf-btn" onclick="stepKeyframeEnd(-1)" title="Предыдущий ключевой кадр">◄ I-кадр</button>
+        <button class="step-btn" onclick="nudgeEnd(-0.04)">-1к</button>
+        <button class="step-btn" onclick="nudgeEnd(0.04)">+1к</button>
+        <button class="step-btn kf-btn" onclick="stepKeyframeEnd(1)" title="Следующий ключевой кадр">I-кадр ►</button>
       </div>
     </div>
 
-    <div class="control-group" style="margin-top: 20px;">
-      <div class="desc" style="color: var(--accent2)">
-        Внимание: Эта операция безвозвратно изменит файл в Seafile.
-        Таймкоды сходов и комментариев будут сдвинуты.
-        Файл расшифровки ИИ (если есть) будет удален.
+    <div class="summary-card">
+      <span>Новая длительность: <strong id="newDuration">00:00.00</strong></span>
+      <span>Сходов сохранено: <strong id="keptBouts">—</strong></span>
+    </div>
+
+    <div class="hotkeys-card">
+      <strong>Горячие клавиши:</strong><br>
+      <kbd>Пробел</kbd> Пауза / Воспроизведение<br>
+      <kbd>←</kbd> / <kbd>→</kbd> Шаг на 1 кадр (0.04с)<br>
+      <kbd>Shift + ←/→</kbd> Шаг на 1.0 сек<br>
+      <kbd>I</kbd> или <kbd>[</kbd> Установить начало (I-кадр)<br>
+      <kbd>O</kbd> или <kbd>]</kbd> Установить конец (I-кадр)
+    </div>
+
+    <div class="control-group" style="border-color: rgba(56, 189, 248, 0.3);">
+      <div class="desc" style="color: #38bdf8">
+        ⚡ <b>Потоковое копирование (Stream Copy):</b> перекодирование отсутствует. Ролик остаётся в оригинальном HEVC с исходным 2.7K качеством камеры GoPro. Обрезка занимает ~1 секунду.
       </div>
     </div>
 
-    <button class="btn danger" id="trimBtn" onclick="submitTrim()">Обрезать видео</button>
+    <button class="btn danger" id="trimBtn" onclick="submitTrim()">✂️ Выполнить быструю обрезку (HEVC)</button>
   </div>
 </div>
 
@@ -286,6 +453,7 @@
   let streamUrl = "";
   let videoId = "";
   let tokenStr = "";
+  let KEYFRAMES = [];
 
   const vid = document.getElementById('vid');
   const timeline = document.getElementById('timeline');
@@ -294,6 +462,10 @@
   const timeDisplay = document.getElementById('timeDisplay');
   const startInput = document.getElementById('startInput');
   const endInput = document.getElementById('endInput');
+  const startFormatted = document.getElementById('startFormatted');
+  const endFormatted = document.getElementById('endFormatted');
+  const newDuration = document.getElementById('newDuration');
+  const keptBouts = document.getElementById('keptBouts');
   const trimStartRegion = document.getElementById('trimStartRegion');
   const trimEndRegion = document.getElementById('trimEndRegion');
   const trimBtn = document.getElementById('trimBtn');
@@ -310,8 +482,92 @@
     tlEnd.textContent = formatTime(videoDuration);
     endInput.value = videoDuration.toFixed(2);
     renderTimeline();
+    renderKeyframes();
     updateRegions();
+    loadKeyframes();
   });
+
+  async function loadKeyframes() {
+    try {
+      const res = await fetch(`/api/videos/${videoId}/keyframes?token=${tokenStr}`);
+      if (res.ok) {
+        KEYFRAMES = await res.json();
+        renderKeyframes();
+        if (startInput.value) {
+          startInput.value = snapToKeyframe(parseFloat(startInput.value)).toFixed(2);
+        }
+        if (endInput.value) {
+          endInput.value = snapToKeyframe(parseFloat(endInput.value)).toFixed(2);
+        }
+        updateRegions();
+      }
+    } catch (e) {
+      console.warn("Could not load keyframes", e);
+    }
+  }
+
+  function renderKeyframes() {
+    timeline.querySelectorAll('.keyframe-tick').forEach(el => el.remove());
+    if (!videoDuration || !KEYFRAMES.length) return;
+    KEYFRAMES.forEach(kf => {
+      const pct = (kf / videoDuration) * 100;
+      if (pct >= 0 && pct <= 100) {
+        const tick = document.createElement('div');
+        tick.className = 'keyframe-tick';
+        tick.style.left = pct + '%';
+        tick.title = `Ключевой I-кадр: ${formatTime(kf)}`;
+        timeline.insertBefore(tick, tlCursor);
+      }
+    });
+  }
+
+  function snapToKeyframe(val) {
+    if (!KEYFRAMES || KEYFRAMES.length === 0) return val;
+    let closest = KEYFRAMES[0];
+    let minDiff = Math.abs(val - closest);
+    for (let i = 1; i < KEYFRAMES.length; i++) {
+      const diff = Math.abs(val - KEYFRAMES[i]);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closest = KEYFRAMES[i];
+      }
+    }
+    return closest;
+  }
+
+  function stepKeyframeStart(dir) {
+    if (!KEYFRAMES || KEYFRAMES.length === 0) return;
+    const cur = parseFloat(startInput.value) || 0;
+    let target = cur;
+    if (dir > 0) {
+      const found = KEYFRAMES.find(k => k > cur + 0.05);
+      if (found !== undefined) target = found;
+    } else {
+      const rev = [...KEYFRAMES].reverse();
+      const found = rev.find(k => k < cur - 0.05);
+      if (found !== undefined) target = found;
+    }
+    startInput.value = target.toFixed(2);
+    vid.currentTime = target;
+    updateRegions();
+  }
+
+  function stepKeyframeEnd(dir) {
+    if (!KEYFRAMES || KEYFRAMES.length === 0) return;
+    const cur = parseFloat(endInput.value) || (videoDuration || 0);
+    let target = cur;
+    if (dir > 0) {
+      const found = KEYFRAMES.find(k => k > cur + 0.05);
+      if (found !== undefined) target = found;
+    } else {
+      const rev = [...KEYFRAMES].reverse();
+      const found = rev.find(k => k < cur - 0.05);
+      if (found !== undefined) target = found;
+    }
+    endInput.value = target.toFixed(2);
+    vid.currentTime = target;
+    updateRegions();
+  }
 
   vid.addEventListener('timeupdate', () => {
     if (!videoDuration) return;
@@ -323,7 +579,7 @@
   timeline.addEventListener('click', e => {
     if (!videoDuration) return;
     const rect = timeline.getBoundingClientRect();
-    const pct = (e.clientX - rect.left) / rect.width;
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     vid.currentTime = pct * videoDuration;
   });
 
@@ -343,12 +599,31 @@
   }
 
   function setStart() {
-    startInput.value = vid.currentTime.toFixed(2);
+    const t = snapToKeyframe(vid.currentTime);
+    startInput.value = t.toFixed(2);
     updateRegions();
   }
 
   function setEnd() {
-    endInput.value = vid.currentTime.toFixed(2);
+    const t = snapToKeyframe(vid.currentTime);
+    endInput.value = t.toFixed(2);
+    updateRegions();
+  }
+
+  function nudgeStart(delta) {
+    let val = Math.max(0, (parseFloat(startInput.value) || 0) + delta);
+    if (val >= (parseFloat(endInput.value) || videoDuration)) return;
+    startInput.value = val.toFixed(2);
+    vid.currentTime = val;
+    updateRegions();
+  }
+
+  function nudgeEnd(delta) {
+    let maxDur = videoDuration || 999999;
+    let val = Math.min(maxDur, (parseFloat(endInput.value) || maxDur) + delta);
+    if (val <= (parseFloat(startInput.value) || 0)) return;
+    endInput.value = val.toFixed(2);
+    vid.currentTime = val;
     updateRegions();
   }
 
@@ -356,29 +631,80 @@
     inp.addEventListener('input', updateRegions);
   });
 
+  startInput.addEventListener('change', () => {
+    const val = parseFloat(startInput.value) || 0;
+    startInput.value = snapToKeyframe(val).toFixed(2);
+    vid.currentTime = parseFloat(startInput.value);
+    updateRegions();
+  });
+
+  endInput.addEventListener('change', () => {
+    const val = parseFloat(endInput.value) || (videoDuration || 0);
+    endInput.value = snapToKeyframe(val).toFixed(2);
+    vid.currentTime = parseFloat(endInput.value);
+    updateRegions();
+  });
+
   function updateRegions() {
     if (!videoDuration) return;
-    const start = parseFloat(startInput.value) || 0;
-    const end = parseFloat(endInput.value) || videoDuration;
+    const start = Math.max(0, parseFloat(startInput.value) || 0);
+    const end = Math.min(videoDuration, parseFloat(endInput.value) || videoDuration);
+
+    startFormatted.textContent = formatTime(start);
+    endFormatted.textContent = formatTime(end);
+
+    const dur = Math.max(0, end - start);
+    newDuration.textContent = formatTime(dur);
 
     const startPct = Math.min((start / videoDuration) * 100, 100);
     trimStartRegion.style.width = startPct + '%';
 
     const endPct = Math.max(100 - (end / videoDuration) * 100, 0);
     trimEndRegion.style.width = endPct + '%';
+
+    // Count preserved bouts
+    let total = EMBEDDED_EXCHANGES.length;
+    let kept = EMBEDDED_EXCHANGES.filter(ex => ex.start_time_sec >= start && ex.end_time_sec <= end).length;
+    keptBouts.textContent = `${kept} из ${total}`;
   }
 
+  // Keyboard hotkeys
+  window.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (vid.paused) vid.play(); else vid.pause();
+    } else if (e.code === 'ArrowLeft') {
+      e.preventDefault();
+      vid.currentTime = Math.max(0, vid.currentTime - (e.shiftKey ? 1.0 : 0.04));
+    } else if (e.code === 'ArrowRight') {
+      e.preventDefault();
+      vid.currentTime = Math.min(videoDuration, vid.currentTime + (e.shiftKey ? 1.0 : 0.04));
+    } else if (e.key === 'i' || e.key === 'I' || e.key === '[' || e.key === 'ш' || e.key === 'Ш') {
+      e.preventDefault();
+      setStart();
+    } else if (e.key === 'o' || e.key === 'O' || e.key === ']' || e.key === 'щ' || e.key === 'Щ') {
+      e.preventDefault();
+      setEnd();
+    }
+  });
+
   async function submitTrim() {
+    startInput.value = snapToKeyframe(parseFloat(startInput.value) || 0).toFixed(2);
+    endInput.value = snapToKeyframe(parseFloat(endInput.value) || (videoDuration || 0)).toFixed(2);
+    updateRegions();
+
     const start = parseFloat(startInput.value);
     const end = parseFloat(endInput.value);
 
     if (start >= end) {
-      alert("Начало обрезки должно быть меньше конца.");
+      alert("Начало обрезки должно быть строго меньше конца.");
       return;
     }
     
-    if (start === 0 && end >= videoDuration - 0.5) {
-      alert("Видео и так целое, нечего обрезать.");
+    if (start === 0 && end >= videoDuration - 0.02) {
+      alert("Выбран весь исходный видеофайл, нечего обрезать.");
       return;
     }
 
@@ -398,14 +724,15 @@
       console.error("Failed to fetch trim impact", e);
     }
 
-    let confirmMsg = `Вы уверены, что хотите обрезать видео (файл будет безвозвратно перезаписан в Seafile)?\n\n`;
+    let confirmMsg = `Выполнить быструю потоковую обрезку без перекодирования (Stream Copy)?\n\n` +
+      `Интервал: ${formatTime(start)} — ${formatTime(end)} (Длительность: ${formatTime(end - start)})\n\n`;
     if (deleted_bouts > 0 || deleted_comments > 0) {
-      confirmMsg += `ВНИМАНИЕ! В результате обрезки будут БЕЗВОЗВРАТНО УДАЛЕНЫ:\n`;
-      if (deleted_bouts > 0) confirmMsg += `- Сходов: ${deleted_bouts}\n`;
-      if (deleted_comments > 0) confirmMsg += `- Комментариев: ${deleted_comments}\n`;
+      confirmMsg += `ВНИМАНИЕ! Будут удалены элементы вне диапазона:\n`;
+      if (deleted_bouts > 0) confirmMsg += `• Сходов: ${deleted_bouts}\n`;
+      if (deleted_comments > 0) confirmMsg += `• Комментариев: ${deleted_comments}\n`;
       confirmMsg += `\n`;
     }
-    confirmMsg += `Эта операция займет время. Продолжить?`;
+    confirmMsg += `Файл останется в оригинальном формате HEVC (100% исходное качество). Длительность операции: ~1 секунда. Продолжить?`;
 
     if (!confirm(confirmMsg)) {
       trimBtn.disabled = false;
@@ -413,7 +740,7 @@
     }
 
     overlay.style.display = 'flex';
-    document.getElementById('overlayText').textContent = "Выполняется обрезка видео на сервере... Это может занять пару минут. Пожалуйста, подождите.";
+    document.getElementById('overlayText').textContent = "Выполняется быстрое потоковое копирование HEVC на сервере... Пожалуйста, подождите.";
 
     try {
       const res = await fetch(`/api/videos/${videoId}/trim?token=${tokenStr}`, {
@@ -435,7 +762,7 @@
           const statusData = await statusRes.json();
           if (statusData.status === 'success') {
             clearInterval(pollInterval);
-            alert("Видео успешно обрезано! Перезагрузите главную страницу, чтобы увидеть изменения.");
+            alert("Видео успешно и точно обрезано! Перезагрузите страницу для обновления данных.");
             window.close();
           } else if (statusData.status === 'error') {
             clearInterval(pollInterval);
@@ -456,10 +783,11 @@
   }
 
   function formatTime(sec) {
-    if (!sec && sec !== 0) return '—';
+    if (!sec && sec !== 0) return '00:00.00';
     const m = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
+    const s = Math.floor(sec % 60);
+    const cs = Math.floor((sec % 1) * 100);
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${cs.toString().padStart(2, '0')}`;
   }
 </script>
 

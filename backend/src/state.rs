@@ -18,4 +18,5 @@ pub struct AppState {
     pub vk_app_id: Option<String>,
     pub vk_app_secret: Option<String>,
     pub ai_queue_tx: tokio::sync::mpsc::UnboundedSender<String>,
+    pub transcode: Arc<crate::services::transcode::TranscodeManager>,
 }

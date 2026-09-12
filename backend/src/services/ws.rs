@@ -88,6 +88,12 @@ pub struct WsFighter {
 pub enum WsEvent {
     NewComment(WsComment),
     UpdateComment(WsComment),
+    UpdateCommentReaction {
+        comment_id: i32,
+        video_id: String,
+        likes: i32,
+        dislikes: i32,
+    },
     DeleteComment {
         id: i32,
         video_id: String,
@@ -126,6 +132,11 @@ pub enum WsEvent {
         video_id: String,
         preview_url: String,
     },
+    UpdateVideoOptimized {
+        video_id: String,
+        is_optimized: bool,
+        is_optimizing: bool,
+    },
 }
 
 impl WsEvent {
@@ -139,6 +150,7 @@ impl WsEvent {
                 | WsEvent::NewVideo { .. }
                 | WsEvent::VideoRemoved { .. }
                 | WsEvent::PresenceUpdate { .. }
+                | WsEvent::UpdateVideoOptimized { .. }
         )
     }
 
@@ -146,12 +158,14 @@ impl WsEvent {
         match self {
             WsEvent::NewComment(c) => Some(&c.video_id),
             WsEvent::UpdateComment(c) => Some(&c.video_id),
+            WsEvent::UpdateCommentReaction { video_id, .. } => Some(video_id),
             WsEvent::DeleteComment { video_id, .. } => Some(video_id),
             WsEvent::UpdateBout(b) => Some(&b.video_id),
             WsEvent::UpdateVideoScore { video_id, .. } => Some(video_id),
             WsEvent::UpdateVideoFighters { video_id, .. } => Some(video_id),
             WsEvent::UpdateVideoAiLabeled { video_id, .. } => Some(video_id),
             WsEvent::UpdateVideoPreview { video_id, .. } => Some(video_id),
+            WsEvent::UpdateVideoOptimized { video_id, .. } => Some(video_id),
             WsEvent::NewVideo { .. } => None,
             WsEvent::VideoRemoved { .. } => None,
             WsEvent::PresenceUpdate { .. } => None,

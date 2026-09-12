@@ -48,6 +48,7 @@ pub fn router(state: AppState) -> Router {
             get(videos::get_video).patch(videos::patch_video),
         )
         .route("/api/videos/{id}/stream", get(videos::stream_video))
+        .route("/api/videos/{id}/stream/status", get(videos::stream_status))
         .route("/api/videos/{id}/download", get(videos::download_video))
         .route("/api/videos/{id}/share", post(videos::create_share_token))
         .route("/s/video/{id}", get(videos::og_share_video))
@@ -94,6 +95,23 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/videos/{id}/trim_status",
             get(videos::get_trim_status),
+        )
+        .route(
+            "/api/videos/{id}/keyframes",
+            get(videos::get_keyframes),
+        )
+        // Adaptive Video Optimization
+        .route(
+            "/api/videos/{id}/optimize",
+            post(videos::optimize_video),
+        )
+        .route(
+            "/api/admin/videos/optimization-candidates",
+            get(videos::get_optimization_candidates),
+        )
+        .route(
+            "/api/admin/videos/batch-optimize",
+            post(videos::batch_optimize_videos),
         )
         // Admin Videos Sync
         .route(

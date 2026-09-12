@@ -29,6 +29,8 @@ diesel::table! {
         is_ai_labeled  -> Bool,
         is_analyzing   -> Bool,
         is_queued      -> Bool,
+        is_optimized   -> Bool,
+        is_optimizing  -> Bool,
     }
 }
 

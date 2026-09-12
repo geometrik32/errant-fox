@@ -8,6 +8,7 @@ pub struct Config {
     pub previews_dir: String,
     pub avatars_dir: String,
     pub transcripts_dir: String,
+    pub temp_dir: String,
     pub server_port: u16,
     pub frontend_origin: String,
     pub frontend_url: String,
@@ -29,6 +30,7 @@ impl Config {
             previews_dir: required("PREVIEWS_DIR"),
             avatars_dir: required("AVATARS_DIR"),
             transcripts_dir: get_transcripts_dir(),
+            temp_dir: get_temp_dir(),
             server_port: required("SERVER_PORT")
                 .parse()
                 .expect("SERVER_PORT must be a valid port number"),
@@ -38,6 +40,16 @@ impl Config {
             vk_app_id: env::var("VK_APP_ID").ok(),
             vk_app_secret: env::var("VK_APP_SECRET").ok(),
         }
+    }
+}
+
+fn get_temp_dir() -> String {
+    if let Ok(dir) = env::var("TEMP_DIR") {
+        dir
+    } else if std::path::Path::new("/data").exists() {
+        "/data/temp".to_string()
+    } else {
+        "data/temp".to_string()
     }
 }
 

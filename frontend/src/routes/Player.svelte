@@ -41,8 +41,126 @@
   let player: any = $state(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let judgingPanel: any = $state(null);
+  let layoutEl = $state<HTMLElement | null>(null);
 
-  let layoutEl: HTMLElement | null = $state(null);
+  const PREFERRED_CODEC_KEY = 'errant_fox_preferred_codec';
+
+  // Codec & on-demand transcode state
+  let currentCodec = $state<'hevc' | 'h264'>('hevc');
+  let isH264Ready = $state(false);
+  let isTranscoding = $state(false);
+  let transcodePollTimer: number | null = null;
+
+  onDestroy(() => {
+    if (transcodePollTimer) {
+      window.clearTimeout(transcodePollTimer);
+      transcodePollTimer = null;
+    }
+  });
+
+  let effectiveStreamUrl = $derived.by(() => {
+    if (!video) return '';
+    const base = video.stream_url;
+    if (currentCodec === 'h264') {
+      return base.includes('?') ? `${base}&codec=h264` : `${base}?codec=h264`;
+    }
+    return base;
+  });
+
+  async function checkH264Status(vidId: string) {
+    try {
+      const tokenParam = shareToken ? `&token=${encodeURIComponent(shareToken)}` : '';
+      const statusUrl = `/api/videos/${vidId}/stream/status?codec=h264${tokenParam}&auto_start=false`;
+      const res = await fetch(statusUrl);
+      if (res.ok) {
+        const data = await res.json();
+        isH264Ready = !!data.ready;
+        const savedPref = localStorage.getItem(PREFERRED_CODEC_KEY);
+        if (savedPref === 'h264' && isH264Ready) {
+          currentCodec = 'h264';
+        } else {
+          currentCodec = 'hevc';
+        }
+      }
+    } catch (e) {
+      console.error('Failed to pre-check H.264 status', e);
+    }
+  }
+
+  async function selectCodec(target: 'hevc' | 'h264') {
+    if (!video || isTranscoding || currentCodec === target) return;
+
+    if (target === 'hevc') {
+      localStorage.setItem(PREFERRED_CODEC_KEY, 'hevc');
+      currentCodec = 'hevc';
+      return;
+    }
+
+    localStorage.setItem(PREFERRED_CODEC_KEY, 'h264');
+    const savedTimeMs = currentTime * 1000;
+
+    if (isH264Ready) {
+      currentCodec = 'h264';
+      setTimeout(() => player?.seekTo(savedTimeMs), 60);
+      return;
+    }
+
+    const tokenParam = shareToken ? `&token=${encodeURIComponent(shareToken)}` : '';
+    const statusUrl = `/api/videos/${video.id}/stream/status?codec=h264${tokenParam}&auto_start=true`;
+
+    try {
+      const res = await fetch(statusUrl);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ready) {
+          isH264Ready = true;
+          currentCodec = 'h264';
+          setTimeout(() => player?.seekTo(savedTimeMs), 60);
+          return;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to check transcode status', e);
+    }
+
+    isTranscoding = true;
+    pollTranscodeStatus(savedTimeMs);
+  }
+
+  function toggleCodec() {
+    selectCodec(currentCodec === 'hevc' ? 'h264' : 'hevc');
+  }
+
+  function pollTranscodeStatus(targetTimeMs: number) {
+    if (transcodePollTimer) window.clearTimeout(transcodePollTimer);
+
+    transcodePollTimer = window.setTimeout(async () => {
+      if (!video) {
+        isTranscoding = false;
+        return;
+      }
+      try {
+        const tokenParam = shareToken ? `&token=${encodeURIComponent(shareToken)}` : '';
+        const statusUrl = `/api/videos/${video.id}/stream/status?codec=h264${tokenParam}&auto_start=true`;
+        const res = await fetch(statusUrl);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.ready) {
+            isTranscoding = false;
+            isH264Ready = true;
+            currentCodec = 'h264';
+            setTimeout(() => player?.seekTo(targetTimeMs), 80);
+            return;
+          }
+        }
+      } catch (e) {
+        console.error('Error polling transcode status', e);
+      }
+      if (isTranscoding) {
+        pollTranscodeStatus(targetTimeMs);
+      }
+    }, 1500);
+  }
 
   import { setLandscapeOrientation } from '../lib/utils/push';
 
@@ -121,7 +239,10 @@
   });
 
   // Highlighted & Hovered comment IDs
-  let highlightedCommentId = $state<number | null>(initialHighlightedId ?? null);
+  let highlightedCommentId = $state<number | null>(null);
+  $effect(() => {
+    highlightedCommentId = initialHighlightedId ?? null;
+  });
   let hoveredCommentId = $state<number | null>(null);
   let activeFlashingCommentId = $state<number | null>(null);
 
@@ -245,6 +366,7 @@
       liveBouts = sharedBoutId ? video.bouts.filter(b => b.id === sharedBoutId) : [...video.bouts];
       liveComments = [...video.comments];
       connectWS();
+      checkH264Status(video.id);
     } catch (e) {
       loadError = e instanceof Error ? e.message : 'Ошибка загрузки видео';
     } finally {
@@ -363,7 +485,7 @@
       <div class="mobile-player-area">
         <VideoPlayer
           bind:this={player}
-          src={video!.stream_url}
+          src={effectiveStreamUrl}
           {speed}
           {volume}
           {playing}
@@ -380,6 +502,7 @@
           currentUser={$currentUser}
           fighterA={video!.fighter_a}
           fighterB={video!.fighter_b}
+          {isTranscoding}
           ontimeupdate={(t) => { currentTime = t; }}
           ondurationchange={(d) => { duration = d; }}
           onplayingchange={(p) => {
@@ -416,6 +539,11 @@
           {isDrawingMode}
           {hoveredCommentId}
           {activeFlashingCommentId}
+          {currentCodec}
+          {isTranscoding}
+          {isH264Ready}
+          onselectcodec={selectCodec}
+          ontogglecodec={toggleCodec}
           onfullscreen={toggleFullscreenMobile}
           oncommenthover={(id) => { hoveredCommentId = id; }}
           oncommentleave={() => { hoveredCommentId = null; }}
@@ -564,7 +692,7 @@
       <div class="col col-center">
         <VideoPlayer
           bind:this={player}
-          src={video.stream_url}
+          src={effectiveStreamUrl}
           {speed}
           {volume}
           {playing}
@@ -581,6 +709,7 @@
           currentUser={$currentUser}
           fighterA={video.fighter_a}
           fighterB={video.fighter_b}
+          {isTranscoding}
           ontimeupdate={(t) => { currentTime = t; }}
           ondurationchange={(d) => { duration = d; }}
           onplayingchange={(p) => {
@@ -659,6 +788,11 @@
         {isDrawingMode}
         {hoveredCommentId}
         {activeFlashingCommentId}
+        {currentCodec}
+        {isTranscoding}
+        {isH264Ready}
+        onselectcodec={selectCodec}
+        ontogglecodec={toggleCodec}
         oncommenthover={(id) => { hoveredCommentId = id; }}
         oncommentleave={() => { hoveredCommentId = null; }}
         onseek={(ms) => {

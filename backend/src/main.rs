@@ -87,6 +87,11 @@ async fn main() {
         config.previews_dir.clone(),
     ));
 
+    let transcode_manager = services::transcode::TranscodeManager::new(
+        std::path::PathBuf::from(&config.temp_dir),
+        config.server_port,
+    );
+
     let app_state = state::AppState {
         db: db_pool,
         jwt_secret: config.jwt_secret.clone(),
@@ -102,6 +107,7 @@ async fn main() {
         vk_app_id: config.vk_app_id.clone(),
         vk_app_secret: config.vk_app_secret.clone(),
         ai_queue_tx,
+        transcode: transcode_manager,
     };
 
     services::ai_queue::start_ai_queue_processor(app_state.clone(), ai_queue_rx);

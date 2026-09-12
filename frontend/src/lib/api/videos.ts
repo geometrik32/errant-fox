@@ -87,3 +87,22 @@ export async function batchAiLabelVideos(videoIds?: string[]): Promise<{ status:
     body: JSON.stringify({ video_ids: videoIds }),
   });
 }
+
+export async function optimizeVideo(id: string): Promise<{ status: string; video_id: string }> {
+  return apiFetch<{ status: string; video_id: string }>(`/videos/${id}/optimize`, {
+    method: 'POST',
+  });
+}
+
+export async function getOptimizationCandidates(olderThanDays?: number): Promise<import('./types').OptimizationCandidate[]> {
+  const query = olderThanDays !== undefined ? `?older_than_days=${olderThanDays}` : '';
+  return apiFetch<import('./types').OptimizationCandidate[]>(`/admin/videos/optimization-candidates${query}`);
+}
+
+export async function batchOptimizeVideos(videoIds: string[]): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>('/admin/videos/batch-optimize', {
+    method: 'POST',
+    body: JSON.stringify({ video_ids: videoIds }),
+  });
+}
+

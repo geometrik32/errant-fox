@@ -33,6 +33,7 @@
     onspeedchange?: (speed: number) => void;
     onstrokeschange?: (strokes: Stroke[]) => void;
     onclosedrawing?: () => void;
+    isTranscoding?: boolean;
   }
 
   let {
@@ -53,6 +54,7 @@
     currentUser = null,
     fighterA = null,
     fighterB = null,
+    isTranscoding = false,
     ontimeupdate,
     ondurationchange,
     onplayingchange,
@@ -552,6 +554,18 @@
   ontouchend={handleTouchEnd}
   ontouchcancel={handleTouchEnd}
 >
+  {#if isTranscoding}
+    <div class="transcode-overlay">
+      <div class="transcode-card">
+        <div class="transcode-spinner"></div>
+        <div class="transcode-title">Подготовка совместимой версии (H.264)</div>
+        <div class="transcode-desc">
+          Выполняется конвертация видео на сервере с сохранением оригинальной частоты кадров. Пожалуйста, подождите…
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <!-- Double tap seek indicator -->
   {#if seekIndicator}
     <div class="seek-indicator seek-indicator--{seekIndicator.side}">
@@ -933,5 +947,57 @@
     .panel-dot {
       display: none;
     }
+  }
+
+  .transcode-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.82);
+    backdrop-filter: blur(5px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    padding: 24px;
+    animation: fadeIn 0.25s ease;
+  }
+
+  .transcode-card {
+    background: var(--surface-solid, #18181b);
+    border: 1px solid var(--border-color, #27272a);
+    border-radius: 12px;
+    padding: 28px 24px;
+    max-width: 420px;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .transcode-spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid rgba(245, 158, 11, 0.2);
+    border-top-color: var(--accent-yellow, #f59e0b);
+    border-radius: 50%;
+    animation: transcode-spin 0.8s linear infinite;
+  }
+
+  .transcode-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text-primary, #ffffff);
+  }
+
+  .transcode-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary, #a1a1aa);
+    line-height: 1.45;
+  }
+
+  @keyframes transcode-spin {
+    to { transform: rotate(360deg); }
   }
 </style>
