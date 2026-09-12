@@ -45,6 +45,7 @@
     // 1. Count unique videos that HAVE non-empty bouts (tagged/marked)
     const taggedVideoIdsPerWeek = new Map<string, Set<string>>();
     for (const b of bouts) {
+      if (b.is_unmarked || b.is_ai) continue;
       const hasContent = b.my_score > 0 || b.opponent_score > 0 ||
         b.my_technique_id != null || b.opponent_technique_id != null ||
         b.my_result != null || b.opponent_result != null;

@@ -8,13 +8,14 @@
 
   let { bouts, totalVideos = 0 }: Props = $props();
 
-  let totalBouts = $derived(bouts.length);
-  let boutWins = $derived(bouts.filter(b => b.my_score > b.opponent_score).length);
+  let validBouts = $derived(bouts.filter(b => !b.is_unmarked && !b.is_ai));
+  let totalBouts = $derived(validBouts.length);
+  let boutWins = $derived(validBouts.filter(b => b.my_score > b.opponent_score).length);
   let boutWinRate = $derived(totalBouts > 0 ? Math.round((boutWins / totalBouts) * 100) : 0);
 
   let videoResults = $derived.by(() => {
     const videoMap = new Map<string, { my: number; opp: number }>();
-    for (const b of bouts) {
+    for (const b of validBouts) {
       const v = videoMap.get(b.video_id);
       if (v) { v.my += b.my_score; v.opp += b.opponent_score; }
       else videoMap.set(b.video_id, { my: b.my_score, opp: b.opponent_score });
@@ -26,8 +27,8 @@
   let battleWins = $derived(videoResults.filter(r => r === 1).length);
   let battleWinRate = $derived(totalBattles > 0 ? Math.round((battleWins / totalBattles) * 100) : 0);
 
-  let pointsScored = $derived(bouts.reduce((sum, b) => sum + b.my_score, 0));
-  let pointsConceded = $derived(bouts.reduce((sum, b) => sum + b.opponent_score, 0));
+  let pointsScored = $derived(validBouts.reduce((sum, b) => sum + b.my_score, 0));
+  let pointsConceded = $derived(validBouts.reduce((sum, b) => sum + b.opponent_score, 0));
   let avgBoutsPerFight = $derived(totalBattles > 0 ? (totalBouts / totalBattles).toFixed(1) : '—');
 </script>
 

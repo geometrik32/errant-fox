@@ -99,7 +99,9 @@
         map.set(b.video_id, g);
         list.push(g);
       }
-      if (!b.is_unmarked) {
+      if (b.is_unmarked) {
+        g.is_unmarked = true;
+      } else {
         g.my_score += b.my_score;
         g.opponent_score += b.opponent_score;
         g.bouts.push(b);

@@ -49,6 +49,7 @@ export interface FighterBout {
   opponent_hit_zone: string | null;
   opponent_result: 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | 'disqualification' | 'afterblow' | null;
   is_unmarked?: boolean;
+  is_ai?: boolean;
 }
 
 export interface VideoFighter {

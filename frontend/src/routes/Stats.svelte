@@ -74,8 +74,33 @@
     return [...weeks].sort().join(',');
   }
 
+  // Video IDs that are fully human-labeled (has at least 1 bout AND zero AI bouts)
+  let fullyLabeledVideoIds = $derived.by(() => {
+    const aiVideoIds = new Set<string>();
+    const videoIdsWithBouts = new Set<string>();
+
+    for (const v of rawVideos) {
+      if (v.is_ai_labeled) aiVideoIds.add(v.id);
+    }
+    for (const b of rawBouts) {
+      videoIdsWithBouts.add(b.video_id);
+      if (b.is_ai) aiVideoIds.add(b.video_id);
+    }
+
+    const set = new Set<string>();
+    for (const vidId of videoIdsWithBouts) {
+      if (!aiVideoIds.has(vidId)) {
+        set.add(vidId);
+      }
+    }
+    return set;
+  });
+
+  // Bouts belonging ONLY to fully human-labeled videos
+  let rawValidBouts = $derived(rawBouts.filter(b => fullyLabeledVideoIds.has(b.video_id)));
+
   let filteredBouts = $derived.by(() => {
-    let result = [...rawBouts];
+    let result = [...rawValidBouts];
     if (zoneFilter) {
       result = result.filter(b => {
         const mz = (b.my_hit_zone ?? '').split(':')[0];
@@ -139,9 +164,8 @@
     );
 
     if (!hasBoutFilters && selectedFighter) {
-      const taggedVideoIds = new Set(rawBouts.map(b => b.video_id));
       for (const vid of filteredVideos) {
-        if (!taggedVideoIds.has(vid.id)) {
+        if (!fullyLabeledVideoIds.has(vid.id)) {
           const am_a = vid.fighter_a?.id === selectedFighter.id;
           const opp = am_a ? vid.fighter_b : vid.fighter_a;
 
@@ -208,14 +232,14 @@
 
 
   let firstBoutDate = $derived(
-    rawBouts.length > 0
-      ? rawBouts.reduce((min, b) => b.video_date < min ? b.video_date : min, rawBouts[0].video_date)
+    rawValidBouts.length > 0
+      ? rawValidBouts.reduce((min, b) => b.video_date < min ? b.video_date : min, rawValidBouts[0].video_date)
       : null
   );
 
   // Bouts for technique lists (we don't want them to filter themselves out)
   let boutsForMyTechniques = $derived.by(() => {
-    let result = [...rawBouts];
+    let result = [...rawValidBouts];
     if (tableFilters.opponent_id) result = result.filter(b => b.opponent_id === tableFilters.opponent_id);
     if (zoneFilter) result = result.filter(b => (b.my_hit_zone ?? '').split(':')[0] === zoneFilter || (b.opponent_hit_zone ?? '').split(':')[0] === zoneFilter);
     if (tableFilters.opponent_technique) result = result.filter(b => b.opponent_technique_name === tableFilters.opponent_technique);
@@ -227,7 +251,7 @@
   });
 
   let boutsForOpponentTechniques = $derived.by(() => {
-    let result = [...rawBouts];
+    let result = [...rawValidBouts];
     if (tableFilters.opponent_id) result = result.filter(b => b.opponent_id === tableFilters.opponent_id);
     if (zoneFilter) result = result.filter(b => (b.my_hit_zone ?? '').split(':')[0] === zoneFilter || (b.opponent_hit_zone ?? '').split(':')[0] === zoneFilter);
     if (tableFilters.my_technique) result = result.filter(b => b.my_technique_name === tableFilters.my_technique);
@@ -240,7 +264,7 @@
 
   // Charts should respect technique filters
   let boutsForCharts = $derived.by(() => {
-    let result = [...rawBouts];
+    let result = [...rawValidBouts];
     if (tableFilters.opponent_id)
       result = result.filter(b => b.opponent_id === tableFilters.opponent_id);
     if (zoneFilter) {
@@ -267,7 +291,7 @@
   let activeWeeks = $derived.by(() => {
     if (tableFilters.date_week) return parseWeeks(tableFilters.date_week);
     if (tableFilters.video_id) {
-      const bout = rawBouts.find(b => b.video_id === tableFilters.video_id);
+      const bout = rawValidBouts.find(b => b.video_id === tableFilters.video_id) || rawBouts.find(b => b.video_id === tableFilters.video_id);
       if (bout) return [getISOWeek(bout.video_date)];
     }
     return [];

@@ -51,6 +51,7 @@ pub struct FighterBoutDto {
     pub opponent_technique_name: Option<String>,
     pub opponent_hit_zone: Option<String>,
     pub opponent_result: Option<String>,
+    pub is_ai: bool,
 }
 
 #[derive(Serialize)]
@@ -258,6 +259,7 @@ pub async fn fighter_bouts(
                     bout.hit_zone_a.clone()
                 },
                 opponent_result: if am_a { bout.result_b.clone() } else { bout.result_a.clone() },
+                is_ai: bout.is_ai,
             });
         }
 
