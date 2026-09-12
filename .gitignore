@@ -53,3 +53,21 @@ yolov8x.pt
 directives/
 scratch/
 yolov8x-pose.pt
+test_venv/
+test_compression_output/
+GVHMR/
+models/
+outputs/
+docker/
+docker-compose.wham.yml
+execution/*
+!execution/compress_adaptive_vfr.py
+
+# Local dev runners, logs and test files
+run_*.ps1
+run_*.bat
+*.mp4
+err_out.txt
+wget-log
+GEMINI.md
+

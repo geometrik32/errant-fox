@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import type { Video } from '../api/types';
   import { resolveColor } from '../api/types';
-  import { regeneratePreview, aiLabelVideo, cancelAiLabelVideo } from '../api/videos';
+  import { regeneratePreview, aiLabelVideo, cancelAiLabelVideo, optimizeVideo } from '../api/videos';
   import { currentUser } from '../../stores';
   import ShareModal from '../ui/ShareModal.svelte';
 
@@ -18,6 +18,8 @@
   let imgError = $state(false);
   let isRegenerating = $state(false);
   let isAiLabeling = $state(false);
+  let isOptimizingLocal = $state(false);
+  let isOptimizing = $derived(video.is_optimizing || isOptimizingLocal);
   let menuOpen = $state(false);
   let showShare = $state(false);
   let showInfo = $state(false);
@@ -201,6 +203,11 @@
         <div class="spinner ai-spinner"></div>
         <span class="spinner-text">Анализ ИИ...</span>
       </div>
+    {:else if isOptimizing}
+      <div class="spinner-container optimizing-container">
+        <div class="spinner optimize-spinner"></div>
+        <span class="spinner-text">Оптимизация...</span>
+      </div>
     {:else if video.is_queued}
       <div class="spinner-container queued-container">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-yellow)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -366,6 +373,47 @@
         </button>
       {/if}
 
+      {@const isEligibleForOptimization = video.is_eligible_for_optimization ?? (video.has_human_bouts && !video.is_ai_labeled && !video.is_optimized && !video.is_optimizing)}
+      {#if isEligibleForOptimization}
+        <button 
+          class="menu-item menu-item-optimize" 
+          onclick={async (e) => { 
+            e.stopPropagation(); 
+            closeMenu(); 
+            isOptimizingLocal = true; 
+            try { 
+              await optimizeVideo(video.id); 
+            } catch (err) { 
+              alert(err instanceof Error ? err.message : 'Ошибка запуска оптимизации'); 
+              isOptimizingLocal = false; 
+            }
+          }}
+          disabled={isOptimizing}
+          title="Сжать видео (VFR) с сохранением 100 fps на сходах"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg>
+          <span>Оптимизировать видео</span>
+        </button>
+      {/if}
+
+      <button 
+        class="menu-item" 
+        onclick={(e) => { 
+          e.stopPropagation(); 
+          closeMenu(); 
+          window.dispatchEvent(new CustomEvent('ef-open-batch-optimize'));
+        }}
+        title="Окно пакетной оптимизации видео"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+          <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+        </svg>
+        <span>Оптимизировать всё...</span>
+      </button>
+
       <button 
         class="menu-item" 
         onclick={async (e) => { 
@@ -441,6 +489,18 @@
                   </a>
                 {:else}
                   <span>Недоступно</span>
+                {/if}
+              </td>
+            </tr>
+            <tr>
+              <td><strong>VFR-сжатие:</strong></td>
+              <td>
+                {#if video.is_optimized}
+                  <span style="color: #22c55e; font-weight: 500;">✅ Оптимизировано (VFR)</span>
+                {:else if video.is_optimizing}
+                  <span style="color: var(--accent-yellow); font-weight: 500;">⏳ В процессе оптимизации...</span>
+                {:else}
+                  <span>Исходный файл</span>
                 {/if}
               </td>
             </tr>
@@ -689,6 +749,21 @@
   .menu-item-ai:hover:not(:disabled) {
     background: rgba(124, 58, 237, 0.18);
     color: #a78bfa;
+  }
+
+  .menu-item-optimize:not(:disabled) {
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.12), transparent);
+    border-left: 2px solid #10b981;
+  }
+
+  .menu-item-optimize:hover:not(:disabled) {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+  }
+
+  .optimize-spinner {
+    border-top-color: #10b981 !important;
+    border-right-color: #34d399 !important;
   }
 
   .spinner-container {

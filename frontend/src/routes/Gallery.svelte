@@ -164,6 +164,14 @@
               applyFilter();
             }).catch(() => {});
           }
+        } else if (msg.type === 'update_video_optimized') {
+          allVideos = allVideos.map(v => {
+            if (v.id === msg.video_id) {
+              return { ...v, is_optimized: msg.is_optimized, is_optimizing: msg.is_optimizing };
+            }
+            return v;
+          });
+          applyFilter();
         }
       } catch {
         // ignore malformed messages

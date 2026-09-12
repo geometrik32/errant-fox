@@ -52,6 +52,8 @@ pub struct Video {
     pub is_ai_labeled: bool,
     pub is_analyzing: bool,
     pub is_queued: bool,
+    pub is_optimized: bool,
+    pub is_optimizing: bool,
 }
 
 #[derive(Insertable, Deserialize, Debug)]

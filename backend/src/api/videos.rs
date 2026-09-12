@@ -54,6 +54,9 @@ pub struct VideoListDto {
     pub is_ai_labeled: bool,
     pub is_analyzing: bool,
     pub is_queued: bool,
+    pub is_optimized: bool,
+    pub is_optimizing: bool,
+    pub is_eligible_for_optimization: bool,
     pub has_transcript: bool,
     pub has_human_bouts: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -114,6 +117,9 @@ pub struct VideoFullDto {
     pub is_ai_labeled: bool,
     pub is_analyzing: bool,
     pub is_queued: bool,
+    pub is_optimized: bool,
+    pub is_optimizing: bool,
+    pub is_eligible_for_optimization: bool,
     pub has_transcript: bool,
     pub has_human_bouts: bool,
     pub bouts: Vec<BoutDto>,
@@ -226,6 +232,7 @@ fn build_video_full(
 
     let has_transcript = std::path::Path::new(&format!("{}/{}.json", transcripts_dir, video.id)).exists();
     let has_human_bouts = bouts.iter().any(|b| !b.is_ai);
+    let is_eligible_for_optimization = !bouts.is_empty() && bouts.iter().all(|b| !b.is_ai) && !video.is_optimized && !video.is_optimizing;
 
     VideoFullDto {
         id: video.id.clone(),
@@ -238,6 +245,9 @@ fn build_video_full(
         is_ai_labeled: video.is_ai_labeled,
         is_analyzing: video.is_analyzing,
         is_queued: video.is_queued,
+        is_optimized: video.is_optimized,
+        is_optimizing: video.is_optimizing,
+        is_eligible_for_optimization,
         has_transcript,
         has_human_bouts,
         bouts: bouts.iter().map(bout_dto).collect(),
@@ -416,6 +426,7 @@ pub async fn list_videos(
                     .unwrap_or(&[]);
 
                 let has_human_bouts = bouts.iter().any(|b| !b.is_ai);
+                let is_eligible_for_optimization = !bouts.is_empty() && bouts.iter().all(|b| !b.is_ai) && !v.is_optimized && !v.is_optimizing;
 
                 let (total_score_a, total_score_b) = if is_tagged {
                     let sa: i32 = bouts.iter().map(|b| b.score_a).sum();
@@ -438,6 +449,9 @@ pub async fn list_videos(
                     is_ai_labeled: v.is_ai_labeled,
                     is_analyzing: v.is_analyzing,
                     is_queued: v.is_queued,
+                    is_optimized: v.is_optimized,
+                    is_optimizing: v.is_optimizing,
+                    is_eligible_for_optimization,
                     has_transcript: std::path::Path::new(&format!("{}/{}.json", transcripts_dir, v.id)).exists(),
                     has_human_bouts,
                     seafile_path: if is_admin { Some(v.seafile_path.clone()) } else { None },
@@ -990,13 +1004,161 @@ pub async fn get_preview_frame(
     Ok(([(header::CONTENT_TYPE, "image/jpeg")], bytes).into_response())
 }
 
-// ── Video stream proxy ────────────────────────────────────────────────────────
+// ── Video stream proxy & on-demand transcode ──────────────────────────────────
+
+#[derive(Deserialize, Default)]
+pub struct StreamQuery {
+    pub codec: Option<String>,
+    pub token: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct StreamStatusQuery {
+    pub codec: Option<String>,
+    pub auto_start: Option<bool>,
+}
+
+#[derive(Serialize)]
+pub struct StreamStatusDto {
+    pub ready: bool,
+    pub in_progress: bool,
+}
+
+pub async fn stream_status(
+    State(state): State<AppState>,
+    Path(video_id): Path<String>,
+    Query(query): Query<StreamStatusQuery>,
+) -> Result<Json<StreamStatusDto>, AppError> {
+    if query.codec.as_deref() == Some("h264") {
+        let (ready, in_progress) = state.transcode.check_status(&video_id).await;
+        if !ready && !in_progress && query.auto_start.unwrap_or(true) {
+            let _ = state.transcode.start_or_subscribe(&video_id).await;
+            return Ok(Json(StreamStatusDto {
+                ready: false,
+                in_progress: true,
+            }));
+        }
+        return Ok(Json(StreamStatusDto {
+            ready,
+            in_progress,
+        }));
+    }
+
+    Ok(Json(StreamStatusDto {
+        ready: true,
+        in_progress: false,
+    }))
+}
+
+async fn serve_local_file_range(
+    file_path: &std::path::Path,
+    range_header: Option<&str>,
+) -> Result<axum::response::Response, AppError> {
+    use tokio::io::{AsyncReadExt, AsyncSeekExt};
+
+    let mut file = tokio::fs::File::open(file_path)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+    let metadata = file
+        .metadata()
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+    let total_size = metadata.len();
+
+    let (start, end) = if let Some(range_str) = range_header {
+        if let Some(bytes_range) = range_str.strip_prefix("bytes=") {
+            let parts: Vec<&str> = bytes_range.split('-').collect();
+            let start = parts.first().and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
+            let end = parts
+                .get(1)
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(total_size.saturating_sub(1));
+            let end = end.min(total_size.saturating_sub(1));
+            (start, end)
+        } else {
+            (0, total_size.saturating_sub(1))
+        }
+    } else {
+        (0, total_size.saturating_sub(1))
+    };
+
+    let length = if total_size == 0 || start > end {
+        0
+    } else {
+        end - start + 1
+    };
+
+    file.seek(std::io::SeekFrom::Start(start))
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let chunk_size = 64 * 1024;
+    let stream = futures_util::stream::unfold(
+        (file, length),
+        move |(mut f, mut remaining)| async move {
+            if remaining == 0 {
+                return None;
+            }
+            let to_read = (chunk_size as u64).min(remaining) as usize;
+            let mut buf = vec![0u8; to_read];
+            match f.read_exact(&mut buf).await {
+                Ok(_) => {
+                    remaining -= to_read as u64;
+                    Some((Ok::<_, std::io::Error>(axum::body::Bytes::from(buf)), (f, remaining)))
+                }
+                Err(e) => Some((Err(e), (f, 0))),
+            }
+        },
+    );
+
+    let body = axum::body::Body::from_stream(stream);
+
+    let mut builder = axum::response::Response::builder()
+        .header("content-type", "video/mp4")
+        .header("accept-ranges", "bytes");
+
+    if range_header.is_some() {
+        builder = builder
+            .status(StatusCode::PARTIAL_CONTENT)
+            .header(
+                "content-range",
+                format!("bytes {}-{}/{}", start, end, total_size),
+            )
+            .header("content-length", length.to_string());
+    } else {
+        builder = builder
+            .status(StatusCode::OK)
+            .header("content-length", total_size.to_string());
+    }
+
+    builder
+        .body(body)
+        .map_err(|e| AppError::Internal(e.to_string()))
+}
 
 pub async fn stream_video(
     State(state): State<AppState>,
     Path(video_id): Path<String>,
-    req_headers: HeaderMap,
+    Query(query): Query<StreamQuery>,
+    req: axum::extract::Request,
 ) -> Result<axum::response::Response, AppError> {
+    // If client requests H.264 compatible stream
+    if query.codec.as_deref() == Some("h264") {
+        let target_file = state.transcode.target_path(&video_id);
+        if target_file.exists() {
+            state.transcode.touch(&video_id).await;
+            let range = req
+                .headers()
+                .get(header::RANGE)
+                .and_then(|v| v.to_str().ok());
+            return serve_local_file_range(&target_file, range).await;
+        } else {
+            // Not ready yet — trigger transcode if not already running
+            let _ = state.transcode.start_or_subscribe(&video_id).await;
+            return Err(AppError::NotFound);
+        }
+    }
+
     let db = state.db.clone();
     let video_id_for_db = video_id.clone();
 
@@ -1014,7 +1176,8 @@ pub async fn stream_video(
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
-    let range = req_headers
+    let range = req
+        .headers()
         .get(header::RANGE)
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
@@ -1357,12 +1520,10 @@ pub async fn admin_import_videos(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let mut authorized = false;
 
-    // 1. Check IMPORT_TRIGGER_KEY from .env
-    if let Ok(secret_key) = std::env::var("IMPORT_TRIGGER_KEY") {
-        if let Some(ref req_key) = query.key {
-            if req_key == &secret_key {
-                authorized = true;
-            }
+    // 1. Check secret key against state.jwt_secret
+    if let Some(ref req_key) = query.key {
+        if req_key == &state.jwt_secret {
+            authorized = true;
         }
     }
 
@@ -2293,8 +2454,94 @@ pub async fn get_trim_status(
     Ok(axum::Json(status))
 }
 
+pub async fn get_keyframes(
+    State(state): State<AppState>,
+    crate::middleware::auth::CurrentUser(user): crate::middleware::auth::CurrentUser,
+    Path(video_id): Path<String>,
+) -> Result<impl axum::response::IntoResponse, AppError> {
+    if !user.is_admin {
+        return Err(AppError::Forbidden);
+    }
+
+    let temp_dir = get_temp_dir().await;
+    let cache_file = format!("{}/keyframes_{}.json", temp_dir, video_id);
+
+    if let Ok(data) = tokio::fs::read_to_string(&cache_file).await {
+        if let Ok(kfs) = serde_json::from_str::<Vec<f64>>(&data) {
+            return Ok(axum::Json(kfs));
+        }
+    }
+
+    let db = state.db.clone();
+    let vid = video_id.clone();
+    let video = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::videos;
+        use diesel::prelude::*;
+        let mut conn = db.get().map_err(|_| diesel::result::Error::NotFound)?;
+        videos::table
+            .filter(videos::id.eq(&vid))
+            .first::<Video>(&mut conn)
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))?
+    .map_err(|_| AppError::NotFound)?;
+
+    let download_url = state
+        .seafile
+        .get_download_url(&video.seafile_path)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let output = tokio::process::Command::new("ffprobe")
+        .arg("-v")
+        .arg("error")
+        .arg("-select_streams")
+        .arg("v:0")
+        .arg("-skip_frame")
+        .arg("nokey")
+        .arg("-show_entries")
+        .arg("frame=pts_time")
+        .arg("-of")
+        .arg("csv=p=0")
+        .arg("-user_agent")
+        .arg("Mozilla/5.0")
+        .arg(&download_url)
+        .output()
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to spawn ffprobe: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        tracing::error!("ffprobe get_keyframes failed: {}", stderr);
+        return Err(AppError::Internal(format!("ffprobe failed: {}", stderr)));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut keyframes: Vec<f64> = stdout
+        .lines()
+        .filter_map(|l| l.trim().parse::<f64>().ok())
+        .collect();
+
+    if keyframes.is_empty() || keyframes.first() != Some(&0.0) {
+        keyframes.insert(0, 0.0);
+    }
+    keyframes.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    keyframes.dedup();
+
+    if let Ok(json_str) = serde_json::to_string(&keyframes) {
+        let _ = tokio::fs::write(&cache_file, json_str).await;
+    }
+
+    Ok(axum::Json(keyframes))
+}
+
 async fn get_temp_dir() -> String {
-    let candidates = ["/data/temp", "data/temp", "/tmp/errant_fox_temp"];
+    if let Ok(dir) = std::env::var("TEMP_DIR") {
+        if tokio::fs::create_dir_all(&dir).await.is_ok() {
+            return dir;
+        }
+    }
+    let candidates = ["data/temp", "/data/temp", "/tmp/errant_fox_temp"];
     for candidate in candidates {
         if tokio::fs::create_dir_all(candidate).await.is_ok() {
             return candidate.to_string();
@@ -2376,8 +2623,7 @@ async fn run_trim_task(state: AppState, video_id: String, payload: TrimVideoPayl
     let temp_input = format!("{}/input_{}.mp4", temp_dir, video_id);
     let temp_output = format!("{}/trimmed_{}.mp4", temp_dir, video_id);
     
-    // Step 1: Download the original video via reqwest (works reliably with Seafile HTTPS)
-    // Stream to disk to avoid loading multi-GB files into RAM
+    // Step 1: Download the original video
     tracing::info!("Trim: downloading video {} from Seafile to {}...", video_id, temp_input);
     let response = reqwest::get(&download_url).await?;
     {
@@ -2392,10 +2638,11 @@ async fn run_trim_task(state: AppState, video_id: String, payload: TrimVideoPayl
     }
     tracing::info!("Trim: download complete, running ffmpeg...");
     
-    // Step 2: Run ffmpeg on local files
+    // Step 2: Run ffmpeg lossless stream copy (-c copy) on keyframe bounds
     let duration = payload.end_sec - payload.start_sec;
     
     let output = tokio::process::Command::new("ffmpeg")
+        .arg("-y")
         .arg("-ss")
         .arg(payload.start_sec.to_string())
         .arg("-i")
@@ -2404,9 +2651,10 @@ async fn run_trim_task(state: AppState, video_id: String, payload: TrimVideoPayl
         .arg(duration.to_string())
         .arg("-c")
         .arg("copy")
+        .arg("-avoid_negative_ts")
+        .arg("make_zero")
         .arg("-movflags")
         .arg("+faststart")
-        .arg("-y")
         .arg(&temp_output)
         .output()
         .await?;
@@ -2419,25 +2667,40 @@ async fn run_trim_task(state: AppState, video_id: String, payload: TrimVideoPayl
         let _ = tokio::fs::remove_file(&temp_output).await;
         return Err(anyhow::anyhow!("FFmpeg trim failed: {}", stderr));
     }
-    tracing::info!("Trim: ffmpeg done, uploading to Seafile...");
+    tracing::info!("Trim: ffmpeg stream copy done, uploading to Seafile...");
 
     // Step 3: Upload trimmed file back to Seafile
     let file_bytes = tokio::fs::read(&temp_output).await?;
     state.seafile.upload_file(&seafile_path, file_bytes).await?;
     let _ = tokio::fs::remove_file(&temp_output).await;
+
+    // Invalidate stale caches for this trimmed video
+    let _ = tokio::fs::remove_file(format!("{}/keyframes_{}.json", temp_dir, video_id)).await;
+    let _ = tokio::fs::remove_file(state.transcode.target_path(&video_id)).await;
+
     tracing::info!("Trim: upload done, updating DB...");
 
-    let start_ms = (payload.start_sec * 1000.0) as i32;
+    let start_ms = (payload.start_sec * 1000.0).round() as i32;
+    let end_ms = (payload.end_sec * 1000.0).round() as i32;
+    let new_duration_ms = ((payload.end_sec - payload.start_sec) * 1000.0).round() as i32;
     
     tokio::task::spawn_blocking({
         let vid = video_id.clone();
         let db = db.clone();
-        let new_duration_ms = ((payload.end_sec - payload.start_sec) * 1000.0) as i32;
         move || -> Result<(), diesel::result::Error> {
-            use crate::db::schema::{bouts, comments};
+            use crate::db::schema::{bouts, comments, videos};
             use diesel::prelude::*;
             let mut conn = db.get().map_err(|_| diesel::result::Error::NotFound)?;
             
+            // Delete bouts that fall out of the kept range
+            diesel::delete(
+                bouts::table.filter(
+                    bouts::video_id.eq(&vid)
+                        .and(bouts::time_start_ms.lt(start_ms).or(bouts::time_end_ms.gt(end_ms)))
+                )
+            ).execute(&mut conn)?;
+
+            // Shift remaining bouts
             diesel::update(bouts::table.filter(bouts::video_id.eq(&vid)))
                 .set((
                     bouts::time_start_ms.eq(bouts::time_start_ms - start_ms),
@@ -2445,55 +2708,53 @@ async fn run_trim_task(state: AppState, video_id: String, payload: TrimVideoPayl
                 ))
                 .execute(&mut conn)?;
 
-            // Delete bouts that fall entirely into the cut or cross the boundaries
-            diesel::delete(
-                bouts::table.filter(
-                    bouts::video_id.eq(&vid)
-                        .and(bouts::time_start_ms.lt(0).or(bouts::time_end_ms.gt(new_duration_ms)))
-                )
-            ).execute(&mut conn)?;
-
-            diesel::update(comments::table.filter(comments::video_id.eq(&vid)))
-                .set(comments::timestamp_ms.eq(comments::timestamp_ms - start_ms))
-                .execute(&mut conn)?;
-
             // Delete comments that fall out of bounds
             diesel::delete(
                 comments::table.filter(
                     comments::video_id.eq(&vid)
-                        .and(comments::timestamp_ms.lt(0).or(comments::timestamp_ms.gt(new_duration_ms)))
+                        .and(comments::timestamp_ms.lt(start_ms).or(comments::timestamp_ms.gt(end_ms)))
                 )
             ).execute(&mut conn)?;
+
+            // Shift remaining comments
+            diesel::update(comments::table.filter(comments::video_id.eq(&vid)))
+                .set(comments::timestamp_ms.eq(comments::timestamp_ms - start_ms))
+                .execute(&mut conn)?;
+
+            // Update video duration
+            diesel::update(videos::table.filter(videos::id.eq(&vid)))
+                .set(videos::duration_ms.eq(Some(new_duration_ms)))
+                .execute(&mut conn)?;
 
             Ok(())
         }
     })
     .await??;
 
-    // 4. Update transcript JSON timestamps instead of deleting it
+    // 4. Update transcript JSON timestamps and words
     let json_path = format!("{}/{}.json", state.transcripts_dir, video_id);
+    let mut has_transcript = false;
     if let Ok(raw_json) = tokio::fs::read_to_string(&json_path).await {
         if let Ok(mut parsed) = serde_json::from_str::<serde_json::Value>(&raw_json) {
             let start_sec = payload.start_sec;
-            let new_duration_sec = payload.end_sec - payload.start_sec;
-            let start_ms = (start_sec * 1000.0) as i64;
-            let new_duration_ms = (new_duration_sec * 1000.0) as i64;
+            let end_sec = payload.end_sec;
+            let start_ms = (start_sec * 1000.0).round() as i64;
+            let end_ms = (end_sec * 1000.0).round() as i64;
 
             if let Some(exchanges) = parsed.get_mut("exchanges").and_then(|v| v.as_array_mut()) {
                 let mut updated_exchanges = Vec::new();
                 for ex in exchanges.iter_mut() {
                     let cur_start_ms = ex.get("start_ms").and_then(|v| v.as_i64())
-                        .or_else(|| ex.get("start_time_sec").and_then(|v| v.as_f64()).map(|s| (s * 1000.0) as i64))
+                        .or_else(|| ex.get("start_time_sec").and_then(|v| v.as_f64()).map(|s| (s * 1000.0).round() as i64))
                         .unwrap_or(0);
                     let cur_end_ms = ex.get("end_ms").and_then(|v| v.as_i64())
-                        .or_else(|| ex.get("end_time_sec").and_then(|v| v.as_f64()).map(|s| (s * 1000.0) as i64))
+                        .or_else(|| ex.get("end_time_sec").and_then(|v| v.as_f64()).map(|s| (s * 1000.0).round() as i64))
                         .unwrap_or(0);
 
-                    let new_start_ms = cur_start_ms - start_ms;
-                    let new_end_ms = cur_end_ms - start_ms;
-
-                    // Keep only if exchange is inside trimmed range
-                    if new_end_ms > 0 && new_start_ms < new_duration_ms {
+                    // Keep only if exchange is within kept range
+                    if cur_start_ms >= start_ms && cur_end_ms <= end_ms {
+                        let new_start_ms = cur_start_ms - start_ms;
+                        let new_end_ms = cur_end_ms - start_ms;
                         if let Some(obj) = ex.as_object_mut() {
                             obj.insert("start_ms".to_string(), serde_json::json!(new_start_ms));
                             obj.insert("end_ms".to_string(), serde_json::json!(new_end_ms));
@@ -2509,17 +2770,62 @@ async fn run_trim_task(state: AppState, video_id: String, payload: TrimVideoPayl
                 parsed["exchanges"] = serde_json::json!(updated_exchanges);
             }
 
+            // Also shift and filter words if present
+            for words_key in &["words", "allWords"] {
+                if let Some(words) = parsed.get_mut(*words_key).and_then(|v| v.as_array_mut()) {
+                    let mut updated_words = Vec::new();
+                    for w in words.iter_mut() {
+                        let w_start_sec = w.get("start").and_then(|v| v.as_f64())
+                            .or_else(|| w.get("start_time_sec").and_then(|v| v.as_f64()))
+                            .or_else(|| w.get("start_ms").and_then(|v| v.as_f64()).map(|m| m / 1000.0));
+                        let w_end_sec = w.get("end").and_then(|v| v.as_f64())
+                            .or_else(|| w.get("end_time_sec").and_then(|v| v.as_f64()))
+                            .or_else(|| w.get("end_ms").and_then(|v| v.as_f64()).map(|m| m / 1000.0));
+
+                        if let (Some(w_start), Some(w_end)) = (w_start_sec, w_end_sec) {
+                            if w_start >= start_sec && w_end <= end_sec {
+                                if let Some(obj) = w.as_object_mut() {
+                                    let new_w_start = (w_start - start_sec).max(0.0);
+                                    let new_w_end = (w_end - start_sec).max(0.0);
+                                    if obj.contains_key("start") {
+                                        obj.insert("start".to_string(), serde_json::json!(new_w_start));
+                                    }
+                                    if obj.contains_key("end") {
+                                        obj.insert("end".to_string(), serde_json::json!(new_w_end));
+                                    }
+                                    if obj.contains_key("start_time_sec") {
+                                        obj.insert("start_time_sec".to_string(), serde_json::json!(new_w_start));
+                                    }
+                                    if obj.contains_key("end_time_sec") {
+                                        obj.insert("end_time_sec".to_string(), serde_json::json!(new_w_end));
+                                    }
+                                    if obj.contains_key("start_ms") {
+                                        obj.insert("start_ms".to_string(), serde_json::json!((new_w_start * 1000.0).round() as i64));
+                                    }
+                                    if obj.contains_key("end_ms") {
+                                        obj.insert("end_ms".to_string(), serde_json::json!((new_w_end * 1000.0).round() as i64));
+                                    }
+                                }
+                                updated_words.push(w.clone());
+                            }
+                        }
+                    }
+                    parsed[*words_key] = serde_json::json!(updated_words);
+                }
+            }
+
             if let Ok(updated_json) = serde_json::to_string_pretty(&parsed) {
                 let _ = tokio::fs::write(&json_path, &updated_json).await;
+                has_transcript = true;
             }
         }
     }
 
     // 5. Recalculate is_ai_labeled based on remaining AI bouts
-    tokio::task::spawn_blocking({
+    let is_ai = tokio::task::spawn_blocking({
         let vid = video_id.clone();
         let db = db.clone();
-        move || -> Result<(), diesel::result::Error> {
+        move || -> Result<bool, diesel::result::Error> {
             use crate::db::schema::{bouts, videos};
             use diesel::prelude::*;
             let mut conn = db.get().map_err(|_| diesel::result::Error::NotFound)?;
@@ -2533,9 +2839,35 @@ async fn run_trim_task(state: AppState, video_id: String, payload: TrimVideoPayl
             diesel::update(videos::table.filter(videos::id.eq(&vid)))
                 .set(videos::is_ai_labeled.eq(is_ai))
                 .execute(&mut conn)?;
-            Ok(())
+            Ok(is_ai)
         }
-    }).await.unwrap_or(Ok(())).unwrap_or(());
+    }).await.unwrap_or(Ok(false)).unwrap_or(false);
+
+    // 6. Regenerate preview thumbnail for the new start of video
+    if let Err(e) = crate::services::previews::generate_previews(
+        &video_id,
+        &state.seafile,
+        &seafile_path,
+        std::path::Path::new(&state.previews_dir),
+        &state.db,
+        state.server_port,
+    ).await {
+        tracing::error!("Failed to regenerate preview for trimmed video {}: {:?}", video_id, e);
+    } else {
+        let _ = state.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoPreview {
+            video_id: video_id.clone(),
+            preview_url: format!("/api/videos/{}/previews/0", video_id),
+        });
+    }
+
+    // Send AI labeled status update
+    let _ = state.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoAiLabeled {
+        video_id: video_id.clone(),
+        is_ai_labeled: is_ai,
+        is_analyzing: false,
+        is_queued: false,
+        has_transcript: Some(has_transcript),
+    });
 
     Ok(())
 }
@@ -2552,8 +2884,8 @@ pub async fn get_trim_impact(
     
     let db = state.db.clone();
     
-    let start_ms = (payload.start_sec * 1000.0) as i32;
-    let end_ms = (payload.end_sec * 1000.0) as i32;
+    let start_ms = (payload.start_sec * 1000.0).round() as i32;
+    let end_ms = (payload.end_sec * 1000.0).round() as i32;
     
     let impact = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{bouts, comments};
@@ -2583,3 +2915,381 @@ pub async fn get_trim_impact(
         "deleted_comments": impact.1
     })))
 }
+
+// ── Adaptive Video Optimization ────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct OptimizationCandidatesQuery {
+    pub older_than_days: Option<i64>,
+}
+
+#[derive(Deserialize)]
+pub struct BatchOptimizePayload {
+    pub video_ids: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct OptimizationCandidateDto {
+    pub id: String,
+    pub date: String,
+    pub seafile_path: String,
+    pub duration_ms: Option<i32>,
+    pub bouts_count: usize,
+    pub fighter_a_name: Option<String>,
+    pub fighter_b_name: Option<String>,
+}
+
+pub async fn get_optimization_candidates(
+    State(state): State<AppState>,
+    crate::middleware::auth::CurrentUser(user): crate::middleware::auth::CurrentUser,
+    Query(params): Query<OptimizationCandidatesQuery>,
+) -> Result<impl axum::response::IntoResponse, AppError> {
+    if !user.is_admin {
+        return Err(AppError::Forbidden);
+    }
+
+    let db = state.db.clone();
+    let candidates = tokio::task::spawn_blocking(move || -> Result<Vec<OptimizationCandidateDto>, diesel::result::Error> {
+        use crate::db::schema::{bouts, users, videos};
+        use diesel::prelude::*;
+        let mut conn = db.get().map_err(|_| diesel::result::Error::NotFound)?;
+
+        let all_videos: Vec<Video> = videos::table
+            .filter(videos::is_optimized.eq(false))
+            .filter(videos::is_optimizing.eq(false))
+            .order(videos::date.desc())
+            .load(&mut conn)?;
+
+        let all_bouts: Vec<crate::db::models::Bout> = bouts::table.load(&mut conn)?;
+        let mut bouts_by_video: HashMap<String, Vec<crate::db::models::Bout>> = HashMap::new();
+        for b in all_bouts {
+            bouts_by_video.entry(b.video_id.clone()).or_default().push(b);
+        }
+
+        let all_users: Vec<User> = users::table.load(&mut conn)?;
+        let users_by_id: HashMap<String, User> = all_users.into_iter().map(|u| (u.id.clone(), u)).collect();
+
+        let today = chrono::Utc::now().naive_utc().date();
+        let cutoff_date = params.older_than_days.map(|d| today - chrono::Duration::days(d));
+
+        let mut result = Vec::new();
+        for v in all_videos {
+            if let Some(cutoff) = cutoff_date {
+                if v.date > cutoff {
+                    continue;
+                }
+            }
+
+            let video_bouts = bouts_by_video.get(&v.id).map(|b| b.as_slice()).unwrap_or(&[]);
+            // Eligible: at least 1 bout and ALL bouts are human (is_ai == false)
+            let is_eligible = !video_bouts.is_empty() && video_bouts.iter().all(|b| !b.is_ai);
+            if !is_eligible {
+                continue;
+            }
+
+            let fighter_a_name = v.fighter_a_id.as_ref().and_then(|id| users_by_id.get(id)).map(|u| u.display_name.clone());
+            let fighter_b_name = v.fighter_b_id.as_ref().and_then(|id| users_by_id.get(id)).map(|u| u.display_name.clone());
+
+            result.push(OptimizationCandidateDto {
+                id: v.id,
+                date: v.date.format("%Y-%m-%d").to_string(),
+                seafile_path: v.seafile_path,
+                duration_ms: v.duration_ms,
+                bouts_count: video_bouts.len(),
+                fighter_a_name,
+                fighter_b_name,
+            });
+        }
+
+        Ok(result)
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))?
+    .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    Ok(axum::Json(candidates))
+}
+
+pub async fn optimize_video(
+    State(state): State<AppState>,
+    crate::middleware::auth::CurrentUser(user): crate::middleware::auth::CurrentUser,
+    Path(video_id): Path<String>,
+) -> Result<impl axum::response::IntoResponse, AppError> {
+    if !user.is_admin {
+        return Err(AppError::Forbidden);
+    }
+
+    let db = state.db.clone();
+    let vid = video_id.clone();
+
+    // Verify video and eligibility
+    let video = tokio::task::spawn_blocking({
+        let db = db.clone();
+        let vid = vid.clone();
+        move || -> Result<Video, AppError> {
+            use crate::db::schema::{bouts, videos};
+            use diesel::prelude::*;
+            let mut conn = db.get().map_err(|_| AppError::Internal("DB connection error".into()))?;
+
+            let v = videos::table
+                .filter(videos::id.eq(&vid))
+                .first::<Video>(&mut conn)
+                .map_err(|_| AppError::NotFound)?;
+
+            if v.is_optimizing {
+                return Err(AppError::BadRequest("Видео уже находится в процессе оптимизации".into()));
+            }
+
+            let video_bouts: Vec<crate::db::models::Bout> = bouts::table
+                .filter(bouts::video_id.eq(&vid))
+                .load(&mut conn)
+                .map_err(|_| AppError::Internal("Failed to load bouts".into()))?;
+
+            let is_eligible = !video_bouts.is_empty() && video_bouts.iter().all(|b| !b.is_ai);
+            if !is_eligible {
+                return Err(AppError::BadRequest("Видео не полностью размечено человеком или не имеет сходов".into()));
+            }
+
+            // Set is_optimizing = true
+            diesel::update(videos::table.filter(videos::id.eq(&vid)))
+                .set(videos::is_optimizing.eq(true))
+                .execute(&mut conn)
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+
+            Ok(v)
+        }
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    // Broadcast WS event that optimization has started
+    let _ = state.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoOptimized {
+        video_id: video_id.clone(),
+        is_optimized: video.is_optimized,
+        is_optimizing: true,
+    });
+
+    // Spawn background task
+    let state_clone = state.clone();
+    let vid_task = video_id.clone();
+    tokio::spawn(async move {
+        if let Err(e) = run_optimize_task(state_clone, vid_task.clone()).await {
+            tracing::error!("Optimization task failed for video {}: {:?}", vid_task, e);
+        }
+    });
+
+    Ok(axum::response::Json(serde_json::json!({
+        "status": "optimizing",
+        "video_id": video_id
+    })))
+}
+
+pub async fn batch_optimize_videos(
+    State(state): State<AppState>,
+    crate::middleware::auth::CurrentUser(user): crate::middleware::auth::CurrentUser,
+    axum::Json(payload): axum::Json<BatchOptimizePayload>,
+) -> Result<impl axum::response::IntoResponse, AppError> {
+    if !user.is_admin {
+        return Err(AppError::Forbidden);
+    }
+
+    let video_ids = payload.video_ids;
+    if video_ids.is_empty() {
+        return Ok(axum::response::Json(serde_json::json!({ "queued_count": 0 })));
+    }
+
+    let state_clone = state.clone();
+    tokio::spawn(async move {
+        for vid in video_ids {
+            // Set is_optimizing in DB
+            let db = state_clone.db.clone();
+            let vid_c = vid.clone();
+            let should_run = tokio::task::spawn_blocking(move || -> bool {
+                use crate::db::schema::videos;
+                use diesel::prelude::*;
+                if let Ok(mut conn) = db.get() {
+                    let v = videos::table.filter(videos::id.eq(&vid_c)).first::<Video>(&mut conn);
+                    if let Ok(v) = v {
+                        if !v.is_optimizing && !v.is_optimized {
+                            let _ = diesel::update(videos::table.filter(videos::id.eq(&vid_c)))
+                                .set(videos::is_optimizing.eq(true))
+                                .execute(&mut conn);
+                            return true;
+                        }
+                    }
+                }
+                false
+            }).await.unwrap_or(false);
+
+            if should_run {
+                let _ = state_clone.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoOptimized {
+                    video_id: vid.clone(),
+                    is_optimized: false,
+                    is_optimizing: true,
+                });
+
+                if let Err(e) = run_optimize_task(state_clone.clone(), vid.clone()).await {
+                    tracing::error!("Batch optimization failed for {}: {:?}", vid, e);
+                }
+            }
+        }
+    });
+
+    Ok(axum::response::Json(serde_json::json!({ "status": "queued" })))
+}
+
+async fn run_optimize_task(state: AppState, video_id: String) -> Result<(), anyhow::Error> {
+    let db = state.db.clone();
+
+    // 1. Get video
+    let video = tokio::task::spawn_blocking({
+        let vid = video_id.clone();
+        let db = db.clone();
+        move || {
+            use crate::db::schema::videos;
+            use diesel::prelude::*;
+            let mut conn = db.get().map_err(|_| diesel::result::Error::NotFound)?;
+            videos::table
+                .filter(videos::id.eq(&vid))
+                .first::<Video>(&mut conn)
+        }
+    })
+    .await??;
+
+    let seafile_path = video.seafile_path.clone();
+    let temp_dir = get_temp_dir().await;
+    let temp_input = format!("{}/opt_in_{}.mp4", temp_dir, video_id);
+    let temp_output = format!("{}/opt_out_{}.mp4", temp_dir, video_id);
+
+    // 2. Download original video
+    tracing::info!("Optimize: downloading video {} from Seafile to {}...", video_id, temp_input);
+    let download_url = state.seafile.get_download_url(&seafile_path).await?;
+    let response = reqwest::get(&download_url).await?;
+    {
+        use tokio::io::AsyncWriteExt;
+        let mut file = tokio::fs::File::create(&temp_input).await?;
+        let mut stream = response.bytes_stream();
+        use futures_util::StreamExt;
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk?;
+            file.write_all(&chunk).await?;
+        }
+    }
+
+    // 3. Find python binary and script
+    let script_candidates = [
+        "execution/compress_adaptive_vfr.py",
+        "../execution/compress_adaptive_vfr.py",
+        "/app/execution/compress_adaptive_vfr.py",
+    ];
+    let mut script_path = "execution/compress_adaptive_vfr.py".to_string();
+    for c in script_candidates {
+        if std::path::Path::new(c).exists() {
+            script_path = c.to_string();
+            break;
+        }
+    }
+
+    let python_bin = std::env::var("PYTHON_BIN").unwrap_or_else(|_| {
+        if std::path::Path::new("venv/Scripts/python.exe").exists() {
+            "venv/Scripts/python.exe".to_string()
+        } else if std::path::Path::new("venv/bin/python").exists() {
+            "venv/bin/python".to_string()
+        } else {
+            "python".to_string()
+        }
+    });
+
+    tracing::info!("Optimize: running {} {} on {}...", python_bin, script_path, video_id);
+
+    // Try GPU hevc_nvenc first, fallback to libx265 if needed
+    let output = tokio::process::Command::new(&python_bin)
+        .arg(&script_path)
+        .arg(&temp_input)
+        .arg("--video-id")
+        .arg(&video_id)
+        .arg("-o")
+        .arg(&temp_output)
+        .arg("--encoder")
+        .arg("hevc_nvenc")
+        .output()
+        .await;
+
+    let success = match output {
+        Ok(ref o) if o.status.success() => true,
+        _ => {
+            tracing::warn!("NVENC encoding failed or unavailable, retrying with libx265 CPU...");
+            let fallback_out = tokio::process::Command::new(&python_bin)
+                .arg(&script_path)
+                .arg(&temp_input)
+                .arg("--video-id")
+                .arg(&video_id)
+                .arg("-o")
+                .arg(&temp_output)
+                .arg("--encoder")
+                .arg("libx265")
+                .output()
+                .await;
+            matches!(fallback_out, Ok(ref o) if o.status.success())
+        }
+    };
+
+    let _ = tokio::fs::remove_file(&temp_input).await;
+
+    if !success || !std::path::Path::new(&temp_output).exists() {
+        let _ = tokio::fs::remove_file(&temp_output).await;
+        // Reset is_optimizing in DB
+        let vid_clone = video_id.clone();
+        let db_clone = db.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            use crate::db::schema::videos;
+            use diesel::prelude::*;
+            if let Ok(mut conn) = db_clone.get() {
+                let _ = diesel::update(videos::table.filter(videos::id.eq(&vid_clone)))
+                    .set(videos::is_optimizing.eq(false))
+                    .execute(&mut conn);
+            }
+        }).await;
+
+        let _ = state.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoOptimized {
+            video_id: video_id.clone(),
+            is_optimized: false,
+            is_optimizing: false,
+        });
+
+        return Err(anyhow::anyhow!("Adaptive VFR compression failed for {}", video_id));
+    }
+
+    // 4. Upload compressed file back to Seafile
+    tracing::info!("Optimize: compression complete, uploading back to Seafile: {}...", seafile_path);
+    let file_bytes = tokio::fs::read(&temp_output).await?;
+    state.seafile.upload_file(&seafile_path, file_bytes).await?;
+    let _ = tokio::fs::remove_file(&temp_output).await;
+
+    // 5. Update DB: is_optimized = true, is_optimizing = false
+    let vid_clone = video_id.clone();
+    let db_clone = db.clone();
+    tokio::task::spawn_blocking(move || {
+        use crate::db::schema::videos;
+        use diesel::prelude::*;
+        if let Ok(mut conn) = db_clone.get() {
+            let _ = diesel::update(videos::table.filter(videos::id.eq(&vid_clone)))
+                .set((
+                    videos::is_optimized.eq(true),
+                    videos::is_optimizing.eq(false),
+                ))
+                .execute(&mut conn);
+        }
+    }).await?;
+
+    // 6. Broadcast WS update
+    let _ = state.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoOptimized {
+        video_id: video_id.clone(),
+        is_optimized: true,
+        is_optimizing: false,
+    });
+
+    tracing::info!("Optimize: video {} successfully optimized and updated!", video_id);
+    Ok(())
+}
+

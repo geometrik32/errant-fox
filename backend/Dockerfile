@@ -16,7 +16,7 @@ RUN touch src/main.rs && cargo build --release
 # Stage 2: Runtime
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates ffmpeg
+RUN apk add --no-cache ca-certificates ffmpeg python3 libva-intel-driver intel-media-driver
 
 WORKDIR /app
 

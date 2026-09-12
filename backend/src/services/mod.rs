@@ -5,4 +5,5 @@ pub mod sync;
 pub mod ws;
 pub mod vk;
 pub mod ai_queue;
+pub mod transcode;
 

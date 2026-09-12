@@ -69,6 +69,9 @@ export interface Video {
   is_ai_labeled: boolean;
   is_analyzing?: boolean;
   is_queued?: boolean;
+  is_optimized?: boolean;
+  is_optimizing?: boolean;
+  is_eligible_for_optimization?: boolean;
   has_transcript?: boolean;
   has_human_bouts?: boolean;
   preview_url: string;
@@ -117,6 +120,9 @@ export interface VideoFull {
   is_ai_labeled: boolean;
   is_analyzing?: boolean;
   is_queued?: boolean;
+  is_optimized?: boolean;
+  is_optimizing?: boolean;
+  is_eligible_for_optimization?: boolean;
   has_transcript?: boolean;
   has_human_bouts?: boolean;
   bouts: Bout[];
@@ -135,7 +141,15 @@ export interface VideoShort {
   preview_url: string;
 }
 
-
+export interface OptimizationCandidate {
+  id: string;
+  date: string;
+  seafile_path: string;
+  duration_ms: number | null;
+  bouts_count: number;
+  fighter_a_name: string | null;
+  fighter_b_name: string | null;
+}
 
 export interface SearchResult {
   comment_id: number;
