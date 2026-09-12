@@ -16,6 +16,7 @@
     type FightKey = string;
     const fights = new Map<FightKey, { oppId: string; myScore: number; oppScore: number }>();
     for (const b of bouts) {
+      if (b.is_unmarked || b.is_ai) continue;
       const key: FightKey = `${b.opponent_id}::${b.video_id}`;
       const f = fights.get(key);
       if (f) { f.myScore += b.my_score; f.oppScore += b.opponent_score; }

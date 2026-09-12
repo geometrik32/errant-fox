@@ -44,6 +44,7 @@
   function computeVideoResults(bouts: FighterBout[]) {
     const videoMap = new Map<string, { video_id: string; date: string; week: string; opponent_name: string; my: number; opp: number }>();
     for (const b of bouts) {
+      if (b.is_unmarked || b.is_ai) continue;
       const v = videoMap.get(b.video_id);
       if (v) { v.my += b.my_score; v.opp += b.opponent_score; }
       else videoMap.set(b.video_id, { video_id: b.video_id, date: b.video_date, week: getISOWeek(b.video_date), opponent_name: b.opponent_name, my: b.my_score, opp: b.opponent_score });

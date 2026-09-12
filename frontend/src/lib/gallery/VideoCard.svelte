@@ -31,8 +31,8 @@
   let cardState = $derived((): 0 | 1 | 2 | 3 => {
     const hasFighters = !!video.fighter_a && !!video.fighter_b;
     if (!hasFighters || !video.is_tagged) return 0;
-    if (video.has_human_bouts) return 2;
     if (video.is_ai_labeled) return 3;
+    if (video.has_human_bouts) return 2;
     const scoreA = video.total_score_a;
     const scoreB = video.total_score_b;
     const hasScores = scoreA !== undefined && scoreB !== undefined;
