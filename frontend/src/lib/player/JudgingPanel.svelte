@@ -434,7 +434,7 @@
             onclick={() => selectFighter('a', 'guest')}
           >
             <span class="fighter-opt-avatar" style:background="#475569" style:border-color="#475569">
-              <img src="/api/users/guest/avatar" alt="Вне клуба" onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              <img src="/api/users/guest/avatar" alt="Вне клуба" onerror={(e) => { const img = e.target as HTMLImageElement; if (!img.src.endsWith('/guest.jpg')) { img.src = '/guest.jpg'; } else { img.style.display = 'none'; } }} />
               <svg class="fighter-opt-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5" />
                 <path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
@@ -529,7 +529,7 @@
             onclick={() => selectFighter('b', 'guest')}
           >
             <span class="fighter-opt-avatar" style:background="#475569" style:border-color="#475569">
-              <img src="/api/users/guest/avatar" alt="Вне клуба" onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              <img src="/api/users/guest/avatar" alt="Вне клуба" onerror={(e) => { const img = e.target as HTMLImageElement; if (!img.src.endsWith('/guest.jpg')) { img.src = '/guest.jpg'; } else { img.style.display = 'none'; } }} />
               <svg class="fighter-opt-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5" />
                 <path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
