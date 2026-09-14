@@ -5,6 +5,7 @@
   import Gallery from './routes/Gallery.svelte';
   import Stats from './routes/Stats.svelte';
   import Player from './routes/Player.svelte';
+  import ToastContainer from './lib/ui/ToastContainer.svelte';
   import { loginWithVk } from './lib/api/auth';
 
   let hash = $state(typeof window !== 'undefined' ? (window.location.hash || '#/gallery') : '#/gallery');
@@ -183,6 +184,8 @@
     </main>
   </div>
 {/if}
+
+<ToastContainer />
 
 <style>
   .app {

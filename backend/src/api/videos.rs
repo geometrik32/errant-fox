@@ -1360,66 +1360,6 @@ pub async fn download_shared_video(
 }
 
 
-pub async fn regenerate_preview(
-    State(state): State<AppState>,
-    _user: CurrentUser,
-    Path(video_id): Path<String>,
-) -> Result<Json<serde_json::Value>, AppError> {
-    if !_user.0.is_admin {
-        return Err(AppError::Forbidden);
-    }
-    let db = state.db.clone();
-    let vid_clone = video_id.clone();
-
-    let seafile_path = tokio::task::spawn_blocking(move || {
-        use crate::db::schema::videos;
-        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
-        
-        let video = videos::table
-            .filter(videos::id.eq(&vid_clone))
-            .first::<Video>(&mut conn)
-            .optional()
-            .map_err(|e| AppError::Internal(e.to_string()))?
-            .ok_or(AppError::NotFound)?;
-            
-        diesel::update(videos::table.filter(videos::id.eq(&vid_clone)))
-            .set(videos::preview_count.eq(0))
-            .execute(&mut conn)
-            .map_err(|e| AppError::Internal(e.to_string()))?;
-            
-        Ok::<String, AppError>(video.seafile_path)
-    })
-    .await
-    .map_err(|e| AppError::Internal(e.to_string()))??;
-
-    let seafile = state.seafile.clone();
-    let previews_dir = state.previews_dir.clone();
-    let db = state.db.clone();
-    let server_port = state.server_port;
-
-    let ws_hub = state.ws_hub.clone();
-    tokio::spawn(async move {
-        if let Err(e) = crate::services::previews::generate_previews(
-            &video_id,
-            &seafile,
-            &seafile_path,
-            std::path::Path::new(&previews_dir),
-            &db,
-            server_port,
-        )
-        .await
-        {
-            tracing::error!("generate_previews failed for {video_id}: {e:?}");
-        } else {
-            let _ = ws_hub.send(crate::services::ws::WsEvent::UpdateVideoPreview {
-                video_id: video_id.clone(),
-                preview_url: format!("/api/videos/{}/previews/0", video_id),
-            });
-        }
-    });
-
-    Ok(Json(serde_json::json!({ "status": "regenerating" })))
-}
 
 // ── Admin Database Sync ───────────────────────────────────────────────────────
 
@@ -2938,6 +2878,11 @@ pub struct BatchOptimizePayload {
     pub video_ids: Vec<String>,
 }
 
+#[derive(Deserialize)]
+pub struct BatchTranscodePayload {
+    pub video_ids: Vec<String>,
+}
+
 #[derive(Serialize)]
 pub struct OptimizationCandidateDto {
     pub id: String,
@@ -3146,6 +3091,54 @@ pub async fn batch_optimize_videos(
     });
 
     Ok(axum::response::Json(serde_json::json!({ "status": "queued" })))
+}
+
+pub async fn batch_transcode_videos(
+    State(state): State<AppState>,
+    crate::middleware::auth::CurrentUser(user): crate::middleware::auth::CurrentUser,
+    axum::Json(payload): axum::Json<BatchTranscodePayload>,
+) -> Result<impl axum::response::IntoResponse, AppError> {
+    if !user.is_admin {
+        return Err(AppError::Forbidden);
+    }
+
+    let video_ids = payload.video_ids;
+    if video_ids.is_empty() {
+        return Ok(axum::response::Json(serde_json::json!({
+            "status": "ok",
+            "queued": 0,
+            "already_ready": 0,
+        })));
+    }
+
+    let mut queued = 0;
+    let mut already_ready = 0;
+    let transcode = state.transcode.clone();
+    let mut to_start = Vec::new();
+
+    for vid in &video_ids {
+        let (ready, in_progress) = transcode.check_status(vid).await;
+        if ready {
+            already_ready += 1;
+        } else {
+            queued += 1;
+            if !in_progress {
+                to_start.push(vid.clone());
+            }
+        }
+    }
+
+    tokio::spawn(async move {
+        for vid in to_start {
+            let _ = transcode.start_or_subscribe(&vid).await;
+        }
+    });
+
+    Ok(axum::response::Json(serde_json::json!({
+        "status": "queued",
+        "queued": queued,
+        "already_ready": already_ready,
+    })))
 }
 
 async fn run_optimize_task(state: AppState, video_id: String) -> Result<(), anyhow::Error> {
