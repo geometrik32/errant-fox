@@ -229,6 +229,16 @@
         <span class="tournament-text">{video.tournament_name || 'Турнир'}</span>
       </div>
     {/if}
+    {#if video.has_h264}
+      <div class="h264-badge" title="Сконвертировано в H.264 (кэш на 7 дней)">
+        <span>H.264</span>
+      </div>
+    {:else if video.is_transcoding}
+      <div class="h264-badge transcoding" title="Выполняется конвертация в H.264...">
+        <span class="h264-badge-spinner"></span>
+        <span>H.264</span>
+      </div>
+    {/if}
     {#if selected}
       <div class="selected-center-overlay">
         <div class="selected-circle-badge">
@@ -423,36 +433,58 @@
         </button>
       {/if}
 
-      <button 
-        class="menu-item" 
-        onclick={async (e) => { 
-          e.stopPropagation(); 
-          closeMenu(); 
-          try { 
-            const res = await batchTranscodeVideos([video.id]); 
-            if (res.already_ready > 0) {
-              showToast('Версия H.264 уже готова в кэше', 'info');
-            } else {
-              showToast('Конвертация в H.264 запущена на сервере', 'success');
-            }
-          } catch (err) { 
-            showToast(err instanceof Error ? err.message : 'Ошибка запуска конвертации', 'error'); 
-          } 
-        }}
-        title="Сконвертировать видео в H.264 для быстрой веб-совместимости"
-      >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
-          <line x1="7" y1="2" x2="7" y2="22"/>
-          <line x1="17" y1="2" x2="17" y2="22"/>
-          <line x1="2" y1="12" x2="22" y2="12"/>
-          <line x1="2" y1="7" x2="7" y2="7"/>
-          <line x1="2" y1="17" x2="7" y2="17"/>
-          <line x1="17" y1="17" x2="22" y2="17"/>
-          <line x1="17" y1="7" x2="22" y2="7"/>
-        </svg>
-        <span>Конвертировать в H.264</span>
-      </button>
+      {#if video.has_h264}
+        <button 
+          class="menu-item" 
+          disabled={true}
+          title="Версия H.264 уже готова в кэше (хранится 7 дней)"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          <span style="color: #60a5fa;">H.264 готов (в кэше 7 дн.)</span>
+        </button>
+      {:else if video.is_transcoding}
+        <button 
+          class="menu-item" 
+          disabled={true}
+          title="Конвертация в H.264 выполняется в данный момент"
+        >
+          <span class="h264-btn-spinner"></span>
+          <span>Конвертация H.264...</span>
+        </button>
+      {:else}
+        <button 
+          class="menu-item" 
+          onclick={async (e) => { 
+            e.stopPropagation(); 
+            closeMenu(); 
+            try { 
+              const res = await batchTranscodeVideos([video.id]); 
+              if (res.already_ready > 0) {
+                showToast('Версия H.264 уже готова в кэше', 'info');
+              } else {
+                showToast('Конвертация в H.264 запущена на сервере', 'success');
+              }
+            } catch (err) { 
+              showToast(err instanceof Error ? err.message : 'Ошибка запуска конвертации', 'error'); 
+            } 
+          }}
+          title="Сконвертировать видео в H.264 для быстрой веб-совместимости"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
+            <line x1="7" y1="2" x2="7" y2="22"/>
+            <line x1="17" y1="2" x2="17" y2="22"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+            <line x1="2" y1="7" x2="7" y2="7"/>
+            <line x1="2" y1="17" x2="7" y2="17"/>
+            <line x1="17" y1="17" x2="22" y2="17"/>
+            <line x1="17" y1="7" x2="22" y2="7"/>
+          </svg>
+          <span>Конвертировать в H.264</span>
+        </button>
+      {/if}
 
       <button 
         class="menu-item" 
@@ -729,6 +761,44 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* ── H.264 Badge ───────────────────────────────────── */
+  .h264-badge {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(59, 130, 246, 0.6);
+    border-radius: var(--radius-sm);
+    padding: 2px 7px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #60a5fa;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+    z-index: 5;
+    pointer-events: none;
+    letter-spacing: 0.03em;
+  }
+
+  .h264-badge.transcoding {
+    border-color: rgba(245, 158, 11, 0.6);
+    color: var(--accent-yellow);
+  }
+
+  .h264-badge-spinner,
+  .h264-btn-spinner {
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid rgba(255, 255, 255, 0.2);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    display: inline-block;
   }
 
   /* ── AI spinner ───────────────────────────────────── */

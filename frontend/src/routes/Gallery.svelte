@@ -193,6 +193,14 @@
             return v;
           });
           applyFilter();
+        } else if (msg.type === 'update_video_transcode') {
+          allVideos = allVideos.map(v => {
+            if (v.id === msg.video_id) {
+              return { ...v, has_h264: msg.has_h264, is_transcoding: msg.is_transcoding };
+            }
+            return v;
+          });
+          applyFilter();
         }
       } catch {
         // ignore malformed messages

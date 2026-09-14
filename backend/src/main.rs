@@ -90,6 +90,7 @@ async fn main() {
     let transcode_manager = services::transcode::TranscodeManager::new(
         std::path::PathBuf::from(&config.temp_dir),
         config.server_port,
+        ws_tx.clone(),
     );
 
     let guest_avatar_path = format!("{}/guest.jpg", config.avatars_dir);
