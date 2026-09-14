@@ -123,7 +123,7 @@
   function startEdit(f: Fighter) {
     editingId      = f.id;
     editName       = f.display_name;
-    editColor      = f.color ?? resolveColor(f.id, null);
+    editColor      = f.color ?? (f.id === 'guest' ? '#475569' : resolveColor(f.id, null));
     editVkId       = f.vk_id ?? '';
     editPassword   = '';
     editIsAdmin    = f.is_admin;
@@ -154,32 +154,37 @@
     editError = '';
     try {
       const data: { display_name?: string; password?: string; color?: string; is_admin?: boolean; vk_id?: string; role?: string } = {};
-      if (editName !== f.display_name) data.display_name = editName;
-      if (editPassword) data.password = editPassword;
-      if (editRole !== f.role) data.role = editRole;
+      const trimmedName = editName.trim();
+      if (trimmedName && trimmedName !== f.display_name) data.display_name = trimmedName;
 
-      // Save color/avatar/admin if user is fighter or retired
-      if (editRole === 'fighter' || editRole === 'retired') {
+      if (f.id === 'guest') {
+        // System guest profile: can edit display_name, color, and avatar only
         if (editColor !== (f.color ?? '')) data.color = editColor;
-        if (editIsAdmin !== f.is_admin) data.is_admin = editIsAdmin;
       } else {
-        // If changed to guest, strip admin rights and set fallback color
-        if (f.is_admin) data.is_admin = false;
-        data.color = '#9E9E9E';
+        if (editPassword) data.password = editPassword;
+        if (editRole !== f.role) data.role = editRole;
+
+        // Save color/avatar/admin if user is fighter or retired
+        if (editRole === 'fighter' || editRole === 'retired') {
+          if (editColor !== (f.color ?? '')) data.color = editColor;
+          if (editIsAdmin !== f.is_admin) data.is_admin = editIsAdmin;
+        } else {
+          // If changed to guest, strip admin rights and set fallback color
+          if (f.is_admin) data.is_admin = false;
+          data.color = '#9E9E9E';
+        }
+
+        if (editVkId !== (f.vk_id ?? '')) data.vk_id = editVkId;
       }
 
-      if (editVkId !== (f.vk_id ?? '')) data.vk_id = editVkId;
-
-      if (Object.keys(data).length > 0 || ((editRole === 'fighter' || editRole === 'retired') && editAvatarFile)) {
-        if (Object.keys(data).length > 0) {
-          await patchUser(f.id, data);
-        }
-        if ((editRole === 'fighter' || editRole === 'retired') && editAvatarFile) {
-          await uploadUserAvatar(f.id, editAvatarFile);
-        }
-        await loadUsers();
-        await refreshFightersStore();
+      if (Object.keys(data).length > 0) {
+        await patchUser(f.id, data);
       }
+      if (editAvatarFile && (editRole === 'fighter' || editRole === 'retired' || f.id === 'guest')) {
+        await uploadUserAvatar(f.id, editAvatarFile);
+      }
+      await loadUsers();
+      await refreshFightersStore();
       editingId = null;
     } catch (e) {
       editError = e instanceof Error ? e.message : 'Ошибка при сохранении';
@@ -356,14 +361,14 @@
             {#if editingId === f.id}
               <!-- Inline edit form (matches Profile design) -->
               <div class="edit-form-modern">
-                {#if editRole === 'fighter'}
-                  <!-- Left: Avatar pick (Fighters only) -->
+                {#if editRole === 'fighter' || f.id === 'guest'}
+                  <!-- Left: Avatar pick -->
                   <label class="avatar-wrap-modern avatar-wrap-edit" title="Загрузить аватар">
                     <div class="avatar-preview-modern avatar-preview-edit" style:background={editColor}>
                       {#if editAvatarPrev}
                         <img src={editAvatarPrev} alt="preview" />
                       {:else if f.avatar_url}
-                        <img src={f.avatar_url} alt={f.display_name} />
+                        <img src={f.avatar_url} alt={f.display_name} onerror={(e) => { const img = e.target as HTMLImageElement; if (f.id === 'guest' && !img.src.endsWith('/guest.jpg')) { img.src = '/guest.jpg'; } else { img.style.display = 'none'; } }} />
                       {:else}
                         <svg class="avatar-fallback-modern" width="20" height="20" viewBox="0 0 24 24" fill="none">
                           <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="1.5"/>
@@ -385,28 +390,8 @@
                     <input class="input-glass" type="text" bind:value={editName} placeholder="Имя" />
                   </div>
 
-                  <div class="row-fields">
-                    <div class="field flex-grow">
-                      <label class="label-sm">VK ID (при наличии)</label>
-                      <input class="input-glass" type="text" bind:value={editVkId} placeholder="Например, 12345678" />
-                    </div>
-                    <div class="field flex-grow">
-                      <label class="label-sm">Новый пароль</label>
-                      <input class="input-glass" type="password" bind:value={editPassword} placeholder="Оставьте пустым" autocomplete="new-password" />
-                    </div>
-                  </div>
-
-                  <div class="row-fields align-center">
-                    <div class="field flex-grow">
-                      <label class="label-sm">Роль</label>
-                      <select class="input-glass select-glass-inline-modern" bind:value={editRole}>
-                        <option value="fighter">Боец</option>
-                        <option value="guest">Гость</option>
-                        <option value="retired">На пенсии</option>
-                      </select>
-                    </div>
-
-                    {#if editRole === 'fighter' || editRole === 'retired'}
+                  {#if f.id === 'guest'}
+                    <div class="row-fields align-center">
                       <div class="field color-field">
                         <label class="label-sm">Цвет</label>
                         <div class="color-picker-wrapper">
@@ -414,13 +399,49 @@
                           <span class="color-preview-dot" style:background={editColor}></span>
                         </div>
                       </div>
+                      <div class="system-role-badge">
+                        <span class="label-sm">Роль</span>
+                        <span class="role-pill">Системный профиль (Гость)</span>
+                      </div>
+                    </div>
+                  {:else}
+                    <div class="row-fields">
+                      <div class="field flex-grow">
+                        <label class="label-sm">VK ID (при наличии)</label>
+                        <input class="input-glass" type="text" bind:value={editVkId} placeholder="Например, 12345678" />
+                      </div>
+                      <div class="field flex-grow">
+                        <label class="label-sm">Новый пароль</label>
+                        <input class="input-glass" type="password" bind:value={editPassword} placeholder="Оставьте пустым" autocomplete="new-password" />
+                      </div>
+                    </div>
 
-                      <label class="checkbox-row" style="margin-top: 18px; margin-left: auto;">
-                        <input type="checkbox" bind:checked={editIsAdmin} />
-                        <span>Администратор</span>
-                      </label>
-                    {/if}
-                  </div>
+                    <div class="row-fields align-center">
+                      <div class="field flex-grow">
+                        <label class="label-sm">Роль</label>
+                        <select class="input-glass select-glass-inline-modern" bind:value={editRole}>
+                          <option value="fighter">Боец</option>
+                          <option value="guest">Гость</option>
+                          <option value="retired">На пенсии</option>
+                        </select>
+                      </div>
+
+                      {#if editRole === 'fighter' || editRole === 'retired'}
+                        <div class="field color-field">
+                          <label class="label-sm">Цвет</label>
+                          <div class="color-picker-wrapper">
+                            <input type="color" class="color-input-modern" bind:value={editColor} />
+                            <span class="color-preview-dot" style:background={editColor}></span>
+                          </div>
+                        </div>
+
+                        <label class="checkbox-row" style="margin-top: 18px; margin-left: auto;">
+                          <input type="checkbox" bind:checked={editIsAdmin} />
+                          <span>Администратор</span>
+                        </label>
+                      {/if}
+                    </div>
+                  {/if}
 
                   {#if editError}
                     <p class="error">{editError}</p>
@@ -439,14 +460,14 @@
               <!-- Collapsed row -->
               <div class="collapsed-row-content">
                 <div class="user-info">
-                  {#if f.role === 'fighter' || f.role === 'retired'}
+                  {#if f.role === 'fighter' || f.role === 'retired' || f.id === 'guest'}
                     <div class="user-dot" style:background={resolveColor(f.id, f.color)}></div>
                     <div class="user-avatar-wrap">
                       <svg class="user-avatar-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="1.5"/>
                         <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
                       </svg>
-                      <img class="user-avatar-img" src={f.avatar_url} alt={f.display_name} onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      <img class="user-avatar-img" src={f.avatar_url} alt={f.display_name} onerror={(e) => { const img = e.target as HTMLImageElement; if (f.id === 'guest' && !img.src.endsWith('/guest.jpg')) { img.src = '/guest.jpg'; } else { img.style.display = 'none'; } }} />
                     </div>
                   {/if}
                   <div class="user-names">
@@ -457,7 +478,7 @@
                       {/if}
                     </span>
                     <span class="user-login">
-                      @{f.username}{f.is_admin ? ' · Администратор' : ''}{f.role === 'retired' ? ' · На пенсии' : ''}
+                      @{f.username}{f.id === 'guest' ? ' · Системный профиль' : (f.is_admin ? ' · Администратор' : '')}{f.role === 'retired' ? ' · На пенсии' : ''}
                     </span>
                   </div>
                 </div>
@@ -468,14 +489,16 @@
                       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                     </svg>
                   </button>
-                  <button class="btn-icon danger" onclick={() => promptDelete(f)} title="Удалить">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                      <polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                      <path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                      <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                      <path d="M9 6V4h6v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                    </svg>
-                  </button>
+                  {#if f.id !== 'guest'}
+                    <button class="btn-icon danger" onclick={() => promptDelete(f)} title="Удалить">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                        <polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        <path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        <path d="M9 6V4h6v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                      </svg>
+                    </button>
+                  {/if}
                 </div>
               </div>
             {/if}
@@ -774,6 +797,25 @@
 
   .color-picker-wrapper:hover .color-preview-dot {
     transform: scale(1.08);
+  }
+
+  .system-role-badge {
+    display: flex;
+    flex-direction: column;
+    margin-left: 20px;
+  }
+
+  .role-pill {
+    display: inline-flex;
+    align-items: center;
+    height: 38px;
+    padding: 0 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    box-sizing: border-box;
   }
 
   .checkbox-row {

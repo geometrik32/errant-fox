@@ -24,6 +24,7 @@ export interface Fighter {
 
 export function resolveColor(id: string, color: string | null | undefined): string {
   if (color) return color;
+  if (id === 'guest') return '#475569';
   let hash = 0;
   for (const ch of id) hash = (hash * 31 + ch.charCodeAt(0)) & 0x7fffffff;
   return `hsl(${hash % 360}, 55%, 48%)`;

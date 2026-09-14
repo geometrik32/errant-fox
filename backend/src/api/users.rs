@@ -374,14 +374,20 @@ pub async fn get_avatar(
     let path = format!("{}/{}.jpg", state.avatars_dir, user_id);
     match tokio::fs::read(&path).await {
         Ok(data) => Ok((
-            [(axum::http::header::CONTENT_TYPE, "image/jpeg")],
+            [
+                (axum::http::header::CONTENT_TYPE, "image/jpeg"),
+                (axum::http::header::CACHE_CONTROL, "no-cache, must-revalidate"),
+            ],
             data,
         )
             .into_response()),
         Err(_) => {
             if user_id == "guest" {
                 Ok((
-                    [(axum::http::header::CONTENT_TYPE, "image/jpeg")],
+                    [
+                        (axum::http::header::CONTENT_TYPE, "image/jpeg"),
+                        (axum::http::header::CACHE_CONTROL, "no-cache, must-revalidate"),
+                    ],
                     DEFAULT_GUEST_AVATAR.to_vec(),
                 )
                     .into_response())
@@ -466,20 +472,34 @@ pub async fn patch_admin_user(
             .ok_or(AppError::NotFound)?;
 
         let new_name = body.display_name.unwrap_or(target_user.display_name);
-        let new_hash = if let Some(pw) = body.password {
+        let new_hash = if user_id == "guest" {
+            target_user.password_hash
+        } else if let Some(pw) = body.password {
             bcrypt::hash(&pw, bcrypt::DEFAULT_COST)
                 .map_err(|e| AppError::Internal(e.to_string()))?
         } else {
             target_user.password_hash
         };
         let new_color = body.color.or(target_user.color);
-        let new_is_admin = body.is_admin.unwrap_or(target_user.is_admin);
-        let new_vk_id = match body.vk_id {
-            Some(ref v) if !v.trim().is_empty() => Some(v.trim().to_string()),
-            Some(_) => None,
-            None => target_user.vk_id,
+        let new_is_admin = if user_id == "guest" {
+            false
+        } else {
+            body.is_admin.unwrap_or(target_user.is_admin)
         };
-        let new_role = body.role.unwrap_or(target_user.role);
+        let new_vk_id = if user_id == "guest" {
+            None
+        } else {
+            match body.vk_id {
+                Some(ref v) if !v.trim().is_empty() => Some(v.trim().to_string()),
+                Some(_) => None,
+                None => target_user.vk_id,
+            }
+        };
+        let new_role = if user_id == "guest" {
+            "guest".to_string()
+        } else {
+            body.role.unwrap_or(target_user.role)
+        };
 
         diesel::update(users.filter(id.eq(&user_id)))
             .set((
@@ -541,6 +561,18 @@ pub async fn upload_avatar_for(
     tokio::fs::write(&path, data)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let db = state.db.clone();
+    let uid = user_id.clone();
+    let _ = tokio::task::spawn_blocking(move || {
+        use crate::db::schema::users::dsl::*;
+        if let Ok(mut conn) = db.get() {
+            let file_name = format!("{}.jpg", uid);
+            let _ = diesel::update(users.filter(id.eq(&uid)))
+                .set(avatar_path.eq(Some(file_name)))
+                .execute(&mut conn);
+        }
+    }).await;
 
     Ok(Json(
         serde_json::json!({ "avatar_url": format!("/api/users/{}/avatar", user_id) }),
