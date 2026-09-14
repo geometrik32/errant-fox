@@ -2,21 +2,34 @@
   import { onMount } from 'svelte';
   import type { Video } from '../api/types';
   import { resolveColor } from '../api/types';
-  import { regeneratePreview, aiLabelVideo, cancelAiLabelVideo, optimizeVideo } from '../api/videos';
+  import { aiLabelVideo, cancelAiLabelVideo, optimizeVideo, batchTranscodeVideos } from '../api/videos';
   import { currentUser } from '../../stores';
+  import { showToast } from '../stores/toast';
   import ShareModal from '../ui/ShareModal.svelte';
 
   interface Props {
     video: Video;
     watchers?: any[];
+    selected?: boolean;
+    hasSelection?: boolean;
     onopen?: (id: string) => void;
     onreload?: () => void;
+    ontoggle?: (id: string, e: MouseEvent) => void;
+    onbatchmenu?: (e: MouseEvent) => void;
   }
 
-  let { video, watchers = [], onopen, onreload }: Props = $props();
+  let {
+    video,
+    watchers = [],
+    selected = false,
+    hasSelection = false,
+    onopen,
+    onreload,
+    ontoggle,
+    onbatchmenu,
+  }: Props = $props();
 
   let imgError = $state(false);
-  let isRegenerating = $state(false);
   let isAiLabeling = $state(false);
   let isOptimizingLocal = $state(false);
   let isOptimizing = $derived(video.is_optimizing || isOptimizingLocal);
@@ -41,8 +54,17 @@
     return 0;
   });
 
-  function handleClick() {
+  function handleClick(e: MouseEvent) {
+    if (e.shiftKey || e.ctrlKey || e.metaKey || hasSelection) {
+      ontoggle?.(video.id, e);
+      return;
+    }
     onopen?.(video.id);
+  }
+
+  function handleCheckboxClick(e: MouseEvent) {
+    e.stopPropagation();
+    ontoggle?.(video.id, e);
   }
 
   function handleAuxClick(e: MouseEvent) {
@@ -68,11 +90,21 @@
     e.preventDefault();
     e.stopPropagation(); // Prevent immediate closing from window contextmenu handler
     
+    if (selected && hasSelection && onbatchmenu) {
+      closeMenu();
+      onbatchmenu(e);
+      return;
+    }
+
+    if (!selected && hasSelection) {
+      ontoggle?.(video.id, e);
+    }
+
     // Broadcast event to close all other open context menus in gallery
     window.dispatchEvent(new CustomEvent('ef-close-context-menus', { detail: { videoId: video.id } }));
 
-    const menuWidth = 190;
-    const menuHeight = 150;
+    const menuWidth = 210;
+    const menuHeight = 220;
     let x = e.clientX;
     let y = e.clientY;
     
@@ -130,31 +162,6 @@
     window.open(trimUrl, '_blank');
   }
 
-  function pollPreview() {
-    const url = video.preview_url;
-    let attempts = 0;
-    const interval = setInterval(async () => {
-      attempts++;
-      if (attempts > 20) {
-        clearInterval(interval);
-        isRegenerating = false;
-        alert("Превышено время ожидания генерации превью");
-        return;
-      }
-      try {
-        const res = await fetch(url);
-        if (res.status === 200) {
-          clearInterval(interval);
-          previewVersion = Date.now();
-          imgError = false;
-          isRegenerating = false;
-        }
-      } catch (e) {
-        console.error("Error polling preview:", e);
-      }
-    }, 1500);
-  }
-
   onMount(() => {
     window.addEventListener('ef-close-context-menus', handleOtherMenuOpen);
     return () => {
@@ -173,7 +180,23 @@
 <div class="card-wrapper" 
      class:ai-labeled={video.is_ai_labeled && !video.is_analyzing && !video.is_queued}
      class:analyzing={video.is_analyzing || isAiLabeling}
-     class:queued={video.is_queued && !video.is_analyzing}>
+     class:queued={video.is_queued && !video.is_analyzing}
+     class:is-selected={selected}>
+<button
+  type="button"
+  class="select-checkbox"
+  class:selected={selected}
+  class:visible={hasSelection || selected}
+  onclick={handleCheckboxClick}
+  title={selected ? 'Снять выбор' : 'Выбрать видео (Shift для диапазона)'}
+  aria-label="Выбрать видео"
+>
+  {#if selected}
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  {/if}
+</button>
 <button
   class="card"
   class:state-untagged={cardState() === 0}
@@ -215,11 +238,6 @@
           <polyline points="12 6 12 12 16 14"/>
         </svg>
         <span class="spinner-text queued-text">В очереди ИИ</span>
-      </div>
-    {:else if isRegenerating}
-      <div class="spinner-container">
-        <div class="spinner"></div>
-        <span class="spinner-text">Обновление...</span>
       </div>
     {:else if !imgError}
       <img src={previewSrc} alt="" loading="lazy" onerror={handleImgError} oncontextmenu={handleContextMenu} />
@@ -406,40 +424,33 @@
 
       <button 
         class="menu-item" 
-        onclick={(e) => { 
-          e.stopPropagation(); 
-          closeMenu(); 
-          window.dispatchEvent(new CustomEvent('ef-open-batch-optimize'));
-        }}
-        title="Окно пакетной оптимизации видео"
-      >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-          <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-        </svg>
-        <span>Оптимизировать всё...</span>
-      </button>
-
-      <button 
-        class="menu-item" 
         onclick={async (e) => { 
           e.stopPropagation(); 
           closeMenu(); 
-          isRegenerating = true; 
           try { 
-            await regeneratePreview(video.id); 
-            pollPreview(); 
+            const res = await batchTranscodeVideos([video.id]); 
+            if (res.already_ready > 0) {
+              showToast('Версия H.264 уже готова в кэше', 'info');
+            } else {
+              showToast('Конвертация в H.264 запущена на сервере', 'success');
+            }
           } catch (err) { 
-            alert(err instanceof Error ? err.message : 'Ошибка при обновлении превью'); 
-            isRegenerating = false; 
+            showToast(err instanceof Error ? err.message : 'Ошибка запуска конвертации', 'error'); 
           } 
         }}
-        disabled={isRegenerating}
+        title="Сконвертировать видео в H.264 для быстрой веб-совместимости"
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+          <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
+          <line x1="7" y1="2" x2="7" y2="22"/>
+          <line x1="17" y1="2" x2="17" y2="22"/>
+          <line x1="2" y1="12" x2="22" y2="12"/>
+          <line x1="2" y1="7" x2="7" y2="7"/>
+          <line x1="2" y1="17" x2="7" y2="17"/>
+          <line x1="17" y1="17" x2="22" y2="17"/>
+          <line x1="17" y1="7" x2="22" y2="7"/>
         </svg>
-        <span>Обновить превью</span>
+        <span>Конвертировать в H.264</span>
       </button>
 
       <button 
@@ -531,7 +542,53 @@
     position: relative;
     border-radius: calc(var(--radius-md) + 3px);
     padding: 0;
-    transition: padding 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+    transition: padding 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, outline 0.15s ease;
+  }
+
+  .card-wrapper.is-selected {
+    outline: 2px solid var(--accent-blue, #3b82f6);
+    outline-offset: 3px;
+    box-shadow: 0 0 16px rgba(59, 130, 246, 0.4);
+  }
+
+  .select-checkbox {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 25;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.82);
+    border: 1.5px solid rgba(255, 255, 255, 0.4);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    padding: 0;
+  }
+
+  .card-wrapper:hover .select-checkbox,
+  .select-checkbox.visible {
+    opacity: 0.85;
+  }
+
+  .select-checkbox:hover {
+    opacity: 1;
+    transform: scale(1.08);
+    border-color: #fff;
+  }
+
+  .select-checkbox.selected {
+    opacity: 1;
+    background: #2563eb;
+    border-color: #3b82f6;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.5);
   }
 
   @property --ai-angle {

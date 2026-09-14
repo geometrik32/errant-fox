@@ -36,12 +36,6 @@ export async function getStreamUrl(id: string): Promise<{ stream_url: string }> 
   return apiFetch<{ stream_url: string }>(`/videos/${id}/stream`);
 }
 
-export async function regeneratePreview(id: string): Promise<{ status: string }> {
-  return apiFetch<{ status: string }>(`/videos/${id}/previews/regenerate`, {
-    method: 'POST',
-  });
-}
-
 export interface AdminSyncCheckResult {
   imported_count: number;
   stale: Video[];
@@ -101,6 +95,13 @@ export async function getOptimizationCandidates(olderThanDays?: number): Promise
 
 export async function batchOptimizeVideos(videoIds: string[]): Promise<{ status: string }> {
   return apiFetch<{ status: string }>('/admin/videos/batch-optimize', {
+    method: 'POST',
+    body: JSON.stringify({ video_ids: videoIds }),
+  });
+}
+
+export async function batchTranscodeVideos(videoIds: string[]): Promise<{ status: string; queued: number; already_ready: number }> {
+  return apiFetch<{ status: string; queued: number; already_ready: number }>('/admin/videos/batch-transcode', {
     method: 'POST',
     body: JSON.stringify({ video_ids: videoIds }),
   });

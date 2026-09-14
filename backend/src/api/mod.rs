@@ -61,10 +61,6 @@ pub fn router(state: AppState) -> Router {
             get(videos::get_preview_frame),
         )
         .route(
-            "/api/videos/{id}/previews/regenerate",
-            post(videos::regenerate_preview),
-        )
-        .route(
             "/api/videos/{id}/ai-label",
             post(videos::ai_label_video),
         )
@@ -112,6 +108,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/admin/videos/batch-optimize",
             post(videos::batch_optimize_videos),
+        )
+        .route(
+            "/api/admin/videos/batch-transcode",
+            post(videos::batch_transcode_videos),
         )
         // Admin Videos Sync
         .route(
