@@ -365,6 +365,8 @@ pub async fn upload_avatar(
     ))
 }
 
+pub const DEFAULT_GUEST_AVATAR: &[u8] = include_bytes!("../assets/guest.jpg");
+
 pub async fn get_avatar(
     State(state): State<AppState>,
     Path(user_id): Path<String>,
@@ -376,7 +378,17 @@ pub async fn get_avatar(
             data,
         )
             .into_response()),
-        Err(_) => Err(AppError::NotFound),
+        Err(_) => {
+            if user_id == "guest" {
+                Ok((
+                    [(axum::http::header::CONTENT_TYPE, "image/jpeg")],
+                    DEFAULT_GUEST_AVATAR.to_vec(),
+                )
+                    .into_response())
+            } else {
+                Err(AppError::NotFound)
+            }
+        }
     }
 }
 

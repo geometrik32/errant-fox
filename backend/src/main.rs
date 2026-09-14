@@ -92,6 +92,16 @@ async fn main() {
         config.server_port,
     );
 
+    let guest_avatar_path = format!("{}/guest.jpg", config.avatars_dir);
+    let _ = std::fs::create_dir_all(&config.avatars_dir);
+    if !std::path::Path::new(&guest_avatar_path).exists() {
+        if let Err(e) = std::fs::write(&guest_avatar_path, api::users::DEFAULT_GUEST_AVATAR) {
+            tracing::warn!("Could not initialize guest avatar on disk: {}", e);
+        } else {
+            tracing::info!("Initialized default guest wolf avatar at {}", guest_avatar_path);
+        }
+    }
+
     let app_state = state::AppState {
         db: db_pool,
         jwt_secret: config.jwt_secret.clone(),

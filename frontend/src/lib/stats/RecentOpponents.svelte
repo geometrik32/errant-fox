@@ -80,7 +80,7 @@
         <div class="avatar-wrap" style:background={opp.color}>
           {#if opp.avatar_url}
             <img class="avatar-img" src={opp.avatar_url} alt={opp.name}
-              onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              onerror={(e) => { const img = e.target as HTMLImageElement; if (opp.id === 'guest' && !img.src.endsWith('/guest.jpg')) { img.src = '/guest.jpg'; } else { img.style.display = 'none'; } }} />
           {:else}
             <svg class="avatar-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="1.5"/>
