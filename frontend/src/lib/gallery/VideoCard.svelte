@@ -11,6 +11,7 @@
     video: Video;
     watchers?: any[];
     selected?: boolean;
+    selectedCount?: number;
     hasSelection?: boolean;
     onopen?: (id: string) => void;
     onreload?: () => void;
@@ -22,6 +23,7 @@
     video,
     watchers = [],
     selected = false,
+    selectedCount = 0,
     hasSelection = false,
     onopen,
     onreload,
@@ -55,16 +57,11 @@
   });
 
   function handleClick(e: MouseEvent) {
-    if (e.shiftKey || e.ctrlKey || e.metaKey || hasSelection) {
+    if (e.shiftKey || e.ctrlKey || e.metaKey) {
       ontoggle?.(video.id, e);
       return;
     }
     onopen?.(video.id);
-  }
-
-  function handleCheckboxClick(e: MouseEvent) {
-    e.stopPropagation();
-    ontoggle?.(video.id, e);
   }
 
   function handleAuxClick(e: MouseEvent) {
@@ -90,14 +87,10 @@
     e.preventDefault();
     e.stopPropagation(); // Prevent immediate closing from window contextmenu handler
     
-    if (selected && hasSelection && onbatchmenu) {
+    if (selected && selectedCount > 1 && onbatchmenu) {
       closeMenu();
       onbatchmenu(e);
       return;
-    }
-
-    if (!selected && hasSelection) {
-      ontoggle?.(video.id, e);
     }
 
     // Broadcast event to close all other open context menus in gallery
@@ -180,23 +173,7 @@
 <div class="card-wrapper" 
      class:ai-labeled={video.is_ai_labeled && !video.is_analyzing && !video.is_queued}
      class:analyzing={video.is_analyzing || isAiLabeling}
-     class:queued={video.is_queued && !video.is_analyzing}
-     class:is-selected={selected}>
-<button
-  type="button"
-  class="select-checkbox"
-  class:selected={selected}
-  class:visible={hasSelection || selected}
-  onclick={handleCheckboxClick}
-  title={selected ? 'Снять выбор' : 'Выбрать видео (Shift для диапазона)'}
-  aria-label="Выбрать видео"
->
-  {#if selected}
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  {/if}
-</button>
+     class:queued={video.is_queued && !video.is_analyzing}>
 <button
   class="card"
   class:state-untagged={cardState() === 0}
@@ -252,6 +229,15 @@
         <span class="tournament-text">{video.tournament_name || 'Турнир'}</span>
       </div>
     {/if}
+    {#if selected}
+      <div class="selected-center-overlay">
+        <div class="selected-circle-badge">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        </div>
+      </div>
+    {/if}
   </div>
 
   <div class="info">
@@ -287,6 +273,20 @@
     class="context-menu" 
     style="left: {menuPos.x}px; top: {menuPos.y}px;"
   >
+    {#if selected}
+      <button 
+        class="menu-item" 
+        onclick={(e) => { e.stopPropagation(); closeMenu(); ontoggle?.(video.id, e); }}
+        title="Снять выделение с этого видео"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+        <span>Снять выделение</span>
+      </button>
+      <div class="menu-divider"></div>
+    {/if}
     <button 
       class="menu-item" 
       onclick={(e) => { e.stopPropagation(); closeMenu(); handleDownload(); }}
@@ -404,11 +404,12 @@
           onclick={async (e) => { 
             e.stopPropagation(); 
             closeMenu(); 
+            if (!confirm('Запустить VFR-оптимизацию (сжатие) этого видео?')) return;
             isOptimizingLocal = true; 
             try { 
               await optimizeVideo(video.id); 
             } catch (err) { 
-              alert(err instanceof Error ? err.message : 'Ошибка запуска оптимизации'); 
+              showToast(err instanceof Error ? err.message : 'Ошибка запуска оптимизации', 'error'); 
               isOptimizingLocal = false; 
             }
           }}
@@ -542,53 +543,45 @@
     position: relative;
     border-radius: calc(var(--radius-md) + 3px);
     padding: 0;
-    transition: padding 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, outline 0.15s ease;
+    transition: padding 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
   }
 
-  .card-wrapper.is-selected {
-    outline: 2px solid var(--accent-blue, #3b82f6);
-    outline-offset: 3px;
-    box-shadow: 0 0 16px rgba(59, 130, 246, 0.4);
-  }
-
-  .select-checkbox {
+  .selected-center-overlay {
     position: absolute;
-    top: 10px;
-    left: 10px;
-    z-index: 25;
-    width: 26px;
-    height: 26px;
-    border-radius: 6px;
-    background: rgba(15, 23, 42, 0.82);
-    border: 1.5px solid rgba(255, 255, 255, 0.4);
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 15;
+    pointer-events: none;
+    backdrop-filter: blur(1.5px);
+    -webkit-backdrop-filter: blur(1.5px);
+    border-radius: var(--radius-md);
+  }
+
+  .selected-circle-badge {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    background: #2563eb;
     color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
-    cursor: pointer;
-    opacity: 0;
-    transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    padding: 0;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(255, 255, 255, 0.25);
+    animation: badgeScaleIn 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   }
 
-  .card-wrapper:hover .select-checkbox,
-  .select-checkbox.visible {
-    opacity: 0.85;
-  }
-
-  .select-checkbox:hover {
-    opacity: 1;
-    transform: scale(1.08);
-    border-color: #fff;
-  }
-
-  .select-checkbox.selected {
-    opacity: 1;
-    background: #2563eb;
-    border-color: #3b82f6;
-    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.5);
+  @keyframes badgeScaleIn {
+    from {
+      transform: scale(0.6);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
   }
 
   @property --ai-angle {
