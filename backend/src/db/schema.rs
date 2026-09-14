@@ -31,6 +31,8 @@ diesel::table! {
         is_queued      -> Bool,
         is_optimized   -> Bool,
         is_optimizing  -> Bool,
+        is_tournament  -> Bool,
+        tournament_name -> Nullable<Text>,
     }
 }
 

@@ -113,6 +113,9 @@ pub enum WsEvent {
         id: String,
         date: String,
         preview_url: String,
+        is_tournament: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        tournament_name: Option<String>,
     },
     VideoRemoved {
         id: String,

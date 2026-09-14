@@ -61,11 +61,22 @@
   let fighterAId = $state<string>(untrack(() => video.fighter_a?.id ?? ''));
   let fighterBId = $state<string>(untrack(() => video.fighter_b?.id ?? ''));
 
+  const GUEST_FIGHTER: VideoFighter = {
+    id: 'guest',
+    display_name: 'Вне клуба',
+    avatar_url: '/api/users/guest/avatar',
+    color: '#475569',
+  };
+
   let activeFighterA = $derived<VideoFighter | null>(
-    $fighters.find(f => f.id === fighterAId) as VideoFighter | null ?? null
+    fighterAId === 'guest'
+      ? GUEST_FIGHTER
+      : ($fighters.find(f => f.id === fighterAId) as VideoFighter | null ?? null)
   );
   let activeFighterB = $derived<VideoFighter | null>(
-    $fighters.find(f => f.id === fighterBId) as VideoFighter | null ?? null
+    fighterBId === 'guest'
+      ? GUEST_FIGHTER
+      : ($fighters.find(f => f.id === fighterBId) as VideoFighter | null ?? null)
   );
 
   let selectableFightersA = $derived(
@@ -417,6 +428,20 @@
             <span class="fighter-opt-avatar unselected"></span>
             <span class="fighter-opt-name">Не выбран</span>
           </button>
+          <button
+            class="fighter-opt"
+            class:selected={fighterAId === 'guest'}
+            onclick={() => selectFighter('a', 'guest')}
+          >
+            <span class="fighter-opt-avatar" style:background="#475569" style:border-color="#475569">
+              <img src="/api/users/guest/avatar" alt="Вне клуба" onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              <svg class="fighter-opt-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5" />
+                <path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+              </svg>
+            </span>
+            <span class="fighter-opt-name">Вне клуба</span>
+          </button>
           {#each activeSelectableA as f (f.id)}
             {@const optColor = resolveColor(f.id, f.color)}
             <button
@@ -497,6 +522,20 @@
           <button class="fighter-opt" onclick={() => selectFighter('b', '')}>
             <span class="fighter-opt-avatar unselected"></span>
             <span class="fighter-opt-name">Не выбран</span>
+          </button>
+          <button
+            class="fighter-opt"
+            class:selected={fighterBId === 'guest'}
+            onclick={() => selectFighter('b', 'guest')}
+          >
+            <span class="fighter-opt-avatar" style:background="#475569" style:border-color="#475569">
+              <img src="/api/users/guest/avatar" alt="Вне клуба" onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              <svg class="fighter-opt-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.5" />
+                <path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+              </svg>
+            </span>
+            <span class="fighter-opt-name">Вне клуба</span>
           </button>
           {#each activeSelectableB as f (f.id)}
             {@const optColor = resolveColor(f.id, f.color)}

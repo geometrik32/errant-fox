@@ -59,6 +59,9 @@ pub struct VideoListDto {
     pub is_eligible_for_optimization: bool,
     pub has_transcript: bool,
     pub has_human_bouts: bool,
+    pub is_tournament: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tournament_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seafile_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -122,6 +125,9 @@ pub struct VideoFullDto {
     pub is_eligible_for_optimization: bool,
     pub has_transcript: bool,
     pub has_human_bouts: bool,
+    pub is_tournament: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tournament_name: Option<String>,
     pub bouts: Vec<BoutDto>,
     pub comments: Vec<CommentDto>,
 }
@@ -250,6 +256,8 @@ fn build_video_full(
         is_eligible_for_optimization,
         has_transcript,
         has_human_bouts,
+        is_tournament: video.is_tournament,
+        tournament_name: video.tournament_name.clone(),
         bouts: bouts.iter().map(bout_dto).collect(),
         comments: comment_dtos,
     }
@@ -454,6 +462,8 @@ pub async fn list_videos(
                     is_eligible_for_optimization,
                     has_transcript: std::path::Path::new(&format!("{}/{}.json", transcripts_dir, v.id)).exists(),
                     has_human_bouts,
+                    is_tournament: v.is_tournament,
+                    tournament_name: v.tournament_name.clone(),
                     seafile_path: if is_admin { Some(v.seafile_path.clone()) } else { None },
                     seafile_web_url: if is_admin {
                         Some(format!(

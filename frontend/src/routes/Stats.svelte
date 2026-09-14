@@ -96,8 +96,22 @@
     return set;
   });
 
-  // Bouts belonging ONLY to fully human-labeled videos
-  let rawValidBouts = $derived(rawBouts.filter(b => fullyLabeledVideoIds.has(b.video_id)));
+  let selectedEventType = $state<'all' | 'tournament' | 'training'>('all');
+
+  // Bouts belonging ONLY to fully human-labeled videos, filtered by event type
+  let rawValidBouts = $derived.by(() => {
+    let list = rawBouts.filter(b => fullyLabeledVideoIds.has(b.video_id));
+    if (selectedEventType === 'tournament') {
+      list = list.filter(b => b.is_tournament);
+    } else if (selectedEventType === 'training') {
+      list = list.filter(b => !b.is_tournament);
+    }
+    return list;
+  });
+
+  let totalHumanBoutsCount = $derived(rawBouts.filter(b => fullyLabeledVideoIds.has(b.video_id)).length);
+  let tournamentBoutsCount = $derived(rawBouts.filter(b => fullyLabeledVideoIds.has(b.video_id) && b.is_tournament).length);
+  let trainingBoutsCount = $derived(rawBouts.filter(b => fullyLabeledVideoIds.has(b.video_id) && !b.is_tournament).length);
 
   let filteredBouts = $derived.by(() => {
     let result = [...rawValidBouts];
@@ -299,6 +313,11 @@
 
   let filteredVideos = $derived.by(() => {
     let result = rawVideos;
+    if (selectedEventType === 'tournament') {
+      result = result.filter(v => v.is_tournament);
+    } else if (selectedEventType === 'training') {
+      result = result.filter(v => !v.is_tournament);
+    }
     if (tableFilters.opponent_id) {
       result = result.filter(v => 
         v.fighter_a?.id === tableFilters.opponent_id || 
@@ -322,6 +341,11 @@
 
   let videosForFrequencyChart = $derived.by(() => {
     let result = rawVideos;
+    if (selectedEventType === 'tournament') {
+      result = result.filter(v => v.is_tournament);
+    } else if (selectedEventType === 'training') {
+      result = result.filter(v => !v.is_tournament);
+    }
     if (tableFilters.opponent_id) {
       result = result.filter(v =>
         v.fighter_a?.id === tableFilters.opponent_id ||
@@ -407,26 +431,61 @@
               onclick={() => showFighterDropdown = !showFighterDropdown}
               onkeydown={(e) => e.key === 'Enter' && (showFighterDropdown = !showFighterDropdown)}
             >
-              <div class="avatar-wrap" style:background={resolveColor(selectedFighter.id, selectedFighter.color)}>
-                <svg class="avatar-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="2.5" opacity="0.6"/>
-                  <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.6"/>
-                </svg>
-                <img class="avatar-img" src={selectedFighter.avatar_url} alt={selectedFighter.display_name}
-                  onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-              </div>
-              <div class="fighter-info">
-                <div class="greeting">Статистика бойца</div>
-                <div class="fighter-name">
-                  {selectedFighter.display_name}
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="vertical-align: middle; margin-left: 4px; transform: {showFighterDropdown ? 'rotate(180deg)' : 'none'}; transition: transform 0.2s;">
-                    <path d="M6 9l6 6 6-6"/>
+              <div class="hero-main">
+                <div class="avatar-wrap" style:background={resolveColor(selectedFighter.id, selectedFighter.color)}>
+                  <svg class="avatar-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="2.5" opacity="0.6"/>
+                    <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.6"/>
                   </svg>
+                  <img class="avatar-img" src={selectedFighter.avatar_url} alt={selectedFighter.display_name}
+                    onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                 </div>
-                {#if firstBoutDate}
-                  <div class="fighter-since">с {formatDate(firstBoutDate)}</div>
-                {/if}
+                <div class="fighter-info">
+                  <div class="greeting">Статистика бойца</div>
+                  <div class="fighter-name">
+                    {selectedFighter.display_name}
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="vertical-align: middle; margin-left: 4px; transform: {showFighterDropdown ? 'rotate(180deg)' : 'none'}; transition: transform 0.2s;">
+                      <path d="M6 9l6 6 6-6"/>
+                    </svg>
+                  </div>
+                  {#if firstBoutDate}
+                    <div class="fighter-since">с {formatDate(firstBoutDate)}</div>
+                  {/if}
+                </div>
               </div>
+
+              <!-- svelte-ignore a11y_click_events_have_key_events -->
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div class="hero-event-tabs" onclick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  class="hero-tab-btn"
+                  class:active={selectedEventType === 'all'}
+                  onclick={() => selectedEventType = 'all'}
+                >
+                  <span class="tab-label">Все бои</span>
+                  <span class="tab-count">{totalHumanBoutsCount}</span>
+                </button>
+                <button
+                  type="button"
+                  class="hero-tab-btn"
+                  class:active={selectedEventType === 'training'}
+                  onclick={() => selectedEventType = 'training'}
+                >
+                  <span class="tab-label">Тренировки</span>
+                  <span class="tab-count">{trainingBoutsCount}</span>
+                </button>
+                <button
+                  type="button"
+                  class="hero-tab-btn"
+                  class:active={selectedEventType === 'tournament'}
+                  onclick={() => selectedEventType = 'tournament'}
+                >
+                  <span class="tab-label">🏆 Турниры</span>
+                  <span class="tab-count">{tournamentBoutsCount}</span>
+                </button>
+              </div>
+
               {#if showFighterDropdown}
                 <!-- svelte-ignore a11y_click_events_have_key_events -->
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -596,26 +655,61 @@
                 onclick={() => showFighterDropdown = !showFighterDropdown}
                 onkeydown={(e) => e.key === 'Enter' && (showFighterDropdown = !showFighterDropdown)}
               >
-                <div class="avatar-wrap" style:background={resolveColor(selectedFighter.id, selectedFighter.color)}>
-                  <svg class="avatar-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="2.5" opacity="0.6"/>
-                    <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.6"/>
-                  </svg>
-                  <img class="avatar-img" src={selectedFighter.avatar_url} alt={selectedFighter.display_name}
-                    onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                </div>
-                <div class="fighter-info">
-                  <div class="greeting">Статистика бойца</div>
-                  <div class="fighter-name">
-                    {selectedFighter.display_name}
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="vertical-align: middle; margin-left: 4px; transform: {showFighterDropdown ? 'rotate(180deg)' : 'none'}; transition: transform 0.2s;">
-                      <path d="M6 9l6 6 6-6"/>
+                <div class="hero-main">
+                  <div class="avatar-wrap" style:background={resolveColor(selectedFighter.id, selectedFighter.color)}>
+                    <svg class="avatar-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="2.5" opacity="0.6"/>
+                      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.6"/>
                     </svg>
+                    <img class="avatar-img" src={selectedFighter.avatar_url} alt={selectedFighter.display_name}
+                      onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                   </div>
-                  {#if firstBoutDate}
-                    <div class="fighter-since">с {formatDate(firstBoutDate)}</div>
-                  {/if}
+                  <div class="fighter-info">
+                    <div class="greeting">Статистика бойца</div>
+                    <div class="fighter-name">
+                      {selectedFighter.display_name}
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="vertical-align: middle; margin-left: 4px; transform: {showFighterDropdown ? 'rotate(180deg)' : 'none'}; transition: transform 0.2s;">
+                        <path d="M6 9l6 6 6-6"/>
+                      </svg>
+                    </div>
+                    {#if firstBoutDate}
+                      <div class="fighter-since">с {formatDate(firstBoutDate)}</div>
+                    {/if}
+                  </div>
                 </div>
+
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div class="hero-event-tabs" onclick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    class="hero-tab-btn"
+                    class:active={selectedEventType === 'all'}
+                    onclick={() => selectedEventType = 'all'}
+                  >
+                    <span class="tab-label">Все бои</span>
+                    <span class="tab-count">{totalHumanBoutsCount}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="hero-tab-btn"
+                    class:active={selectedEventType === 'training'}
+                    onclick={() => selectedEventType = 'training'}
+                  >
+                    <span class="tab-label">Тренировки</span>
+                    <span class="tab-count">{trainingBoutsCount}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="hero-tab-btn"
+                    class:active={selectedEventType === 'tournament'}
+                    onclick={() => selectedEventType = 'tournament'}
+                  >
+                    <span class="tab-label">🏆 Турниры</span>
+                    <span class="tab-count">{tournamentBoutsCount}</span>
+                  </button>
+                </div>
+
                 {#if showFighterDropdown}
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
                   <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -794,6 +888,76 @@
     overflow-x: hidden;
   }
 
+  /* Hero Event Tabs (Inside Fighter Card) */
+  .hero-event-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md);
+    padding: 4px;
+    gap: 4px;
+    width: 100%;
+    box-sizing: border-box;
+    cursor: default;
+    margin-top: auto;
+  }
+
+  .hero-tab-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 8px 3px 6px;
+    border: 1px solid transparent;
+    border-radius: calc(var(--radius-md) - 2px);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: inherit;
+    cursor: pointer;
+    transition: var(--transition);
+    min-width: 0;
+  }
+
+  .hero-tab-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .hero-tab-btn.active {
+    background: var(--surface-solid);
+    border-color: rgba(245, 158, 11, 0.35);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  }
+
+  .hero-tab-btn .tab-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    line-height: 1.2;
+    text-align: center;
+    letter-spacing: 0.01em;
+  }
+
+  .hero-tab-btn.active .tab-label {
+    color: var(--accent-yellow);
+    font-weight: 700;
+  }
+
+  .hero-tab-btn .tab-count {
+    font-size: 0.95rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+    line-height: 1.1;
+  }
+
+  .hero-tab-btn.active .tab-count {
+    color: #fff;
+    font-weight: 800;
+  }
+
   /* Empty / loading */
   .empty-state { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 80px 24px; color: var(--text-muted); }
   .empty-icon { font-size: 2.5rem; opacity: 0.4; }
@@ -822,7 +986,7 @@
   /* Top area: Hero + KPIs */
   .top-area {
     display: grid;
-    grid-template-columns: 252px minmax(0, 1fr);
+    grid-template-columns: 295px minmax(0, 1fr);
     gap: 20px;
     height: 350px;
   }
@@ -882,13 +1046,13 @@
 
   /* Fighter Hero */
   .fighter-hero {
-    padding: 30px 24px;
+    padding: 22px 12px 14px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
     text-align: center;
-    gap: 16px;
+    gap: 10px;
     cursor: pointer;
     position: relative;
     z-index: 10;
@@ -897,6 +1061,17 @@
   }
 
   .fighter-hero:hover { border-color: var(--text-secondary); }
+
+  .hero-main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 12px;
+    flex: 1;
+    width: 100%;
+  }
 
   .fighter-dropdown {
     position: absolute;

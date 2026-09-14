@@ -228,6 +228,12 @@
     {#if cardState() === 0}
       <div class="state-overlay" style="--overlay-opacity: 0.55;"></div>
     {/if}
+    {#if video.is_tournament}
+      <div class="tournament-badge" title={video.tournament_name ? `Турнир: ${video.tournament_name}` : 'Турнир'}>
+        <span class="tournament-icon">🏆</span>
+        <span class="tournament-text">{video.tournament_name || 'Турнир'}</span>
+      </div>
+    {/if}
   </div>
 
   <div class="info">
@@ -636,6 +642,43 @@
     inset: 0;
     background: rgba(30, 30, 45, var(--overlay-opacity, 0.5));
     pointer-events: none;
+  }
+
+  /* ── Tournament Badge ──────────────────────────────── */
+  .tournament-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(245, 158, 11, 0.6);
+    border-radius: var(--radius-sm);
+    padding: 3px 8px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--accent-yellow);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+    z-index: 5;
+    max-width: calc(100% - 16px);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    pointer-events: none;
+  }
+
+  .tournament-icon {
+    font-size: 0.75rem;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .tournament-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   /* ── AI spinner ───────────────────────────────────── */

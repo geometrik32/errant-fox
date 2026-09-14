@@ -50,6 +50,8 @@ export interface FighterBout {
   opponent_result: 'hit' | 'miss' | 'blocked' | 'late' | 'no_strike' | 'disqualification' | 'afterblow' | null;
   is_unmarked?: boolean;
   is_ai?: boolean;
+  is_tournament?: boolean;
+  tournament_name?: string | null;
 }
 
 export interface VideoFighter {
@@ -75,6 +77,8 @@ export interface Video {
   is_eligible_for_optimization?: boolean;
   has_transcript?: boolean;
   has_human_bouts?: boolean;
+  is_tournament: boolean;
+  tournament_name?: string | null;
   preview_url: string;
   preview_count: number;
   seafile_path?: string;
@@ -126,6 +130,8 @@ export interface VideoFull {
   is_eligible_for_optimization?: boolean;
   has_transcript?: boolean;
   has_human_bouts?: boolean;
+  is_tournament: boolean;
+  tournament_name?: string | null;
   bouts: Bout[];
   comments: Comment[];
 }

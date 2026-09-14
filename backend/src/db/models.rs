@@ -54,6 +54,8 @@ pub struct Video {
     pub is_queued: bool,
     pub is_optimized: bool,
     pub is_optimizing: bool,
+    pub is_tournament: bool,
+    pub tournament_name: Option<String>,
 }
 
 #[derive(Insertable, Deserialize, Debug)]
@@ -67,6 +69,8 @@ pub struct NewVideo {
     pub duration_ms: Option<i32>,
     pub preview_count: i32,
     pub fps: Option<f32>,
+    pub is_tournament: bool,
+    pub tournament_name: Option<String>,
 }
 
 // ── techniques ────────────────────────────────────────────────────────────────

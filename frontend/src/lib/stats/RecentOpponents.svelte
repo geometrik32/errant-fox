@@ -32,7 +32,7 @@
       else if (myScore < oppScore) s.losses += 1;
     }
 
-    return $fighters
+    const list = $fighters
       .filter(f => f.id !== currentFighterId)
       .map(f => {
         const stats = fightStats.get(f.id) || { wins: 0, losses: 0, total: 0 };
@@ -48,6 +48,22 @@
           color: resolveColor(f.id, f.color)
         };
       });
+
+    const guestStats = fightStats.get('guest');
+    if (guestStats && guestStats.total > 0 && currentFighterId !== 'guest') {
+      list.push({
+        id: 'guest',
+        name: 'Вне клуба',
+        wins: guestStats.wins,
+        losses: guestStats.losses,
+        total: guestStats.total,
+        balance: guestStats.wins - guestStats.losses,
+        avatar_url: '/api/users/guest/avatar',
+        color: '#475569'
+      });
+    }
+
+    return list;
   });
 </script>
 
