@@ -15,10 +15,8 @@ pub async fn run_sync(
     ws_tx: broadcast::Sender<WsEvent>,
     previews_dir: String,
 ) {
-    let date_re = Regex::new(r"(\d{4}[.\-]\d{2}[.\-]\d{2})").unwrap();
-
     tracing::info!("running initial seafile sync...");
-    match import_new_videos_once(&seafile, &db, &ws_tx, &date_re).await {
+    match import_new_videos_once(&seafile, &db, &ws_tx).await {
         Ok(_) => {
             tracing::info!("initial seafile sync completed successfully");
         }
@@ -133,35 +131,66 @@ pub async fn delete_videos_cascade(
     Ok(())
 }
 
+#[derive(Debug, Clone)]
+pub struct ParsedFolderInfo {
+    pub date: NaiveDate,
+    pub is_tournament: bool,
+    pub tournament_name: Option<String>,
+}
+
+pub fn parse_folder_name(name: &str) -> Option<ParsedFolderInfo> {
+    let date_re = Regex::new(r"(\d{4}[.\-]\d{2}[.\-]\d{2})").ok()?;
+    let date_match = date_re.find(name)?;
+    let date_str = date_match.as_str();
+    let date = NaiveDate::parse_from_str(date_str, "%Y.%m.%d")
+        .or_else(|_| NaiveDate::parse_from_str(date_str, "%Y-%m-%d"))
+        .ok()?;
+
+    let tour_re = Regex::new(r"(?i)(\d{4}[.\-]\d{2}[.\-]\d{2})[ _\-\[]*(?:турнир|tournament)[\] _\-]*(.*)").ok()?;
+    if let Some(caps) = tour_re.captures(name) {
+        let raw_name = caps.get(2).map(|m| m.as_str().trim()).unwrap_or("");
+        let clean_name = raw_name
+            .trim_start_matches(|c| c == '-' || c == '_' || c == ' ' || c == ']' || c == ':')
+            .trim();
+        let tournament_name = if clean_name.is_empty() {
+            None
+        } else {
+            Some(clean_name.to_string())
+        };
+        Some(ParsedFolderInfo {
+            date,
+            is_tournament: true,
+            tournament_name,
+        })
+    } else {
+        Some(ParsedFolderInfo {
+            date,
+            is_tournament: false,
+            tournament_name: None,
+        })
+    }
+}
+
 pub async fn import_new_videos(
     seafile: &SeafileClient,
     db: &DbPool,
     ws_tx: &broadcast::Sender<WsEvent>,
 ) -> anyhow::Result<Vec<String>> {
-    let date_re = Regex::new(r"(\d{4}[.\-]\d{2}[.\-]\d{2})").unwrap();
-    import_new_videos_once(seafile, db, ws_tx, &date_re).await
+    import_new_videos_once(seafile, db, ws_tx).await
 }
 
 async fn import_new_videos_once(
     seafile: &SeafileClient,
     db: &DbPool,
     ws_tx: &broadcast::Sender<WsEvent>,
-    date_re: &Regex,
 ) -> anyhow::Result<Vec<String>> {
     let folders = seafile.list_folders().await?;
     let mut imported_ids = Vec::new();
 
     for folder in folders {
-        let date_str = match date_re.find(&folder.name) {
-            Some(m) => m.as_str().to_string(),
+        let folder_info = match parse_folder_name(&folder.name) {
+            Some(info) => info,
             None => continue,
-        };
-
-        let date = match NaiveDate::parse_from_str(&date_str, "%Y.%m.%d")
-            .or_else(|_| NaiveDate::parse_from_str(&date_str, "%Y-%m-%d"))
-        {
-            Ok(d) => d,
-            Err(_) => continue,
         };
 
         let files = match seafile.list_files(&folder.name).await {
@@ -187,6 +216,24 @@ async fn import_new_videos_once(
         })
         .await??;
 
+        if folder_info.is_tournament && !existing_paths.is_empty() {
+            let folder_prefix_update = folder_prefix.clone();
+            let tour_name = folder_info.tournament_name.clone();
+            let db_update = db.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                use crate::db::schema::videos;
+                let mut conn = db_update.get()?;
+                diesel::update(videos::table.filter(videos::seafile_path.like(format!("{}%", folder_prefix_update))))
+                    .set((
+                        videos::is_tournament.eq(true),
+                        videos::tournament_name.eq(tour_name),
+                    ))
+                    .execute(&mut conn)?;
+                Ok::<_, anyhow::Error>(())
+            })
+            .await;
+        }
+
         for file in files {
             if file.entry_type != "file" {
                 continue;
@@ -203,10 +250,12 @@ async fn import_new_videos_once(
                 seafile_path: seafile_path.clone(),
                 fighter_a_id: None,
                 fighter_b_id: None,
-                date,
+                date: folder_info.date,
                 duration_ms: None,
                 preview_count: 0,
                 fps: None,
+                is_tournament: folder_info.is_tournament,
+                tournament_name: folder_info.tournament_name.clone(),
             };
 
             // Try to extract FPS from the moov atom (first 1 MB of the file)
@@ -253,8 +302,10 @@ async fn import_new_videos_once(
 
             let _ = ws_tx.send(WsEvent::NewVideo {
                 id: new_id.clone(),
-                date: date_str.clone(),
+                date: folder_info.date.format("%Y-%m-%d").to_string(),
                 preview_url: format!("/api/videos/{new_id}/previews/0"),
+                is_tournament: folder_info.is_tournament,
+                tournament_name: folder_info.tournament_name.clone(),
             });
             tracing::info!("synced new video: {seafile_path}");
             imported_ids.push(new_id);

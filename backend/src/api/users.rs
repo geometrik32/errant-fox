@@ -52,6 +52,9 @@ pub struct FighterBoutDto {
     pub opponent_hit_zone: Option<String>,
     pub opponent_result: Option<String>,
     pub is_ai: bool,
+    pub is_tournament: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tournament_name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -260,6 +263,8 @@ pub async fn fighter_bouts(
                 },
                 opponent_result: if am_a { bout.result_b.clone() } else { bout.result_a.clone() },
                 is_ai: bout.is_ai,
+                is_tournament: video.is_tournament,
+                tournament_name: video.tournament_name.clone(),
             });
         }
 

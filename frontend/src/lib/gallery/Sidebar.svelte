@@ -5,10 +5,13 @@
   import { resolveColor } from '../api/types';
   import DateRangePicker from '../ui/DateRangePicker.svelte';
 
+  export type EventTypeFilter = 'all' | 'training' | 'tournament';
+
   interface FilterEvent {
     fighter_ids: string[];
     date_from: string;
     date_to: string;
+    event_type: EventTypeFilter;
   }
 
   interface Props {
@@ -23,12 +26,15 @@
   let selectedIds = $state<Set<string>>(new Set(untrack(() => initialFilter?.fighter_ids ?? [])));
   let dateFrom = $state(untrack(() => initialFilter?.date_from ?? ''));
   let dateTo = $state(untrack(() => initialFilter?.date_to ?? ''));
+  let eventType = $state<EventTypeFilter>(untrack(() => initialFilter?.event_type ?? 'all'));
 
   let onlineFighterIds = $derived(new Set(onlineUsers.map(u => u.id)));
 
-  // Filter videos by current date range for sidebar counting
+  // Filter videos by current date range and event type for sidebar counting
   let dateFilteredVideos = $derived.by(() => {
     let list = videos;
+    if (eventType === 'training') list = list.filter(v => !v.is_tournament);
+    else if (eventType === 'tournament') list = list.filter(v => v.is_tournament);
     if (dateFrom) list = list.filter(v => v.date >= dateFrom);
     if (dateTo) list = list.filter(v => v.date <= dateTo);
     return list;
@@ -45,6 +51,21 @@
         if (!match) continue;
       }
       if (v.date) s.add(v.date.slice(0, 10));
+    }
+    return s;
+  });
+
+  // Dates with tournament videos matching selected fighters
+  let tournamentDatesSet = $derived.by(() => {
+    const s = new Set<string>();
+    for (const v of videos) {
+      if (selectedIds.size > 0) {
+        const match = [...selectedIds].every(
+          (id) => v.fighter_a?.id === id || v.fighter_b?.id === id
+        );
+        if (!match) continue;
+      }
+      if (v.is_tournament && v.date) s.add(v.date.slice(0, 10));
     }
     return s;
   });
@@ -96,8 +117,13 @@
     emit();
   }
 
+  function setEventType(type: EventTypeFilter) {
+    eventType = type;
+    emit();
+  }
+
   function emit() {
-    onfilter?.({ fighter_ids: [...selectedIds], date_from: dateFrom, date_to: dateTo });
+    onfilter?.({ fighter_ids: [...selectedIds], date_from: dateFrom, date_to: dateTo, event_type: eventType });
   }
 </script>
 
@@ -171,6 +197,37 @@
     {/if}
   </section>
 
+  <!-- Event Type filter -->
+  <section class="section">
+    <h3 class="section-title">События</h3>
+    <div class="event-type-tabs">
+      <button
+        type="button"
+        class="event-tab"
+        class:active={eventType === 'all'}
+        onclick={() => setEventType('all')}
+      >
+        Все
+      </button>
+      <button
+        type="button"
+        class="event-tab"
+        class:active={eventType === 'training'}
+        onclick={() => setEventType('training')}
+      >
+        Тренировки
+      </button>
+      <button
+        type="button"
+        class="event-tab"
+        class:active={eventType === 'tournament'}
+        onclick={() => setEventType('tournament')}
+      >
+        Турниры
+      </button>
+    </div>
+  </section>
+
   <!-- Date filter -->
   <section class="section">
     <h3 class="section-title">Дата</h3>
@@ -178,6 +235,7 @@
       dateStart={dateFrom}
       dateEnd={dateTo}
       fightDates={videoDatesSet}
+      tournamentDates={tournamentDatesSet}
       onchange={handleDateChange}
     />
   </section>
@@ -357,5 +415,41 @@
     font-size: 0.8rem;
     color: var(--text-secondary);
     padding: 4px 6px;
+  }
+
+  .event-type-tabs {
+    display: flex;
+    background: var(--surface-deep);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 3px;
+    gap: 3px;
+    margin-bottom: 4px;
+  }
+
+  .event-tab {
+    flex: 1;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 500;
+    font-family: inherit;
+    padding: 6px 4px;
+    border-radius: calc(var(--radius-sm) - 2px);
+    cursor: pointer;
+    transition: var(--transition);
+    text-align: center;
+  }
+
+  .event-tab:hover {
+    color: var(--text-primary);
+  }
+
+  .event-tab.active {
+    background: var(--surface-solid);
+    color: var(--accent-yellow);
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
   }
 </style>

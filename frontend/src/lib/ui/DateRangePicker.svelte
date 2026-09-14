@@ -3,10 +3,11 @@
     dateStart: string;
     dateEnd: string;
     fightDates: Set<string>;
+    tournamentDates?: Set<string>;
     onchange: (start: string, end: string) => void;
   }
 
-  let { dateStart = $bindable(), dateEnd = $bindable(), fightDates, onchange }: Props = $props();
+  let { dateStart = $bindable(), dateEnd = $bindable(), fightDates, tournamentDates = new Set<string>(), onchange }: Props = $props();
 
   let isOpen = $state(false);
   let viewDate = $state(new Date());
@@ -38,20 +39,20 @@
     const totalDays = new Date(year, month + 1, 0).getDate();
     const prevMonthDays = new Date(year, month, 0).getDate();
 
-    const list: Array<{ date: Date; dateStr: string; isCurrentMonth: boolean; hasFight: boolean }> = [];
+    const list: Array<{ date: Date; dateStr: string; isCurrentMonth: boolean; hasFight: boolean; isTournament: boolean }> = [];
 
     // Prev month padding
     for (let i = startDay - 1; i >= 0; i--) {
       const d = new Date(year, month - 1, prevMonthDays - i);
       const str = formatDate(d);
-      list.push({ date: d, dateStr: str, isCurrentMonth: false, hasFight: fightDates.has(str) });
+      list.push({ date: d, dateStr: str, isCurrentMonth: false, hasFight: fightDates.has(str), isTournament: tournamentDates.has(str) });
     }
 
     // Current month
     for (let i = 1; i <= totalDays; i++) {
       const d = new Date(year, month, i);
       const str = formatDate(d);
-      list.push({ date: d, dateStr: str, isCurrentMonth: true, hasFight: fightDates.has(str) });
+      list.push({ date: d, dateStr: str, isCurrentMonth: true, hasFight: fightDates.has(str), isTournament: tournamentDates.has(str) });
     }
 
     // Next month padding
@@ -61,7 +62,7 @@
       for (let i = 1; i <= nextPadding; i++) {
         const d = new Date(year, month + 1, i);
         const str = formatDate(d);
-        list.push({ date: d, dateStr: str, isCurrentMonth: false, hasFight: fightDates.has(str) });
+        list.push({ date: d, dateStr: str, isCurrentMonth: false, hasFight: fightDates.has(str), isTournament: tournamentDates.has(str) });
       }
     }
 
@@ -84,7 +85,7 @@
       d.setUTCDate(d.getUTCDate() - (dow - 1));
     }
     
-    const list: Array<{ start: string; end: string; label: string; hasFight: boolean }> = [];
+    const list: Array<{ start: string; end: string; label: string; hasFight: boolean; hasTournament: boolean }> = [];
     
     // Loop until we cover all weeks overlapping with this month
     while (d <= last || (d.getUTCMonth() === month && d <= last)) {
@@ -93,13 +94,17 @@
       sunday.setUTCDate(sunday.getUTCDate() + 6);
       const endStr = formatDate(sunday);
       
-      // Check if any day in this week has a fight
+      // Check if any day in this week has a fight / tournament
       let hasFight = false;
+      let hasTournament = false;
       const checkDay = new Date(d);
       for (let i = 0; i < 7; i++) {
-        if (fightDates.has(formatDate(checkDay))) {
+        const checkStr = formatDate(checkDay);
+        if (fightDates.has(checkStr)) {
           hasFight = true;
-          break;
+        }
+        if (tournamentDates.has(checkStr)) {
+          hasTournament = true;
         }
         checkDay.setUTCDate(checkDay.getUTCDate() + 1);
       }
@@ -113,7 +118,8 @@
         start: startStr,
         end: endStr,
         label: formatLabel(new Date(d), new Date(sunday)),
-        hasFight
+        hasFight,
+        hasTournament,
       });
       
       d.setUTCDate(d.getUTCDate() + 7);
@@ -237,6 +243,7 @@
               class="week-row"
               class:selected={dateStart === week.start && dateEnd === week.end}
               class:has-fight={week.hasFight}
+              class:has-tournament={week.hasTournament}
               onclick={() => {
                 if (dateStart === week.start && dateEnd === week.end) {
                   dateStart = '';
@@ -251,7 +258,9 @@
               }}
             >
               <span class="week-label">{week.label}</span>
-              {#if week.hasFight}
+              {#if week.hasTournament}
+                <span class="week-tournament-badge" title="Турнир">🏆</span>
+              {:else if week.hasFight}
                 <span class="week-fight-dot"></span>
               {/if}
             </button>
@@ -278,10 +287,13 @@
               class:selected-end={day.dateStr === dateEnd}
               class:in-range={dateStart && dateEnd && day.dateStr > dateStart && day.dateStr < dateEnd}
               class:has-fight={day.hasFight}
+              class:has-tournament={day.isTournament}
               onclick={() => selectDate(day.dateStr)}
             >
               <span class="day-number">{day.date.getDate()}</span>
-              {#if day.hasFight}
+              {#if day.isTournament}
+                <span class="day-tournament-icon" title="Турнир">🏆</span>
+              {:else if day.hasFight}
                 <span class="fight-dot"></span>
               {/if}
             </div>
@@ -482,6 +494,19 @@
     font-weight: 600;
   }
 
+  .week-row.has-tournament:not(.selected) {
+    border-color: #f59e0b !important;
+    background: rgba(245, 158, 11, 0.2) !important;
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.25);
+  }
+
+  .week-tournament-badge {
+    font-size: 0.85rem;
+    line-height: 1;
+    margin-left: 6px;
+    filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));
+  }
+
   .week-row.selected .week-fight-dot {
     background: #000;
   }
@@ -570,6 +595,25 @@
     border: 1px solid rgba(245, 158, 11, 0.45);
     border-radius: 6px;
     color: #fff;
+  }
+
+  .day-cell.has-tournament:not(.selected-start):not(.selected-end):not(.in-range) {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.35), rgba(217, 119, 6, 0.45)) !important;
+    border: 1px solid #f59e0b !important;
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
+    border-radius: 6px;
+    color: #fff;
+    font-weight: 700;
+  }
+
+  .day-tournament-icon {
+    position: absolute;
+    top: -2px;
+    right: -1px;
+    font-size: 8px;
+    line-height: 1;
+    pointer-events: none;
+    filter: drop-shadow(0 0 2px rgba(0,0,0,0.8));
   }
 
   .day-cell.has-fight .fight-dot {

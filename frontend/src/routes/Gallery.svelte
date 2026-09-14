@@ -31,19 +31,32 @@
   const FILTER_KEY = 'ef_gallery_filter';
   const SCROLL_KEY = 'ef_gallery_scroll';
 
-  function loadSavedFilter() {
-    try {
-      const raw = sessionStorage.getItem(FILTER_KEY);
-      if (raw) return JSON.parse(raw) as { fighter_ids: string[]; date_from: string; date_to: string };
-    } catch { /* ignore */ }
-    return { fighter_ids: [], date_from: '', date_to: '' };
-  }
+  type EventTypeFilter = 'all' | 'training' | 'tournament';
 
-  let activeFilter = $state<{
+  interface GalleryFilter {
     fighter_ids: string[];
     date_from: string;
     date_to: string;
-  }>(loadSavedFilter());
+    event_type: EventTypeFilter;
+  }
+
+  function loadSavedFilter(): GalleryFilter {
+    try {
+      const raw = sessionStorage.getItem(FILTER_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return {
+          fighter_ids: parsed.fighter_ids || [],
+          date_from: parsed.date_from || '',
+          date_to: parsed.date_to || '',
+          event_type: parsed.event_type || 'all',
+        };
+      }
+    } catch { /* ignore */ }
+    return { fighter_ids: [], date_from: '', date_to: '', event_type: 'all' };
+  }
+
+  let activeFilter = $state<GalleryFilter>(loadSavedFilter());
 
   async function loadVideos() {
     loading = true;
@@ -60,6 +73,12 @@
 
   function applyFilter() {
     let result = allVideos;
+
+    if (activeFilter.event_type === 'training') {
+      result = result.filter((v) => !v.is_tournament);
+    } else if (activeFilter.event_type === 'tournament') {
+      result = result.filter((v) => v.is_tournament);
+    }
 
     if (activeFilter.fighter_ids.length > 0) {
       result = result.filter((v) =>
@@ -80,7 +99,7 @@
     filteredVideos = result;
   }
 
-  function handleFilter(filter: { fighter_ids: string[]; date_from: string; date_to: string }) {
+  function handleFilter(filter: GalleryFilter) {
     activeFilter = filter;
     sessionStorage.setItem(FILTER_KEY, JSON.stringify(filter));
     applyFilter();
@@ -114,6 +133,8 @@
             is_tagged: false,
             is_ai_labeled: false,
             is_analyzing: false,
+            is_tournament: !!msg.is_tournament,
+            tournament_name: msg.tournament_name || null,
             preview_url: msg.preview_url ?? `/api/videos/${msg.id}/previews/0`,
             preview_count: 0,
           };
