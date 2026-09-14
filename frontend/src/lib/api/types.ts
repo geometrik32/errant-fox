@@ -78,6 +78,8 @@ export interface Video {
   is_eligible_for_optimization?: boolean;
   has_transcript?: boolean;
   has_human_bouts?: boolean;
+  has_h264?: boolean;
+  is_transcoding?: boolean;
   is_tournament: boolean;
   tournament_name?: string | null;
   preview_url: string;
@@ -131,6 +133,8 @@ export interface VideoFull {
   is_eligible_for_optimization?: boolean;
   has_transcript?: boolean;
   has_human_bouts?: boolean;
+  has_h264?: boolean;
+  is_transcoding?: boolean;
   is_tournament: boolean;
   tournament_name?: string | null;
   bouts: Bout[];

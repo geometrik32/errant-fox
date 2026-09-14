@@ -140,6 +140,11 @@ pub enum WsEvent {
         is_optimized: bool,
         is_optimizing: bool,
     },
+    UpdateVideoTranscode {
+        video_id: String,
+        has_h264: bool,
+        is_transcoding: bool,
+    },
 }
 
 impl WsEvent {
@@ -154,6 +159,7 @@ impl WsEvent {
                 | WsEvent::VideoRemoved { .. }
                 | WsEvent::PresenceUpdate { .. }
                 | WsEvent::UpdateVideoOptimized { .. }
+                | WsEvent::UpdateVideoTranscode { .. }
         )
     }
 
@@ -169,6 +175,7 @@ impl WsEvent {
             WsEvent::UpdateVideoAiLabeled { video_id, .. } => Some(video_id),
             WsEvent::UpdateVideoPreview { video_id, .. } => Some(video_id),
             WsEvent::UpdateVideoOptimized { video_id, .. } => Some(video_id),
+            WsEvent::UpdateVideoTranscode { video_id, .. } => Some(video_id),
             WsEvent::NewVideo { .. } => None,
             WsEvent::VideoRemoved { .. } => None,
             WsEvent::PresenceUpdate { .. } => None,

@@ -17,15 +17,17 @@ pub struct TranscodeManager {
     pub server_port: u16,
     semaphore: Arc<Semaphore>,
     active_jobs: Arc<Mutex<HashMap<String, watch::Receiver<TranscodeState>>>>,
+    pub ws_hub: crate::services::ws::WsHub,
 }
 
 impl TranscodeManager {
-    pub fn new(temp_dir: PathBuf, server_port: u16) -> Arc<Self> {
+    pub fn new(temp_dir: PathBuf, server_port: u16, ws_hub: crate::services::ws::WsHub) -> Arc<Self> {
         let mgr = Arc::new(Self {
             temp_dir,
             server_port,
             semaphore: Arc::new(Semaphore::new(1)),
             active_jobs: Arc::new(Mutex::new(HashMap::new())),
+            ws_hub,
         });
 
         // Ensure temp directory exists
@@ -38,6 +40,11 @@ impl TranscodeManager {
         });
 
         mgr
+    }
+
+    pub async fn active_job_ids(&self) -> std::collections::HashSet<String> {
+        let jobs = self.active_jobs.lock().await;
+        jobs.keys().cloned().collect()
     }
 
     pub fn target_path(&self, video_id: &str) -> PathBuf {
@@ -92,20 +99,33 @@ impl TranscodeManager {
         jobs.insert(video_id.to_string(), rx.clone());
         drop(jobs);
 
+        let _ = self.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoTranscode {
+            video_id: video_id.to_string(),
+            has_h264: false,
+            is_transcoding: true,
+        });
+
         let mgr = self.clone();
         let vid = video_id.to_string();
         tokio::spawn(async move {
             let res = mgr.run_transcode(&vid).await;
-            let final_state = match res {
-                Ok(_) => TranscodeState::Ready,
+            let (final_state, has_h264) = match res {
+                Ok(_) => (TranscodeState::Ready, true),
                 Err(e) => {
                     tracing::error!("Transcode failed for video {}: {:?}", vid, e);
-                    TranscodeState::Failed(e.to_string())
+                    (TranscodeState::Failed(e.to_string()), false)
                 }
             };
             let _ = tx.send(final_state);
             let mut jobs = mgr.active_jobs.lock().await;
             jobs.remove(&vid);
+            drop(jobs);
+
+            let _ = mgr.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoTranscode {
+                video_id: vid,
+                has_h264,
+                is_transcoding: false,
+            });
         });
 
         rx
@@ -417,7 +437,7 @@ impl TranscodeManager {
     }
 
     async fn run_cleaner_loop(&self) {
-        let mut interval = tokio::time::interval(Duration::from_secs(3600));
+        let mut interval = tokio::time::interval(Duration::from_secs(24 * 3600));
         loop {
             interval.tick().await;
             self.clean_expired_files().await;
@@ -425,7 +445,7 @@ impl TranscodeManager {
     }
 
     async fn clean_expired_files(&self) {
-        let ttl = Duration::from_secs(24 * 3600);
+        let ttl = Duration::from_secs(7 * 24 * 3600);
         let mut read_dir = match tokio::fs::read_dir(&self.temp_dir).await {
             Ok(rd) => rd,
             Err(e) => {
@@ -446,6 +466,14 @@ impl TranscodeManager {
                             if elapsed > ttl {
                                 tracing::info!("Deleting expired transcode file: {:?}", path);
                                 let _ = tokio::fs::remove_file(&path).await;
+                                if file_name.ends_with(".mp4") && !file_name.ends_with(".tmp") {
+                                    let vid = &file_name[5..file_name.len() - 4];
+                                    let _ = self.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoTranscode {
+                                        video_id: vid.to_string(),
+                                        has_h264: false,
+                                        is_transcoding: false,
+                                    });
+                                }
                             }
                         }
                     }

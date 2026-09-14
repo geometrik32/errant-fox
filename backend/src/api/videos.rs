@@ -59,6 +59,8 @@ pub struct VideoListDto {
     pub is_eligible_for_optimization: bool,
     pub has_transcript: bool,
     pub has_human_bouts: bool,
+    pub has_h264: bool,
+    pub is_transcoding: bool,
     pub is_tournament: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tournament_name: Option<String>,
@@ -125,6 +127,8 @@ pub struct VideoFullDto {
     pub is_eligible_for_optimization: bool,
     pub has_transcript: bool,
     pub has_human_bouts: bool,
+    pub has_h264: bool,
+    pub is_transcoding: bool,
     pub is_tournament: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tournament_name: Option<String>,
@@ -184,6 +188,8 @@ fn build_video_full(
     reactions_map: &HashMap<i32, (i32, i32, Option<String>)>,
     stream_url: String,
     transcripts_dir: &str,
+    has_h264: bool,
+    is_transcoding: bool,
 ) -> VideoFullDto {
     let fighter_a = video
         .fighter_a_id
@@ -256,6 +262,8 @@ fn build_video_full(
         is_eligible_for_optimization,
         has_transcript,
         has_human_bouts,
+        has_h264,
+        is_transcoding,
         is_tournament: video.is_tournament,
         tournament_name: video.tournament_name.clone(),
         bouts: bouts.iter().map(bout_dto).collect(),
@@ -345,6 +353,8 @@ pub async fn list_videos(
     let fighter_id = params.fighter_id.clone();
     let is_admin = _user.0.is_admin;
     let transcripts_dir = state.transcripts_dir.clone();
+    let temp_dir = state.transcode.temp_dir.clone();
+    let active_transcodes = state.transcode.active_job_ids().await;
 
     let result = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{bouts, users, videos};
@@ -412,6 +422,22 @@ pub async fn list_videos(
             bouts_by_video.entry(b.video_id.clone()).or_default().push(b);
         }
 
+        let h264_set: std::collections::HashSet<String> = match std::fs::read_dir(&temp_dir) {
+            Ok(entries) => entries
+                .filter_map(|e| e.ok())
+                .filter_map(|e| {
+                    let name = e.file_name().to_string_lossy().into_owned();
+                    if name.starts_with("h264_") && name.ends_with(".mp4") && !name.ends_with(".tmp") {
+                        let id = &name[5..name.len() - 4];
+                        Some(id.to_string())
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            Err(_) => std::collections::HashSet::new(),
+        };
+
         let dtos: Vec<VideoListDto> = video_list
             .iter()
             .map(|v| {
@@ -462,6 +488,8 @@ pub async fn list_videos(
                     is_eligible_for_optimization,
                     has_transcript: std::path::Path::new(&format!("{}/{}.json", transcripts_dir, v.id)).exists(),
                     has_human_bouts,
+                    has_h264: h264_set.contains(&v.id),
+                    is_transcoding: active_transcodes.contains(&v.id),
                     is_tournament: v.is_tournament,
                     tournament_name: v.tournament_name.clone(),
                     seafile_path: if is_admin { Some(v.seafile_path.clone()) } else { None },
@@ -524,6 +552,7 @@ pub async fn get_video_dto_impl(
     let video_id_clone = video_id.to_string();
     let db_clone = db.clone();
     let transcripts_dir = state.transcripts_dir.clone();
+    let (has_h264, is_transcoding) = state.transcode.check_status(video_id).await;
     let dto = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{bouts, comment_reactions, comments};
 
@@ -562,6 +591,8 @@ pub async fn get_video_dto_impl(
             &reactions_map,
             String::new(),
             &transcripts_dir,
+            has_h264,
+            is_transcoding,
         ))
     })
     .await
@@ -800,6 +831,7 @@ pub async fn patch_video(
     let frontend_origin = state.frontend_url.clone();
     let video_id_for_db = video_id.clone();
     let transcripts_dir = state.transcripts_dir.clone();
+    let (has_h264, is_transcoding) = state.transcode.check_status(&video_id).await;
 
     let (dto, notifications) = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{bouts, comment_reactions, comments, videos, users};
@@ -903,6 +935,8 @@ pub async fn patch_video(
             &reactions_map,
             String::new(),
             &transcripts_dir,
+            has_h264,
+            is_transcoding,
         );
 
         Ok::<_, AppError>((full_dto, notifications))

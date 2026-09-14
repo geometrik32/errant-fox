@@ -39,6 +39,11 @@
   );
   let eligibleForAiCount = $derived(eligibleForAi.length);
 
+  let eligibleForTranscode = $derived(
+    selectedVideos.filter((v) => !v.has_h264 && !v.is_transcoding)
+  );
+  let eligibleForTranscodeCount = $derived(eligibleForTranscode.length);
+
   interface DateGroup {
     date: string;
     label: string;
@@ -174,10 +179,19 @@
 
   function promptBatchTranscode() {
     closeBatchMenu();
+    if (eligibleForTranscodeCount === 0) {
+      showToast('Все выбранные видео уже имеют готовую версию H.264', 'info');
+      return;
+    }
+    const skipped = selectedCount - eligibleForTranscodeCount;
+    const message = skipped > 0
+      ? `Выбрано: ${selectedCount} видео.\nИз них требуют конвертации: ${eligibleForTranscodeCount}.\nОстальные (${skipped}) уже имеют версию H.264 и будут пропущены.\n\nЗапустить конвертацию в H.264 для ${eligibleForTranscodeCount} видео?`
+      : `Запустить пакетную конвертацию в H.264 для ${eligibleForTranscodeCount} видео? Обработка будет выполняться в фоновом режиме на сервере.`;
+
     confirmModal = {
       open: true,
       title: 'Конвертация в H.264',
-      message: `Запустить пакетную конвертацию в H.264 для ${selectedCount} видео? Недостающие видео будут добавлены в очередь обработки.`,
+      message,
       danger: false,
       action: executeBatchTranscode,
     };
@@ -224,16 +238,14 @@
   }
 
   async function executeBatchTranscode() {
-    const ids = Array.from(selectedIds);
+    const ids = eligibleForTranscode.map((v) => v.id);
     if (ids.length === 0) return;
     try {
       const res = await batchTranscodeVideos(ids);
-      if (res.queued > 0 && res.already_ready > 0) {
-        showToast(`H.264: ${res.queued} видео в очереди, ${res.already_ready} уже готово`, 'success');
-      } else if (res.queued > 0) {
+      if (res.queued > 0) {
         showToast(`Конвертация в H.264 запущена для ${res.queued} видео`, 'success');
       } else {
-        showToast(`Все выбранные видео (${res.already_ready}) уже сконвертированы в H.264`, 'info');
+        showToast(`Все выбранные видео уже сконвертированы в H.264`, 'info');
       }
       clearSelection();
     } catch (err) {
@@ -344,7 +356,14 @@
     <div class="menu-divider"></div>
 
     {#if $currentUser?.is_admin}
-      <button class="menu-item" onclick={promptBatchTranscode} title="Сконвертировать выбранные видео в H.264">
+      <button 
+        class="menu-item" 
+        onclick={promptBatchTranscode} 
+        disabled={eligibleForTranscodeCount === 0}
+        title={eligibleForTranscodeCount > 0 
+          ? `Сконвертировать выбранные видео в H.264 (${eligibleForTranscodeCount} из ${selectedCount} требуется)` 
+          : 'Все выбранные видео уже имеют готовую версию H.264'}
+      >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
           <line x1="7" y1="2" x2="7" y2="22"/>
@@ -355,7 +374,7 @@
           <line x1="17" y1="17" x2="22" y2="17"/>
           <line x1="17" y1="7" x2="22" y2="7"/>
         </svg>
-        <span>Конвертировать в H.264 ({selectedCount})</span>
+        <span>Конвертировать в H.264 ({eligibleForTranscodeCount})</span>
       </button>
 
       <button 
@@ -409,14 +428,21 @@
     </div>
 
     {#if $currentUser?.is_admin}
-      <button class="batch-bar-btn" onclick={promptBatchTranscode} title="Сконвертировать выбранные в H.264">
+      <button 
+        class="batch-bar-btn" 
+        onclick={promptBatchTranscode} 
+        disabled={eligibleForTranscodeCount === 0}
+        title={eligibleForTranscodeCount > 0 
+          ? `Сконвертировать выбранные в H.264 (${eligibleForTranscodeCount} из ${selectedCount})` 
+          : 'Все выбранные видео уже имеют готовую версию H.264'}
+      >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
           <line x1="7" y1="2" x2="7" y2="22"/>
           <line x1="17" y1="2" x2="17" y2="22"/>
           <line x1="2" y1="12" x2="22" y2="12"/>
         </svg>
-        <span>Конвертировать H.264</span>
+        <span>Конвертировать H.264 ({eligibleForTranscodeCount})</span>
       </button>
 
       <button 
