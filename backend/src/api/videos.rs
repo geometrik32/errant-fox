@@ -1912,19 +1912,22 @@ pub async fn batch_ai_label_video(
         .map_err(|e| AppError::Internal(e.to_string()))??
     };
 
-    // Filter out any video that has human-labeled bouts or is currently analyzing
+    // Filter out any video that has human-labeled bouts or is currently analyzing or queued
     let db_filter = state.db.clone();
-    let video_ids: Vec<String> = tokio::task::spawn_blocking(move || {
+    let raw_ids_clone = raw_ids.clone();
+    let (video_ids, skipped_count): (Vec<String>, usize) = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{videos, bouts};
         let mut conn = db_filter.get().map_err(|e| AppError::Internal(e.to_string()))?;
         let target_videos = videos::table
-            .filter(videos::id.eq_any(&raw_ids))
-            .select((videos::id, videos::is_ai_labeled, videos::is_analyzing))
-            .load::<(String, bool, bool)>(&mut conn)
+            .filter(videos::id.eq_any(&raw_ids_clone))
+            .select((videos::id, videos::is_ai_labeled, videos::is_analyzing, videos::is_queued))
+            .load::<(String, bool, bool, bool)>(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
         let mut valid = Vec::new();
-        for (v_id, is_ai_labeled, is_analyzing) in target_videos {
-            if is_analyzing {
+        let mut skipped = 0;
+        for (v_id, is_ai_labeled, is_analyzing, is_queued) in target_videos {
+            if is_analyzing || is_queued {
+                skipped += 1;
                 continue;
             }
             if is_ai_labeled {
@@ -1938,10 +1941,16 @@ pub async fn batch_ai_label_video(
                     .unwrap_or(0);
                 if human_bouts == 0 {
                     valid.push(v_id);
+                } else {
+                    skipped += 1;
                 }
             }
         }
-        Ok::<Vec<String>, AppError>(valid)
+        let found = valid.len() + skipped;
+        if raw_ids_clone.len() > found {
+            skipped += raw_ids_clone.len() - found;
+        }
+        Ok::<_, AppError>((valid, skipped))
     })
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
@@ -1949,32 +1958,36 @@ pub async fn batch_ai_label_video(
     let count = video_ids.len();
 
     // Mark all target videos as is_queued = true in DB
-    let db_batch = state.db.clone();
-    let target_ids = video_ids.clone();
-    let _ = tokio::task::spawn_blocking(move || {
-        use crate::db::schema::videos;
-        if let Ok(mut conn) = db_batch.get() {
-            let _ = diesel::update(videos::table.filter(videos::id.eq_any(&target_ids)))
-                .set(videos::is_queued.eq(true))
-                .execute(&mut conn);
-        }
-    }).await;
+    if count > 0 {
+        let db_batch = state.db.clone();
+        let target_ids = video_ids.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            use crate::db::schema::videos;
+            if let Ok(mut conn) = db_batch.get() {
+                let _ = diesel::update(videos::table.filter(videos::id.eq_any(&target_ids)))
+                    .set(videos::is_queued.eq(true))
+                    .execute(&mut conn);
+            }
+        }).await;
 
-    // Send WS notification for every queued video & send to queue worker
-    for vid in &video_ids {
-        let _ = state.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoAiLabeled {
-            video_id: vid.clone(),
-            is_ai_labeled: false,
-            is_analyzing: false,
-            is_queued: true,
-            has_transcript: None,
-        });
-        let _ = state.ai_queue_tx.send(vid.clone());
+        // Send WS notification for every queued video & send to queue worker
+        for vid in &video_ids {
+            let _ = state.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoAiLabeled {
+                video_id: vid.clone(),
+                is_ai_labeled: false,
+                is_analyzing: false,
+                is_queued: true,
+                has_transcript: None,
+            });
+            let _ = state.ai_queue_tx.send(vid.clone());
+        }
     }
 
     Ok(Json(serde_json::json!({
         "status": "batch_started",
-        "count": count
+        "count": count,
+        "queued_count": count,
+        "skipped_count": skipped_count
     })))
 }
 
@@ -3050,47 +3063,108 @@ pub async fn batch_optimize_videos(
 
     let video_ids = payload.video_ids;
     if video_ids.is_empty() {
-        return Ok(axum::response::Json(serde_json::json!({ "queued_count": 0 })));
+        return Ok(axum::response::Json(serde_json::json!({
+            "status": "queued",
+            "queued_count": 0,
+            "skipped_count": 0
+        })));
     }
 
-    let state_clone = state.clone();
-    tokio::spawn(async move {
-        for vid in video_ids {
-            // Set is_optimizing in DB
-            let db = state_clone.db.clone();
-            let vid_c = vid.clone();
-            let should_run = tokio::task::spawn_blocking(move || -> bool {
-                use crate::db::schema::videos;
-                use diesel::prelude::*;
-                if let Ok(mut conn) = db.get() {
-                    let v = videos::table.filter(videos::id.eq(&vid_c)).first::<Video>(&mut conn);
-                    if let Ok(v) = v {
-                        if !v.is_optimizing && !v.is_optimized {
-                            let _ = diesel::update(videos::table.filter(videos::id.eq(&vid_c)))
-                                .set(videos::is_optimizing.eq(true))
-                                .execute(&mut conn);
-                            return true;
-                        }
-                    }
-                }
-                false
-            }).await.unwrap_or(false);
+    let db = state.db.clone();
+    let raw_ids = video_ids.clone();
+    let (valid_ids, skipped_count): (Vec<String>, usize) = tokio::task::spawn_blocking(move || -> Result<(Vec<String>, usize), AppError> {
+        use crate::db::schema::{videos, bouts};
+        use diesel::prelude::*;
+        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
 
-            if should_run {
-                let _ = state_clone.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoOptimized {
-                    video_id: vid.clone(),
-                    is_optimized: false,
-                    is_optimizing: true,
-                });
+        let target_videos: Vec<Video> = videos::table
+            .filter(videos::id.eq_any(&raw_ids))
+            .load::<Video>(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
 
-                if let Err(e) = run_optimize_task(state_clone.clone(), vid.clone()).await {
-                    tracing::error!("Batch optimization failed for {}: {:?}", vid, e);
-                }
+        let target_bouts: Vec<crate::db::models::Bout> = bouts::table
+            .filter(bouts::video_id.eq_any(&raw_ids))
+            .load::<crate::db::models::Bout>(&mut conn)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let mut bouts_by_video: std::collections::HashMap<String, Vec<crate::db::models::Bout>> = std::collections::HashMap::new();
+        for b in target_bouts {
+            bouts_by_video.entry(b.video_id.clone()).or_default().push(b);
+        }
+
+        let mut valid = Vec::new();
+        let mut skipped = 0;
+
+        for v in target_videos {
+            if v.is_optimizing || v.is_optimized || v.is_ai_labeled {
+                skipped += 1;
+                continue;
+            }
+            let vb = bouts_by_video.get(&v.id).map(|s| s.as_slice()).unwrap_or(&[]);
+            let is_eligible = !vb.is_empty() && vb.iter().all(|b| !b.is_ai);
+            if is_eligible {
+                valid.push(v.id);
+            } else {
+                skipped += 1;
             }
         }
-    });
 
-    Ok(axum::response::Json(serde_json::json!({ "status": "queued" })))
+        let found_count = valid.len() + skipped;
+        if raw_ids.len() > found_count {
+            skipped += raw_ids.len() - found_count;
+        }
+
+        Ok((valid, skipped))
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    let queued_count = valid_ids.len();
+
+    if queued_count > 0 {
+        let state_clone = state.clone();
+        tokio::spawn(async move {
+            for vid in valid_ids {
+                // Set is_optimizing in DB
+                let db = state_clone.db.clone();
+                let vid_c = vid.clone();
+                let should_run = tokio::task::spawn_blocking(move || -> bool {
+                    use crate::db::schema::videos;
+                    use diesel::prelude::*;
+                    if let Ok(mut conn) = db.get() {
+                        let v = videos::table.filter(videos::id.eq(&vid_c)).first::<Video>(&mut conn);
+                        if let Ok(v) = v {
+                            if !v.is_optimizing && !v.is_optimized {
+                                let _ = diesel::update(videos::table.filter(videos::id.eq(&vid_c)))
+                                    .set(videos::is_optimizing.eq(true))
+                                    .execute(&mut conn);
+                                return true;
+                            }
+                        }
+                    }
+                    false
+                }).await.unwrap_or(false);
+
+                if should_run {
+                    let _ = state_clone.ws_hub.send(crate::services::ws::WsEvent::UpdateVideoOptimized {
+                        video_id: vid.clone(),
+                        is_optimized: false,
+                        is_optimizing: true,
+                    });
+
+                    if let Err(e) = run_optimize_task(state_clone.clone(), vid.clone()).await {
+                        tracing::error!("Batch optimization failed for {}: {:?}", vid, e);
+                    }
+                }
+            }
+        });
+    }
+
+    Ok(axum::response::Json(serde_json::json!({
+        "status": "queued",
+        "queued_count": queued_count,
+        "skipped_count": skipped_count
+    })))
 }
 
 pub async fn batch_transcode_videos(

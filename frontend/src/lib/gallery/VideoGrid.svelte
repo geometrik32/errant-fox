@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Video } from '../api/types';
   import VideoCard from './VideoCard.svelte';
+  import ConfirmModal from '../ui/ConfirmModal.svelte';
   import { currentUser } from '../../stores';
   import { showToast } from '../stores/toast';
   import {
@@ -26,6 +27,17 @@
 
   let selectedCount = $derived(selectedIds.size);
   let hasSelection = $derived(selectedIds.size > 0);
+  let selectedVideos = $derived(videos.filter((v) => selectedIds.has(v.id)));
+
+  let eligibleForOptimize = $derived(
+    selectedVideos.filter((v) => v.is_eligible_for_optimization)
+  );
+  let eligibleForOptimizeCount = $derived(eligibleForOptimize.length);
+
+  let eligibleForAi = $derived(
+    selectedVideos.filter((v) => !v.has_human_bouts && !v.is_analyzing && !v.is_queued)
+  );
+  let eligibleForAiCount = $derived(eligibleForAi.length);
 
   interface DateGroup {
     date: string;
@@ -146,10 +158,74 @@
     }
   }
 
-  async function handleBatchTranscode() {
+  let confirmModal = $state<{
+    open: boolean;
+    title: string;
+    message: string;
+    action: () => Promise<void>;
+    danger?: boolean;
+  }>({
+    open: false,
+    title: '',
+    message: '',
+    action: async () => {},
+    danger: false,
+  });
+
+  function promptBatchTranscode() {
+    closeBatchMenu();
+    confirmModal = {
+      open: true,
+      title: 'Конвертация в H.264',
+      message: `Запустить пакетную конвертацию в H.264 для ${selectedCount} видео? Недостающие видео будут добавлены в очередь обработки.`,
+      danger: false,
+      action: executeBatchTranscode,
+    };
+  }
+
+  function promptBatchOptimize() {
+    closeBatchMenu();
+    if (eligibleForOptimizeCount === 0) {
+      showToast('Среди выбранных нет видео, полностью размеченных человеком', 'error');
+      return;
+    }
+    const skipped = selectedCount - eligibleForOptimizeCount;
+    const message = skipped > 0
+      ? `Выбрано: ${selectedCount} видео.\nИз них полностью размечены человеком и готовы к оптимизации: ${eligibleForOptimizeCount}.\nОстальные (${skipped}) не размечены или размечены ИИ и будут пропущены.\n\nЗапустить VFR-оптимизацию для ${eligibleForOptimizeCount} видео?`
+      : `Запустить пакетную VFR-оптимизацию (сжатие) для ${eligibleForOptimizeCount} видео? Обработка будет выполняться в фоновом режиме на сервере.`;
+
+    confirmModal = {
+      open: true,
+      title: 'Оптимизация видео',
+      message,
+      danger: false,
+      action: executeBatchOptimize,
+    };
+  }
+
+  function promptBatchAiLabel() {
+    closeBatchMenu();
+    if (eligibleForAiCount === 0) {
+      showToast('Все выбранные видео уже размечены человеком или находятся в очереди ИИ', 'error');
+      return;
+    }
+    const skipped = selectedCount - eligibleForAiCount;
+    const message = skipped > 0
+      ? `Выбрано: ${selectedCount} видео.\nИз них готовы к ИИ-разметке: ${eligibleForAiCount}.\nОстальные (${skipped}) уже размечены человеком или обрабатываются и будут пропущены.\n\nЗапустить ИИ-разметку для ${eligibleForAiCount} видео?`
+      : `Запустить пакетную ИИ-разметку сходов для ${eligibleForAiCount} видео?`;
+
+    confirmModal = {
+      open: true,
+      title: 'ИИ-разметка сходов',
+      message,
+      danger: false,
+      action: executeBatchAiLabel,
+    };
+  }
+
+  async function executeBatchTranscode() {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
-    closeBatchMenu();
     try {
       const res = await batchTranscodeVideos(ids);
       if (res.queued > 0 && res.already_ready > 0) {
@@ -165,26 +241,36 @@
     }
   }
 
-  async function handleBatchOptimize() {
-    const ids = Array.from(selectedIds);
+  async function executeBatchOptimize() {
+    const ids = eligibleForOptimize.map((v) => v.id);
     if (ids.length === 0) return;
-    closeBatchMenu();
     try {
-      await batchOptimizeVideos(ids);
-      showToast(`Оптимизация запущена для ${ids.length} видео`, 'success');
+      const res = await batchOptimizeVideos(ids);
+      const queued = res.queued_count ?? ids.length;
+      const skipped = (res.skipped_count ?? 0) + (selectedCount - ids.length);
+      if (skipped > 0) {
+        showToast(`Оптимизация запущена для ${queued} видео (${skipped} пропущено)`, 'success');
+      } else {
+        showToast(`Оптимизация запущена для ${queued} видео`, 'success');
+      }
       clearSelection();
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Ошибка запуска оптимизации', 'error');
     }
   }
 
-  async function handleBatchAiLabel() {
-    const ids = Array.from(selectedIds);
+  async function executeBatchAiLabel() {
+    const ids = eligibleForAi.map((v) => v.id);
     if (ids.length === 0) return;
-    closeBatchMenu();
     try {
-      await batchAiLabelVideos(ids);
-      showToast(`ИИ-разметка запущена для ${ids.length} видео`, 'success');
+      const res = await batchAiLabelVideos(ids);
+      const queued = res.queued_count ?? res.count ?? ids.length;
+      const skipped = (res.skipped_count ?? 0) + (selectedCount - ids.length);
+      if (skipped > 0) {
+        showToast(`ИИ-разметка запущена для ${queued} видео (${skipped} пропущено)`, 'success');
+      } else {
+        showToast(`ИИ-разметка запущена для ${queued} видео`, 'success');
+      }
       clearSelection();
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Ошибка запуска ИИ-разметки', 'error');
@@ -210,14 +296,15 @@
           onclick={() => toggleDateGroup(group.videos)}
           title={allGroupSelected ? 'Снять выделение за день' : 'Выбрать все видео за день'}
         >
-          <span class="group-select-checkbox" class:checked={allGroupSelected} class:indeterminate={!allGroupSelected && someGroupSelected}>
-            {#if allGroupSelected}
-              ✓
-            {:else if someGroupSelected}
-              –
-            {/if}
-          </span>
-          <span>{allGroupSelected ? 'Выбрано всё' : 'Выбрать день'} ({group.videos.length})</span>
+          {#if allGroupSelected}
+            <span class="group-select-check">✓</span>
+            <span>Выбрано всё ({group.videos.length})</span>
+          {:else if someGroupSelected}
+            <span class="group-select-check">–</span>
+            <span>Выбрана часть ({group.videos.length})</span>
+          {:else}
+            <span>Выбрать день ({group.videos.length})</span>
+          {/if}
         </button>
       </div>
 
@@ -227,6 +314,7 @@
             {video}
             watchers={videoWatchers[video.id] ?? []}
             selected={selectedIds.has(video.id)}
+            {selectedCount}
             {hasSelection}
             ontoggle={handleToggle}
             onbatchmenu={handleBatchContextMenu}
@@ -256,7 +344,7 @@
     <div class="menu-divider"></div>
 
     {#if $currentUser?.is_admin}
-      <button class="menu-item" onclick={handleBatchTranscode} title="Сконвертировать выбранные видео в H.264">
+      <button class="menu-item" onclick={promptBatchTranscode} title="Сконвертировать выбранные видео в H.264">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
           <line x1="7" y1="2" x2="7" y2="22"/>
@@ -270,20 +358,34 @@
         <span>Конвертировать в H.264 ({selectedCount})</span>
       </button>
 
-      <button class="menu-item menu-item-optimize" onclick={handleBatchOptimize} title="Сжать видео (VFR) с сохранением 100 fps">
+      <button 
+        class="menu-item menu-item-optimize" 
+        onclick={promptBatchOptimize} 
+        disabled={eligibleForOptimizeCount === 0}
+        title={eligibleForOptimizeCount > 0 
+          ? `Сжать видео (VFR) с сохранением 100 fps (${eligibleForOptimizeCount} готово)` 
+          : 'Среди выбранных нет видео, полностью размеченных человеком'}
+      >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
         </svg>
-        <span>Оптимизировать видео ({selectedCount})</span>
+        <span>Оптимизировать видео ({eligibleForOptimizeCount})</span>
       </button>
 
-      <button class="menu-item menu-item-ai" onclick={handleBatchAiLabel} title="Разметить сходы с помощью ИИ">
+      <button 
+        class="menu-item menu-item-ai" 
+        onclick={promptBatchAiLabel} 
+        disabled={eligibleForAiCount === 0}
+        title={eligibleForAiCount > 0 
+          ? `Разметить сходы с помощью ИИ (${eligibleForAiCount} доступно)` 
+          : 'Все выбранные видео уже размечены человеком или обрабатываются'}
+      >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 2a10 10 0 1 0 10 10" />
           <path d="M12 6v6l4 2" />
           <circle cx="19" cy="5" r="3" fill="currentColor" stroke="none" />
         </svg>
-        <span>Разметить сходы (ИИ) ({selectedCount})</span>
+        <span>Разметить сходы (ИИ) ({eligibleForAiCount})</span>
       </button>
 
       <div class="menu-divider"></div>
@@ -307,7 +409,7 @@
     </div>
 
     {#if $currentUser?.is_admin}
-      <button class="batch-bar-btn" onclick={handleBatchTranscode} title="Сконвертировать выбранные в H.264">
+      <button class="batch-bar-btn" onclick={promptBatchTranscode} title="Сконвертировать выбранные в H.264">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
           <line x1="7" y1="2" x2="7" y2="22"/>
@@ -317,20 +419,34 @@
         <span>Конвертировать H.264</span>
       </button>
 
-      <button class="batch-bar-btn" onclick={handleBatchOptimize} title="Оптимизировать видео (VFR-сжатие)">
+      <button 
+        class="batch-bar-btn" 
+        onclick={promptBatchOptimize} 
+        disabled={eligibleForOptimizeCount === 0}
+        title={eligibleForOptimizeCount > 0 
+          ? `Оптимизировать видео (VFR-сжатие) (${eligibleForOptimizeCount} доступно)` 
+          : 'Среди выбранных нет видео, полностью размеченных человеком'}
+      >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
         </svg>
-        <span>Оптимизировать</span>
+        <span>Оптимизировать ({eligibleForOptimizeCount})</span>
       </button>
 
-      <button class="batch-bar-btn" onclick={handleBatchAiLabel} title="Разметить сходы нейросетью">
+      <button 
+        class="batch-bar-btn" 
+        onclick={promptBatchAiLabel} 
+        disabled={eligibleForAiCount === 0}
+        title={eligibleForAiCount > 0 
+          ? `Разметить сходы нейросетью (${eligibleForAiCount} доступно)` 
+          : 'Все выбранные видео уже размечены человеком или обрабатываются'}
+      >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 2a10 10 0 1 0 10 10" />
           <path d="M12 6v6l4 2" />
           <circle cx="19" cy="5" r="3" fill="currentColor" stroke="none" />
         </svg>
-        <span>Разметить (ИИ)</span>
+        <span>Разметить (ИИ) ({eligibleForAiCount})</span>
       </button>
     {/if}
 
@@ -338,6 +454,24 @@
       ✕
     </button>
   </div>
+{/if}
+
+{#if confirmModal.open}
+  <ConfirmModal
+    title={confirmModal.title}
+    message={confirmModal.message}
+    confirmText="Запустить"
+    cancelText="Отмена"
+    danger={confirmModal.danger}
+    onconfirm={async () => {
+      const action = confirmModal.action;
+      confirmModal.open = false;
+      await action();
+    }}
+    oncancel={() => {
+      confirmModal.open = false;
+    }}
+  />
 {/if}
 
 <style>
@@ -396,28 +530,10 @@
     color: #60a5fa;
   }
 
-  .group-select-checkbox {
-    width: 14px;
-    height: 14px;
-    border-radius: 3px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.7rem;
+  .group-select-check {
+    font-size: 0.82rem;
+    font-weight: 700;
     line-height: 1;
-  }
-
-  .group-select-checkbox.checked {
-    background: #2563eb;
-    border-color: #3b82f6;
-    color: #fff;
-  }
-
-  .group-select-checkbox.indeterminate {
-    background: #1e3a8a;
-    border-color: #3b82f6;
-    color: #93c5fd;
   }
 
   .grid {
@@ -504,6 +620,12 @@
     color: #34d399;
   }
 
+  .menu-item:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    color: var(--text-muted, #64748b);
+  }
+
   /* ── Floating Action Bar ────────────────────────────── */
   .batch-bar {
     position: fixed;
@@ -562,11 +684,18 @@
     transition: all 0.15s ease;
   }
 
-  .batch-bar-btn:hover {
+  .batch-bar-btn:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.16);
     border-color: rgba(255, 255, 255, 0.25);
     color: var(--accent-yellow, #eab308);
     transform: translateY(-1px);
+  }
+
+  .batch-bar-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    border-color: rgba(255, 255, 255, 0.05);
+    color: var(--text-muted, #64748b);
   }
 
   .batch-bar-close {

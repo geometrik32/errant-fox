@@ -75,8 +75,8 @@ export async function cancelAiLabelVideo(id: string): Promise<{ status: string }
   });
 }
 
-export async function batchAiLabelVideos(videoIds?: string[]): Promise<{ status: string; count: number }> {
-  return apiFetch<{ status: string; count: number }>('/admin/videos/batch-ai-label', {
+export async function batchAiLabelVideos(videoIds?: string[]): Promise<{ status: string; count: number; queued_count?: number; skipped_count?: number }> {
+  return apiFetch<{ status: string; count: number; queued_count?: number; skipped_count?: number }>('/admin/videos/batch-ai-label', {
     method: 'POST',
     body: JSON.stringify({ video_ids: videoIds }),
   });
@@ -93,8 +93,8 @@ export async function getOptimizationCandidates(olderThanDays?: number): Promise
   return apiFetch<import('./types').OptimizationCandidate[]>(`/admin/videos/optimization-candidates${query}`);
 }
 
-export async function batchOptimizeVideos(videoIds: string[]): Promise<{ status: string }> {
-  return apiFetch<{ status: string }>('/admin/videos/batch-optimize', {
+export async function batchOptimizeVideos(videoIds: string[]): Promise<{ status: string; queued_count?: number; skipped_count?: number }> {
+  return apiFetch<{ status: string; queued_count?: number; skipped_count?: number }>('/admin/videos/batch-optimize', {
     method: 'POST',
     body: JSON.stringify({ video_ids: videoIds }),
   });
