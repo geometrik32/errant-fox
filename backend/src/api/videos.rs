@@ -833,7 +833,7 @@ pub async fn patch_video(
     let transcripts_dir = state.transcripts_dir.clone();
     let (has_h264, is_transcoding) = state.transcode.check_status(&video_id).await;
 
-    let (dto, notifications) = tokio::task::spawn_blocking(move || {
+    let (dto, notifications, tagged_user_ids) = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{bouts, comment_reactions, comments, videos, users};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
@@ -865,10 +865,28 @@ pub async fn patch_video(
 
         // Collect new tags notifications
         let mut notifications = Vec::new();
+        let mut tagged_user_ids = Vec::new();
 
         // Check if fighter A is newly added
         if let Some(ref new_a) = video.fighter_a_id {
             if Some(new_a) != old_video.fighter_a_id.as_ref() {
+                if new_a != &user_id {
+                    tagged_user_ids.push(new_a.clone());
+                    use crate::db::models::NewNotification;
+                    use crate::db::schema::notifications as notif_schema;
+                    let _ = diesel::insert_into(notif_schema::table)
+                        .values(&NewNotification {
+                            user_id: new_a.clone(),
+                            actor_id: user_id.clone(),
+                            event_type: "video_tag".to_string(),
+                            video_id: video_id_for_db.clone(),
+                            bout_id: None,
+                            comment_id: None,
+                            payload: None,
+                            is_read: false,
+                        })
+                        .execute(&mut conn);
+                }
                 if let Ok(fighter_user) = users::table.filter(users::id.eq(new_a)).first::<User>(&mut conn) {
                     if let Some(ref vk_id_str) = fighter_user.vk_id {
                         if !vk_id_str.trim().is_empty() {
@@ -887,6 +905,23 @@ pub async fn patch_video(
         // Check if fighter B is newly added
         if let Some(ref new_b) = video.fighter_b_id {
             if Some(new_b) != old_video.fighter_b_id.as_ref() {
+                if new_b != &user_id {
+                    tagged_user_ids.push(new_b.clone());
+                    use crate::db::models::NewNotification;
+                    use crate::db::schema::notifications as notif_schema;
+                    let _ = diesel::insert_into(notif_schema::table)
+                        .values(&NewNotification {
+                            user_id: new_b.clone(),
+                            actor_id: user_id.clone(),
+                            event_type: "video_tag".to_string(),
+                            video_id: video_id_for_db.clone(),
+                            bout_id: None,
+                            comment_id: None,
+                            payload: None,
+                            is_read: false,
+                        })
+                        .execute(&mut conn);
+                }
                 if let Ok(fighter_user) = users::table.filter(users::id.eq(new_b)).first::<User>(&mut conn) {
                     if let Some(ref vk_id_str) = fighter_user.vk_id {
                         if !vk_id_str.trim().is_empty() {
@@ -939,7 +974,7 @@ pub async fn patch_video(
             is_transcoding,
         );
 
-        Ok::<_, AppError>((full_dto, notifications))
+        Ok::<_, AppError>((full_dto, notifications, tagged_user_ids))
     })
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
@@ -950,6 +985,19 @@ pub async fn patch_video(
         let notifier = vk_notifier.clone();
         tokio::spawn(async move {
             notifier.send_notification(&vk_id, &message).await;
+        });
+    }
+
+    // Broadcast unread count updates
+    for target_uid in tagged_user_ids {
+        let db_c = state.db.clone();
+        let state_c = state.clone();
+        tokio::spawn(async move {
+            if let Ok(mut conn) = db_c.get() {
+                if let Ok(unread) = crate::api::notifications::count_unread(&mut conn, &target_uid) {
+                    crate::api::notifications::broadcast_unread_count(&state_c, &target_uid, unread);
+                }
+            }
         });
     }
 

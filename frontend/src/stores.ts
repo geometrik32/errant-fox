@@ -5,6 +5,7 @@ import { getFighters } from './lib/api/fighters';
 import { getTechniques } from './lib/api/techniques';
 import { getVideos } from './lib/api/videos';
 import { getMe } from './lib/api/auth';
+import { fetchUnreadCount } from './lib/api/notifications';
 
 export const token: Writable<string | null> = writable(
   typeof localStorage !== 'undefined' ? localStorage.getItem('ef_token') : null
@@ -51,6 +52,29 @@ export async function updateFighterVideoCounts(videosList?: Video[]): Promise<vo
   }
 }
 
+export const unreadNotificationsCount: Writable<number> = writable(0);
+export const activityBtnAlert: Writable<boolean> = writable(false);
+export const notificationsRevision: Writable<number> = writable(0);
+
+let alertTimeout: ReturnType<typeof setTimeout> | null = null;
+
+export function triggerActivityAlert(): void {
+  activityBtnAlert.set(true);
+  if (alertTimeout) clearTimeout(alertTimeout);
+  alertTimeout = setTimeout(() => {
+    activityBtnAlert.set(false);
+  }, 900);
+}
+
+export async function refreshUnreadNotificationsCount(): Promise<void> {
+  try {
+    const count = await fetchUnreadCount();
+    unreadNotificationsCount.set(count);
+  } catch {
+    // Ignore error if unauthenticated
+  }
+}
+
 export async function initStores(): Promise<void> {
   const [fetchedFighters, fetchedTechniques, me] = await Promise.all([
     getFighters(),
@@ -61,4 +85,5 @@ export async function initStores(): Promise<void> {
   techniques.set(fetchedTechniques);
   currentUser.set(me);
   void updateFighterVideoCounts();
+  void refreshUnreadNotificationsCount();
 }

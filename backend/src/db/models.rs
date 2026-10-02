@@ -2,7 +2,7 @@ use chrono::{NaiveDate, NaiveDateTime};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use super::schema::{bouts, comment_reactions, comments, device_tokens, techniques, users, videos, bout_history};
+use super::schema::{bouts, comment_reactions, comments, device_tokens, techniques, users, videos, bout_history, notifications};
 
 // ── users ─────────────────────────────────────────────────────────────────────
 
@@ -211,5 +211,35 @@ pub struct NewDeviceToken {
     pub user_id: String,
     pub fcm_token: String,
     pub platform: String,
+}
+
+// ── notifications ─────────────────────────────────────────────────────────────
+
+#[derive(Queryable, Identifiable, Serialize, Deserialize, Debug, Clone)]
+#[diesel(table_name = notifications)]
+pub struct Notification {
+    pub id: i32,
+    pub user_id: String,
+    pub actor_id: String,
+    pub event_type: String,
+    pub video_id: String,
+    pub bout_id: Option<i32>,
+    pub comment_id: Option<i32>,
+    pub payload: Option<String>,
+    pub is_read: bool,
+    pub created_at: NaiveDateTime,
+}
+
+#[derive(Insertable, Debug, Clone)]
+#[diesel(table_name = notifications)]
+pub struct NewNotification {
+    pub user_id: String,
+    pub actor_id: String,
+    pub event_type: String,
+    pub video_id: String,
+    pub bout_id: Option<i32>,
+    pub comment_id: Option<i32>,
+    pub payload: Option<String>,
+    pub is_read: bool,
 }
 

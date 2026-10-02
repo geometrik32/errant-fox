@@ -145,6 +145,10 @@ pub enum WsEvent {
         has_h264: bool,
         is_transcoding: bool,
     },
+    UpdateNotificationUnreadCount {
+        user_id: String,
+        unread_count: i64,
+    },
 }
 
 impl WsEvent {
@@ -179,6 +183,7 @@ impl WsEvent {
             WsEvent::NewVideo { .. } => None,
             WsEvent::VideoRemoved { .. } => None,
             WsEvent::PresenceUpdate { .. } => None,
+            WsEvent::UpdateNotificationUnreadCount { .. } => None,
         }
     }
 }
@@ -336,13 +341,15 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
             event = rx.recv() => {
                 match event {
                     Ok(ev) => {
-                        let should_send = if ev.is_gallery_event() {
-                            true
-                        } else {
-                            match ev.video_id() {
+                        let should_send = match &ev {
+                            WsEvent::UpdateNotificationUnreadCount { user_id, .. } => {
+                                user_id == &current_online_user_id
+                            }
+                            _ if ev.is_gallery_event() => true,
+                            _ => match ev.video_id() {
                                 Some(vid) => watching.as_deref() == Some(vid),
                                 None => true,
-                            }
+                            },
                         };
                         if should_send {
                             if let Ok(json) = serde_json::to_string(&ev) {

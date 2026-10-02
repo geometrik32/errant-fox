@@ -3,6 +3,7 @@
   import { currentUser } from '../../stores';
   import type { Comment, Bout } from '../api/types';
   import { createComment, updateComment, deleteComment, reactComment, deleteReact, createSharedComment } from '../api/comments';
+  import { markReadComment } from '../api/notifications';
   import ConfirmModal from '../ui/ConfirmModal.svelte';
   import type { Stroke } from './DrawingCanvas.svelte';
 
@@ -58,9 +59,11 @@
   // Auto-open thread if highlightedId is a reply
   $effect(() => {
     if (highlightedId) {
+      void markReadComment(highlightedId);
       const target = comments.find(c => c.id === highlightedId);
       if (target && target.reply_to_id) {
         activeThreadParentId = target.reply_to_id;
+        void markReadComment(target.reply_to_id);
       }
     }
   });
@@ -182,6 +185,8 @@
   function openThread(c: Comment) {
     const rootId = c.reply_to_id || c.id;
     activeThreadParentId = rootId;
+    void markReadComment(c.id);
+    if (c.reply_to_id) void markReadComment(c.reply_to_id);
     const parentComment = comments.find(x => x.id === rootId) || c;
     handleCommentClick(parentComment);
   }

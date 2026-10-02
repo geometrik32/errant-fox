@@ -150,7 +150,7 @@ pub async fn post_comment(
     let frontend_origin = state.frontend_url.clone();
     let commenter_name = user.display_name.clone();
 
-    let (comment, notifications) = tokio::task::spawn_blocking(move || {
+    let (comment, notifications, in_app_notified_uids) = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{comments, videos};
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
@@ -238,9 +238,33 @@ pub async fn post_comment(
             let mut notified_reply_user_id: Option<String> = None;
 
             // A. Check if it's a reply
+            let mut in_app_notified_uids = Vec::new();
             if let Some(parent_id) = comment.reply_to_id {
                 if let Ok(parent_comment) = comments::table.filter(comments::id.eq(parent_id)).first::<Comment>(&mut conn) {
                     if parent_comment.author_id != comment.author_id {
+                        use crate::db::models::NewNotification;
+                        use crate::db::schema::notifications as notif_schema;
+
+                        let payload_json = serde_json::json!({
+                            "original_text": parent_comment.text,
+                            "reply_text": comment.text,
+                            "timestamp_ms": comment.timestamp_ms,
+                        });
+
+                        let _ = diesel::insert_into(notif_schema::table)
+                            .values(&NewNotification {
+                                user_id: parent_comment.author_id.clone(),
+                                actor_id: comment.author_id.clone(),
+                                event_type: "comment_reply".to_string(),
+                                video_id: comment.video_id.clone(),
+                                bout_id: None,
+                                comment_id: Some(comment.id),
+                                payload: Some(payload_json.to_string()),
+                                is_read: false,
+                            })
+                            .execute(&mut conn);
+                        in_app_notified_uids.push(parent_comment.author_id.clone());
+
                         use crate::db::schema::users;
                         if let Ok(parent_author) = users::table.filter(users::id.eq(&parent_comment.author_id)).first::<User>(&mut conn) {
                             if let Some(ref vk_id_str) = parent_author.vk_id {
@@ -278,6 +302,28 @@ pub async fn post_comment(
 
             for part_id in participants {
                 if part_id != comment.author_id && Some(&part_id) != notified_reply_user_id.as_ref() {
+                    use crate::db::models::NewNotification;
+                    use crate::db::schema::notifications as notif_schema;
+
+                    let payload_json = serde_json::json!({
+                        "comment_text": comment.text,
+                        "timestamp_ms": comment.timestamp_ms,
+                    });
+
+                    let _ = diesel::insert_into(notif_schema::table)
+                        .values(&NewNotification {
+                            user_id: part_id.clone(),
+                            actor_id: comment.author_id.clone(),
+                            event_type: "video_comment".to_string(),
+                            video_id: comment.video_id.clone(),
+                            bout_id: None,
+                            comment_id: Some(comment.id),
+                            payload: Some(payload_json.to_string()),
+                            is_read: false,
+                        })
+                        .execute(&mut conn);
+                    in_app_notified_uids.push(part_id.clone());
+
                     use crate::db::schema::users;
                     if let Ok(part_user) = users::table.filter(users::id.eq(&part_id)).first::<User>(&mut conn) {
                         if let Some(ref vk_id_str) = part_user.vk_id {
@@ -301,9 +347,10 @@ pub async fn post_comment(
                     }
                 }
             }
+            Ok::<_, AppError>((comment, notifications, in_app_notified_uids))
+        } else {
+            Ok::<_, AppError>((comment, notifications, Vec::new()))
         }
-
-        Ok::<_, AppError>((comment, notifications))
     })
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
@@ -318,6 +365,19 @@ pub async fn post_comment(
         let notifier = vk_notifier.clone();
         tokio::spawn(async move {
             notifier.send_notification(&target.vk_id, &target.message).await;
+        });
+    }
+
+    // Broadcast unread count updates
+    for target_uid in in_app_notified_uids {
+        let db_c = state.db.clone();
+        let state_c = state.clone();
+        tokio::spawn(async move {
+            if let Ok(mut conn) = db_c.get() {
+                if let Ok(unread) = crate::api::notifications::count_unread(&mut conn, &target_uid) {
+                    crate::api::notifications::broadcast_unread_count(&state_c, &target_uid, unread);
+                }
+            }
         });
     }
 

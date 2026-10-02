@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { token, currentUser, gallerySidebarOpen } from '../../stores';
-  import { resolveColor } from '../api/types';
+  import { token, currentUser, gallerySidebarOpen, unreadNotificationsCount, activityBtnAlert } from '../../stores';
+  import { resolveColor, getContrastColor } from '../api/types';
   import CreateUserModal from '../admin/CreateUserModal.svelte';
   import TechniquesModal from '../admin/TechniquesModal.svelte';
   import ProfileModal from './ProfileModal.svelte';
@@ -35,7 +35,7 @@
   });
 
   let activeNav = $derived(
-    hash === '#/stats' ? 'stats' : hash === '#/search' ? 'search' : 'gallery'
+    hash === '#/stats' ? 'stats' : hash === '#/activity' ? 'activity' : hash === '#/search' ? 'search' : 'gallery'
   );
 
   let isGalleryRoute = $derived(
@@ -127,11 +127,15 @@
         Бойцы
       </button>
       <button
-        class="nav-btn"
-        class:active={activeNav === 'search'}
-        onclick={toggleSearch}
+        class="nav-btn nav-btn--activity"
+        class:active={activeNav === 'activity'}
+        class:btn-flashing={$activityBtnAlert}
+        onclick={() => { navigate('#/activity'); showSearch = false; }}
       >
-        Поиск
+        <span>Активность</span>
+        {#if $unreadNotificationsCount > 0}
+          <span class="nav-badge-dot" title="Непрочитанных: {$unreadNotificationsCount}"></span>
+        {/if}
       </button>
     </nav>
   {/if}
@@ -146,8 +150,8 @@
     >
       <div class="avatar" style:background={avatarColor}>
         <svg class="avatar-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <circle cx="12" cy="8" r="4" stroke="#fff" stroke-width="1.5"/>
-          <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+          <circle cx="12" cy="8" r="4" stroke={getContrastColor(avatarColor)} stroke-width="1.5"/>
+          <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke={getContrastColor(avatarColor)} stroke-width="1.5" stroke-linecap="round"/>
         </svg>
         <img src={$currentUser?.avatar_url} alt={$currentUser?.display_name} onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
       </div>
@@ -294,6 +298,71 @@
   .nav-btn.active {
     color: #000;
     background: var(--accent-yellow);
+  }
+
+  .nav-btn--activity {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .nav-btn--activity.btn-flashing:not(.active) {
+    animation: activity-btn-flash-white 0.85s ease-out 1;
+  }
+
+  .nav-btn--activity.btn-flashing.active {
+    animation: activity-btn-flash-white-active 0.85s ease-out 1;
+  }
+
+  @keyframes activity-btn-flash-white {
+    0% {
+      background: transparent;
+      color: var(--text-secondary);
+      box-shadow: none;
+    }
+    35% {
+      background: rgba(255, 255, 255, 0.22);
+      color: #ffffff;
+      box-shadow: 0 0 14px rgba(255, 255, 255, 0.45);
+    }
+    100% {
+      background: transparent;
+      color: var(--text-secondary);
+      box-shadow: none;
+    }
+  }
+
+  @keyframes activity-btn-flash-white-active {
+    0%, 100% {
+      background: var(--accent-yellow);
+      color: #000;
+    }
+    35% {
+      background: #ffffff;
+      color: #000;
+      box-shadow: 0 0 14px rgba(255, 255, 255, 0.6);
+    }
+  }
+
+  .nav-badge-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: #f97316;
+    border-radius: 50%;
+    margin-left: 6px;
+    box-shadow: 0 0 6px rgba(249, 115, 22, 0.7);
+    animation: badge-pulse 2s infinite ease-in-out;
+  }
+
+  @keyframes badge-pulse {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(1.3);
+      opacity: 0.8;
+    }
   }
 
   .logo-img {

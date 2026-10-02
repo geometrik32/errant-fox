@@ -1,10 +1,12 @@
 <script lang="ts">
-  import { token, currentUser, initStores } from './stores';
+  import { get } from 'svelte/store';
+  import { token, currentUser, initStores, unreadNotificationsCount, triggerActivityAlert, notificationsRevision } from './stores';
   import Auth from './routes/Auth.svelte';
   import Header from './lib/ui/Header.svelte';
   import Gallery from './routes/Gallery.svelte';
   import Stats from './routes/Stats.svelte';
   import Player from './routes/Player.svelte';
+  import Activity from './routes/Activity.svelte';
   import ToastContainer from './lib/ui/ToastContainer.svelte';
   import { loginWithVk } from './lib/api/auth';
 
@@ -95,7 +97,13 @@
   });
 
   let routeName = $derived(
-    hash.startsWith('#/player/') || hash.startsWith('#/share/video/') ? 'player' : hash === '#/stats' ? 'stats' : 'gallery'
+    hash.startsWith('#/player/') || hash.startsWith('#/share/video/')
+      ? 'player'
+      : hash === '#/stats'
+      ? 'stats'
+      : hash === '#/activity'
+      ? 'activity'
+      : 'gallery'
   );
 
   $effect(() => {
@@ -103,7 +111,69 @@
       document.title = 'Errant Fox — Анализ боев';
     } else if (routeName === 'stats') {
       document.title = 'Errant Fox — Статистика';
+    } else if (routeName === 'activity') {
+      document.title = 'Errant Fox — Активность';
     }
+  });
+
+  $effect(() => {
+    const curToken = $token;
+    if (!curToken) return;
+
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+    let active = true;
+
+    function connect() {
+      if (!active) return;
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+      ws.onopen = () => {
+        const t = get(token) || localStorage.getItem('ef_token');
+        if (t && ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ token: t }));
+        }
+      };
+
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'update_notification_unread_count') {
+            const uid = get(currentUser)?.id;
+            if (!msg.user_id || !uid || msg.user_id === uid) {
+              const prev = get(unreadNotificationsCount);
+              const next = Number(msg.unread_count) || 0;
+              if (next > prev) {
+                triggerActivityAlert();
+              }
+              unreadNotificationsCount.set(next);
+              notificationsRevision.update(n => n + 1);
+            }
+          }
+        } catch {}
+      };
+
+      ws.onclose = () => {
+        if (active) {
+          reconnectTimeout = setTimeout(connect, 3000);
+        }
+      };
+
+      ws.onerror = () => {
+        try { ws?.close(); } catch {}
+      };
+    }
+
+    connect();
+
+    return () => {
+      active = false;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (ws) {
+        try { ws.close(); } catch {}
+      }
+    };
   });
 
   let isShareRoute = $derived(hash.startsWith('#/share/video/'));
@@ -175,6 +245,8 @@
           <Gallery />
         {:else if routeName === 'stats'}
           <Stats />
+        {:else if routeName === 'activity'}
+          <Activity />
         {:else if routeName === 'player' && playerId}
           {#key playerId + '-' + shareToken + '-' + sharedBoutId}
           <Player videoId={playerId} {initialTimeMs} {shareToken} {sharedBoutId} {highlightedCommentId} />

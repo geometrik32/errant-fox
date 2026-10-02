@@ -3,6 +3,7 @@
   import { currentUser } from '../stores';
   import { hotkeysStore } from '../lib/stores/hotkeys';
   import { getVideo, getSharedVideo } from '../lib/api/videos';
+  import { markReadByVideo, markReadBout, markReadComment } from '../lib/api/notifications';
   import type { VideoFull, Bout, Comment } from '../lib/api/types';
   import VideoPlayer from '../lib/player/VideoPlayer.svelte';
   import JudgingPanel from '../lib/player/JudgingPanel.svelte';
@@ -367,6 +368,11 @@
       liveComments = [...video.comments];
       connectWS();
       checkH264Status(video.id);
+      if (!shareToken) {
+        void markReadByVideo(videoId);
+        if (sharedBoutId) void markReadBout(sharedBoutId);
+        if (initialHighlightedId) void markReadComment(initialHighlightedId);
+      }
     } catch (e) {
       loadError = e instanceof Error ? e.message : 'Ошибка загрузки видео';
     } finally {

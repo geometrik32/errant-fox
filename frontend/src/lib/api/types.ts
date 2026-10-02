@@ -30,6 +30,28 @@ export function resolveColor(id: string, color: string | null | undefined): stri
   return `hsl(${hash % 360}, 55%, 48%)`;
 }
 
+export function getContrastColor(color: string | null | undefined): string {
+  if (!color) return '#ffffff';
+  let c = color.trim();
+  if (c.startsWith('hsl')) {
+    const m = c.match(/hsl\(\s*\d+\s*,\s*\d+%\s*,\s*(\d+)%\s*\)/);
+    if (m && parseInt(m[1], 10) > 65) return '#0f172a';
+    return '#ffffff';
+  }
+  if (c.startsWith('#')) c = c.slice(1);
+  if (c.length === 3) {
+    c = c.split('').map(ch => ch + ch).join('');
+  }
+  if (c.length === 6) {
+    const r = parseInt(c.slice(0, 2), 16) || 0;
+    const g = parseInt(c.slice(2, 4), 16) || 0;
+    const b = parseInt(c.slice(4, 6), 16) || 0;
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+    return yiq >= 160 ? '#0f172a' : '#ffffff';
+  }
+  return '#ffffff';
+}
+
 export interface FighterBout {
   id: number;
   video_id: string;
@@ -173,4 +195,31 @@ export interface SearchResult {
   video_date: string;
   fighter_a_name: string | null;
   fighter_b_name: string | null;
+}
+
+export interface NotificationUserSummary {
+  id: string;
+  display_name: string;
+  avatar_url: string | null;
+  color: string | null;
+}
+
+export interface NotificationItem {
+  id: number;
+  user_id: string;
+  actor: NotificationUserSummary;
+  event_type: 'video_tag' | 'video_labeled' | 'bout_added' | 'bout_updated' | 'comment_reply' | 'video_comment' | string;
+  video_id: string;
+  video_title: string;
+  bout_id: number | null;
+  comment_id: number | null;
+  payload: any;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface NotificationsResponse {
+  items: NotificationItem[];
+  total: number;
+  unread_count: number;
 }

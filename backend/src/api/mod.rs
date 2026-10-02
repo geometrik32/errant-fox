@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod bouts;
 pub mod comments;
+pub mod notifications;
 pub mod techniques;
 pub mod users;
 pub mod videos;
@@ -145,6 +146,13 @@ pub fn router(state: AppState) -> Router {
             "/api/comments/{id}/react",
             post(comments::react_comment).delete(comments::delete_react),
         )
+        // Notifications
+        .route("/api/notifications", get(notifications::list_notifications))
+        .route("/api/notifications/unread-count", get(notifications::get_unread_count))
+        .route("/api/notifications/read-by-video", post(notifications::read_by_video))
+        .route("/api/notifications/read-bout", post(notifications::read_bout))
+        .route("/api/notifications/read-comment", post(notifications::read_comment))
+        .route("/api/notifications/read-all", post(notifications::read_all))
         // WebSocket
         .route("/ws", get(crate::services::ws::ws_handler))
         .with_state(state)

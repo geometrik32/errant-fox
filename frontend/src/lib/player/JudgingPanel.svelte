@@ -5,6 +5,7 @@
   import { resolveColor } from '../api/types';
   import { createBout } from '../api/bouts';
   import { patchVideo } from '../api/videos';
+  import { markReadBout } from '../api/notifications';
   import BoutCard from './BoutCard.svelte';
   import ConfirmModal from '../ui/ConfirmModal.svelte';
 
@@ -206,6 +207,7 @@
   async function doExpand(id: number) {
     targetExpandId = null;
     expandedBoutId = id;
+    void markReadBout(id);
     const b = bouts.find(b => b.id === id);
     if (b) onseekrequest?.(b.time_start_ms, b.time_end_ms);
     await tick();
@@ -214,6 +216,7 @@
 
   export async function expandBout(id: number) {
     expandedBoutId = id;
+    void markReadBout(id);
     await tick();
     requestAnimationFrame(() => scrollBoutToTop(id, 'smooth'));
   }

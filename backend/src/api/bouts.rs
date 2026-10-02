@@ -145,7 +145,7 @@ pub async fn post_bout(
     let db = state.db.clone();
     let user_id = user.id.clone();
 
-    let (bout, notifications) = tokio::task::spawn_blocking(move || {
+    let (bout, notifications, in_app_notified_uids) = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{bouts, videos, users};
         use diesel::dsl::max;
 
@@ -283,8 +283,32 @@ pub async fn post_bout(
                 participants.push(fid.clone());
             }
 
+            let mut in_app_notified_uids = Vec::new();
             for part_id in participants {
                 if part_id != user_id {
+                    use crate::db::models::NewNotification;
+                    use crate::db::schema::notifications as notif_schema;
+
+                    let payload_json = serde_json::json!({
+                        "order_index": bout.order_index,
+                        "time_start_ms": bout.time_start_ms,
+                        "time_end_ms": bout.time_end_ms,
+                    });
+
+                    let _ = diesel::insert_into(notif_schema::table)
+                        .values(&NewNotification {
+                            user_id: part_id.clone(),
+                            actor_id: user_id.clone(),
+                            event_type: "bout_added".to_string(),
+                            video_id: bout.video_id.clone(),
+                            bout_id: Some(bout.id),
+                            comment_id: None,
+                            payload: Some(payload_json.to_string()),
+                            is_read: false,
+                        })
+                        .execute(&mut conn);
+                    in_app_notified_uids.push(part_id.clone());
+
                     if let Ok(part_user) = users::table.filter(users::id.eq(&part_id)).first::<User>(&mut conn) {
                         if let Some(ref vk_id_str) = part_user.vk_id {
                             if !vk_id_str.trim().is_empty() {
@@ -294,15 +318,29 @@ pub async fn post_bout(
                     }
                 }
             }
+            Ok::<_, AppError>((bout, notifications, in_app_notified_uids))
+        } else {
+            Ok::<_, AppError>((bout, notifications, Vec::new()))
         }
-
-        Ok::<_, AppError>((bout, notifications))
     })
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
     let _ = state.ws_hub.send(WsEvent::UpdateBout(to_ws_bout(&bout)));
     tokio::spawn(broadcast_video_score(state.db.clone(), state.ws_hub.clone(), bout.video_id.clone()));
+
+    // Broadcast unread count updates
+    for target_uid in in_app_notified_uids {
+        let db_c = state.db.clone();
+        let state_c = state.clone();
+        tokio::spawn(async move {
+            if let Ok(mut conn) = db_c.get() {
+                if let Ok(unread) = crate::api::notifications::count_unread(&mut conn, &target_uid) {
+                    crate::api::notifications::broadcast_unread_count(&state_c, &target_uid, unread);
+                }
+            }
+        });
+    }
 
     // Spawn VK notification tasks if not throttled
     let vk_notifier = state.vk_notifier.clone();
@@ -335,7 +373,7 @@ pub async fn patch_bout(
     let db = state.db.clone();
     let user_id = user.id.clone();
 
-    let bout = tokio::task::spawn_blocking(move || {
+    let (bout, in_app_notified_uids) = tokio::task::spawn_blocking(move || {
         use crate::db::schema::bouts;
 
         let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
@@ -462,10 +500,11 @@ pub async fn patch_bout(
             .execute(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        // Write to history if there are changes
+        // Write to history and notifications if there are changes
+        let mut in_app_notified_uids = Vec::new();
         if !changes.is_empty() {
-            use crate::db::models::NewBoutHistory;
-            use crate::db::schema::bout_history;
+            use crate::db::models::{NewBoutHistory, NewNotification};
+            use crate::db::schema::{bout_history, notifications as notif_schema, videos};
 
             diesel::insert_into(bout_history::table)
                 .values(&NewBoutHistory {
@@ -476,21 +515,68 @@ pub async fn patch_bout(
                 })
                 .execute(&mut conn)
                 .map_err(|e| AppError::Internal(e.to_string()))?;
+
+            if let Ok(video) = videos::table.filter(videos::id.eq(&cur.video_id)).first::<crate::db::models::Video>(&mut conn) {
+                let mut participants = Vec::new();
+                if let Some(ref fid) = video.fighter_a_id {
+                    participants.push(fid.clone());
+                }
+                if let Some(ref fid) = video.fighter_b_id {
+                    participants.push(fid.clone());
+                }
+                let payload_json = serde_json::json!({
+                    "order_index": cur.order_index,
+                    "time_start_ms": time_start_ms,
+                    "changes": changes,
+                });
+                for part_id in participants {
+                    if part_id != user_id {
+                        let _ = diesel::insert_into(notif_schema::table)
+                            .values(&NewNotification {
+                                user_id: part_id.clone(),
+                                actor_id: user_id.clone(),
+                                event_type: "bout_updated".to_string(),
+                                video_id: cur.video_id.clone(),
+                                bout_id: Some(id),
+                                comment_id: None,
+                                payload: Some(payload_json.to_string()),
+                                is_read: false,
+                            })
+                            .execute(&mut conn);
+                        in_app_notified_uids.push(part_id);
+                    }
+                }
+            }
         }
 
         // Recalculate AI label — check if video still contains AI bouts
         let _ = recalculate_video_ai_status(&mut conn, &cur.video_id);
 
-        bouts::table
+        let bout = bouts::table
             .filter(bouts::id.eq(id))
             .first::<Bout>(&mut conn)
-            .map_err(|e| AppError::Internal(e.to_string()))
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Ok::<_, AppError>((bout, in_app_notified_uids))
     })
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
 
     let _ = state.ws_hub.send(WsEvent::UpdateBout(to_ws_bout(&bout)));
     tokio::spawn(broadcast_video_score(state.db.clone(), state.ws_hub.clone(), bout.video_id.clone()));
+
+    // Broadcast unread count updates
+    for target_uid in in_app_notified_uids {
+        let db_c = state.db.clone();
+        let state_c = state.clone();
+        tokio::spawn(async move {
+            if let Ok(mut conn) = db_c.get() {
+                if let Ok(unread) = crate::api::notifications::count_unread(&mut conn, &target_uid) {
+                    crate::api::notifications::broadcast_unread_count(&state_c, &target_uid, unread);
+                }
+            }
+        });
+    }
 
     Ok(Json(to_response(&bout)))
 }
