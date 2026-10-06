@@ -387,3 +387,37 @@ pub async fn read_all(
     broadcast_unread_count(&state, &user.id, 0);
     Ok(StatusCode::OK)
 }
+
+pub async fn read_multiple(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Json(body): Json<ReadMultipleRequest>,
+) -> Result<StatusCode, AppError> {
+    let db = state.db.clone();
+    let uid = user.id.clone();
+    let ids = body.ids;
+
+    if ids.is_empty() {
+        return Ok(StatusCode::OK);
+    }
+
+    let unread_count = tokio::task::spawn_blocking(move || {
+        let mut conn = db.get().map_err(|e| AppError::Internal(e.to_string()))?;
+        diesel::update(
+            notifications::table
+                .filter(notifications::user_id.eq(&uid))
+                .filter(notifications::id.eq_any(&ids))
+                .filter(notifications::is_read.eq(false)),
+        )
+        .set(notifications::is_read.eq(true))
+        .execute(&mut conn)
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        count_unread(&mut conn, &uid).map_err(|e| AppError::Internal(e.to_string()))
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    broadcast_unread_count(&state, &user.id, unread_count);
+    Ok(StatusCode::OK)
+}

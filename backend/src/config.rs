@@ -23,12 +23,12 @@ impl Config {
         let origin = required("FRONTEND_ORIGIN");
         let url = env::var("FRONTEND_URL").unwrap_or_else(|_| origin.clone());
         Config {
-            database_url: required("DATABASE_URL"),
+            database_url: resolve_data_path("DATABASE_URL"),
             jwt_secret: required("JWT_SECRET"),
             seafile_url: required("SEAFILE_URL"),
             seafile_token: required("SEAFILE_TOKEN"),
-            previews_dir: required("PREVIEWS_DIR"),
-            avatars_dir: required("AVATARS_DIR"),
+            previews_dir: resolve_data_path("PREVIEWS_DIR"),
+            avatars_dir: resolve_data_path("AVATARS_DIR"),
             transcripts_dir: get_transcripts_dir(),
             temp_dir: get_temp_dir(),
             server_port: required("SERVER_PORT")
@@ -40,6 +40,22 @@ impl Config {
             vk_app_id: env::var("VK_APP_ID").ok(),
             vk_app_secret: env::var("VK_APP_SECRET").ok(),
         }
+    }
+}
+
+fn resolve_data_path(key: &str) -> String {
+    let val = required(key);
+    if std::path::Path::new(&val).exists() {
+        val
+    } else if val.starts_with("/data") {
+        let relative = val.trim_start_matches('/');
+        if std::path::Path::new(relative).exists() {
+            relative.to_string()
+        } else {
+            val
+        }
+    } else {
+        val
     }
 }
 

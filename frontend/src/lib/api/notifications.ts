@@ -50,3 +50,11 @@ export async function markReadAll(): Promise<void> {
     method: 'POST',
   });
 }
+
+export async function markReadMultiple(ids: number[]): Promise<void> {
+  if (ids.length === 0) return;
+  await apiFetch<void>('/notifications/read-multiple', {
+    method: 'POST',
+    body: JSON.stringify({ ids }),
+  });
+}

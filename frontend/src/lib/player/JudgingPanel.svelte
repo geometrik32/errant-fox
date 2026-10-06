@@ -50,10 +50,14 @@
   let bouts = $state<Bout[]>([]);
 
   $effect(() => {
+    bouts = [...video.bouts];
+  });
+
+  onMount(() => {
     if (sharedBoutId !== null) {
-      bouts = video.bouts.filter(b => b.id === sharedBoutId);
-    } else {
-      bouts = [...video.bouts];
+      setTimeout(() => {
+        scrollBoutToTop(sharedBoutId, 'smooth');
+      }, 150);
     }
   });
 
@@ -306,10 +310,6 @@
     if (msg.type === 'update_bout') {
       const { type: _t, video_id: _v, ...fields } = msg;
       const id = fields.id as number;
-
-      if (sharedBoutId !== null && id !== sharedBoutId) {
-        return;
-      }
 
       if (fields.deleted) {
         bouts = bouts.filter(b => b.id !== id);

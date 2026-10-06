@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { currentUser, unreadNotificationsCount, refreshUnreadNotificationsCount, notificationsRevision } from '../stores';
-  import { fetchNotifications, markReadAll, markReadByVideo, markReadBout, markReadComment } from '../lib/api/notifications';
+  import { fetchNotifications, markReadAll, markReadByVideo, markReadBout, markReadComment, markReadMultiple } from '../lib/api/notifications';
   import { searchComments } from '../lib/api/comments';
   import type { NotificationItem, SearchResult } from '../lib/api/types';
   import { resolveColor, getContrastColor } from '../lib/api/types';
@@ -149,6 +149,119 @@
   let unreadNotifications = $derived(filteredNotifications.filter(n => !n.is_read));
   let readNotifications = $derived(filteredNotifications.filter(n => n.is_read));
 
+  // ── Group Types ────────────────────────────────────────────────────────────
+  interface GroupedBouts {
+    kind: 'bouts_group';
+    groupId: string;
+    video_id: string;
+    video_title: string;
+    items: NotificationItem[];
+    actor: { id: string; display_name: string; avatar_url?: string | null; color?: string | null };
+    created_at: string;
+    is_read: boolean;
+  }
+
+  interface GroupedComments {
+    kind: 'comments_group';
+    groupId: string;
+    video_id: string;
+    video_title: string;
+    items: NotificationItem[];
+    actor: { id: string; display_name: string; avatar_url?: string | null; color?: string | null };
+    created_at: string;
+    is_read: boolean;
+  }
+
+  interface SingleNotification {
+    kind: 'single';
+    notification: NotificationItem;
+  }
+
+  type ActivityItem = GroupedBouts | GroupedComments | SingleNotification;
+
+  let expandedGroupIds = $state<Set<string>>(new Set());
+
+  function toggleGroup(groupId: string, e?: MouseEvent) {
+    if (e) e.stopPropagation();
+    const next = new Set(expandedGroupIds);
+    if (next.has(groupId)) {
+      next.delete(groupId);
+    } else {
+      next.add(groupId);
+    }
+    expandedGroupIds = next;
+  }
+
+  function groupNotificationList(items: NotificationItem[]): ActivityItem[] {
+    const boutGroups = new Map<string, NotificationItem[]>();
+    const commentGroups = new Map<string, NotificationItem[]>();
+
+    for (const item of items) {
+      if (item.event_type === 'bout_added' || item.event_type === 'bout_updated') {
+        const list = boutGroups.get(item.video_id) || [];
+        list.push(item);
+        boutGroups.set(item.video_id, list);
+      } else if (item.event_type === 'comment_reply' || item.event_type === 'video_comment') {
+        const list = commentGroups.get(item.video_id) || [];
+        list.push(item);
+        commentGroups.set(item.video_id, list);
+      }
+    }
+
+    const result: ActivityItem[] = [];
+    const processedBouts = new Set<string>();
+    const processedComments = new Set<string>();
+
+    for (const item of items) {
+      if (item.event_type === 'bout_added' || item.event_type === 'bout_updated') {
+        const list = boutGroups.get(item.video_id)!;
+        if (list.length >= 2) {
+          if (!processedBouts.has(item.video_id)) {
+            processedBouts.add(item.video_id);
+            result.push({
+              kind: 'bouts_group',
+              groupId: `bouts_${item.video_id}_${item.is_read ? 'read' : 'unread'}`,
+              video_id: item.video_id,
+              video_title: item.video_title,
+              items: list,
+              actor: list[0].actor,
+              created_at: list[0].created_at,
+              is_read: list.every(x => x.is_read),
+            });
+          }
+        } else {
+          result.push({ kind: 'single', notification: item });
+        }
+      } else if (item.event_type === 'comment_reply' || item.event_type === 'video_comment') {
+        const list = commentGroups.get(item.video_id)!;
+        if (list.length >= 2) {
+          if (!processedComments.has(item.video_id)) {
+            processedComments.add(item.video_id);
+            result.push({
+              kind: 'comments_group',
+              groupId: `comments_${item.video_id}_${item.is_read ? 'read' : 'unread'}`,
+              video_id: item.video_id,
+              video_title: item.video_title,
+              items: list,
+              actor: list[0].actor,
+              created_at: list[0].created_at,
+              is_read: list.every(x => x.is_read),
+            });
+          }
+        } else {
+          result.push({ kind: 'single', notification: item });
+        }
+      } else {
+        result.push({ kind: 'single', notification: item });
+      }
+    }
+
+    return result;
+  }
+
+  let groupedUnread = $derived(groupNotificationList(unreadNotifications));
+  let groupedRead = $derived(groupNotificationList(readNotifications));
+
   // ── Navigation & Actions ────────────────────────────────────────────────────
   function navigateToNotification(n: NotificationItem) {
     if (n.event_type === 'video_tag' || n.event_type === 'video_labeled') {
@@ -164,6 +277,48 @@
     } else {
       window.location.hash = `#/player/${n.video_id}`;
     }
+  }
+
+  async function handleSingleCardClick(n: NotificationItem) {
+    if (!n.is_read) {
+      try {
+        await markReadMultiple([n.id]);
+        notifications = notifications.map(x => x.id === n.id ? { ...x, is_read: true } : x);
+        unreadNotificationsCount.update(c => Math.max(0, c - 1));
+      } catch (e) {
+        console.error('Failed to mark notification read:', e);
+      }
+    }
+    navigateToNotification(n);
+  }
+
+  async function handleGroupCardClick(group: GroupedBouts | GroupedComments) {
+    const unreadIds = group.items.filter(x => !x.is_read).map(x => x.id);
+    if (unreadIds.length > 0) {
+      try {
+        await markReadMultiple(unreadIds);
+        const unreadSet = new Set(unreadIds);
+        notifications = notifications.map(x => unreadSet.has(x.id) ? { ...x, is_read: true } : x);
+        unreadNotificationsCount.update(c => Math.max(0, c - unreadIds.length));
+      } catch (e) {
+        console.error('Failed to mark group notifications read:', e);
+      }
+    }
+    window.location.hash = `#/player/${group.video_id}`;
+  }
+
+  async function handleSubItemClick(group: GroupedBouts | GroupedComments, item: NotificationItem, e?: MouseEvent) {
+    if (e) e.stopPropagation();
+    if (!item.is_read) {
+      try {
+        await markReadMultiple([item.id]);
+        notifications = notifications.map(x => x.id === item.id ? { ...x, is_read: true } : x);
+        unreadNotificationsCount.update(c => Math.max(0, c - 1));
+      } catch (e) {
+        console.error('Failed to mark sub-item read:', e);
+      }
+    }
+    navigateToNotification(item);
   }
 
   function navigateToSearch(r: SearchResult) {
@@ -311,79 +466,241 @@
             Новые ({unreadNotifications.length})
           </div>
           <div class="notif-list">
-            {#each unreadNotifications as n (n.id)}
-              <!-- svelte-ignore a11y_click_events_have_key_events -->
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <div class="notif-card unread" onclick={() => navigateToNotification(n)}>
-                <div class="unread-bar"></div>
+            {#each groupedUnread as entry (entry.kind === 'single' ? entry.notification.id : entry.groupId)}
+              {#if entry.kind === 'single'}
+                {@const n = entry.notification}
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div class="notif-card unread" onclick={() => handleSingleCardClick(n)}>
+                  <div class="unread-bar"></div>
 
-                <!-- Event Icon / Avatar -->
-                <div class="card-avatar-wrap">
-                  <div class="card-avatar-box" style:background={resolveColor(n.actor.id, n.actor.color)}>
-                    <svg class="card-avatar-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <circle cx="12" cy="8" r="4" stroke={getContrastColor(n.actor.color)} stroke-width="1.6"/>
-                      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke={getContrastColor(n.actor.color)} stroke-width="1.6" stroke-linecap="round"/>
-                    </svg>
-                    {#if n.actor.avatar_url}
-                      <img
-                        src={n.actor.avatar_url}
-                        alt=""
-                        class="card-avatar-img"
-                        onerror={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-                      />
+                  <!-- Event Icon / Avatar -->
+                  <div class="card-avatar-wrap">
+                    <div class="card-avatar-box" style:background={resolveColor(n.actor.id, n.actor.color)}>
+                      <svg class="card-avatar-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <circle cx="12" cy="8" r="4" stroke={getContrastColor(n.actor.color)} stroke-width="1.6"/>
+                        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke={getContrastColor(n.actor.color)} stroke-width="1.6" stroke-linecap="round"/>
+                      </svg>
+                      {#if n.actor.avatar_url}
+                        <img
+                          src={n.actor.avatar_url}
+                          alt=""
+                          class="card-avatar-img"
+                          onerror={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                        />
+                      {/if}
+                    </div>
+                    <span class="event-badge">
+                      {#if n.event_type === 'video_tag'}⚔️
+                      {:else if n.event_type === 'bout_added'}➕
+                      {:else if n.event_type === 'bout_updated'}✏️
+                      {:else if n.event_type === 'comment_reply'}💬
+                      {:else if n.event_type === 'video_comment'}💭
+                      {:else}🔔{/if}
+                    </span>
+                  </div>
+
+                  <!-- Content -->
+                  <div class="card-body">
+                    <div class="card-meta">
+                      <span class="actor-name">{n.actor.display_name}</span>
+                      <span class="action-desc">
+                        {#if n.event_type === 'video_tag'}отметил(а) вас в ролике
+                        {:else if n.event_type === 'video_labeled'}завершил(а) разметку ролика
+                        {:else if n.event_type === 'bout_added'}добавил(а) новый сход в
+                        {:else if n.event_type === 'bout_updated'}изменил(а) сход #{n.payload?.order_index ?? ''} в
+                        {:else if n.event_type === 'comment_reply'}ответил(а) на ваш комментарий в
+                        {:else if n.event_type === 'video_comment'}оставил(а) комментарий в вашем бою
+                        {:else}обновил(а) событие в{/if}
+                      </span>
+                      <span class="video-ref">{n.video_title}</span>
+                      <span class="meta-dot">•</span>
+                      <span class="timestamp">{fmtDate(n.created_at)}</span>
+                    </div>
+
+                    <!-- Details Payload -->
+                    {#if n.event_type === 'comment_reply'}
+                      <div class="reply-container">
+                        {#if n.payload?.original_text}
+                          <div class="quote-text">«{n.payload.original_text}»</div>
+                        {/if}
+                        <div class="reply-text">↳ «{n.payload?.reply_text ?? ''}»</div>
+                      </div>
+                    {:else if n.event_type === 'video_comment'}
+                      <div class="comment-text-preview">«{n.payload?.comment_text ?? ''}»</div>
+                    {:else if n.event_type === 'bout_updated' && n.payload?.changes}
+                      <div class="bout-changes">
+                        {#each n.payload.changes as change}
+                          <span class="change-tag">{change}</span>
+                        {/each}
+                      </div>
+                    {:else if n.event_type === 'bout_added'}
+                      <div class="bout-time-tag">
+                        Хронометраж: {fmtMs(n.payload?.time_start_ms ?? 0)} — {fmtMs(n.payload?.time_end_ms ?? 0)}
+                      </div>
                     {/if}
                   </div>
-                  <span class="event-badge">
-                    {#if n.event_type === 'video_tag'}⚔️
-                    {:else if n.event_type === 'bout_added'}➕
-                    {:else if n.event_type === 'bout_updated'}✏️
-                    {:else if n.event_type === 'comment_reply'}💬
-                    {:else if n.event_type === 'video_comment'}💭
-                    {:else}🔔{/if}
-                  </span>
                 </div>
+              {:else if entry.kind === 'bouts_group'}
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div class="notif-card group-card unread" onclick={() => handleGroupCardClick(entry)}>
+                  <div class="unread-bar"></div>
 
-                <!-- Content -->
-                <div class="card-body">
-                  <div class="card-meta">
-                    <span class="actor-name">{n.actor.display_name}</span>
-                    <span class="action-desc">
-                      {#if n.event_type === 'video_tag'}отметил(а) вас в ролике
-                      {:else if n.event_type === 'video_labeled'}завершил(а) разметку ролика
-                      {:else if n.event_type === 'bout_added'}добавил(а) новый сход в
-                      {:else if n.event_type === 'bout_updated'}изменил(а) сход #{n.payload?.order_index ?? ''} в
-                      {:else if n.event_type === 'comment_reply'}ответил(а) на ваш комментарий в
-                      {:else if n.event_type === 'video_comment'}оставил(а) комментарий в вашем бою
-                      {:else}обновил(а) событие в{/if}
-                    </span>
-                    <span class="video-ref">{n.video_title}</span>
-                    <span class="meta-dot">•</span>
-                    <span class="timestamp">{fmtDate(n.created_at)}</span>
+                  <div class="group-main-row">
+                    <div class="card-avatar-wrap">
+                      <div class="card-avatar-box" style:background={resolveColor(entry.actor.id, entry.actor.color)}>
+                        <svg class="card-avatar-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <circle cx="12" cy="8" r="4" stroke={getContrastColor(entry.actor.color)} stroke-width="1.6"/>
+                          <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke={getContrastColor(entry.actor.color)} stroke-width="1.6" stroke-linecap="round"/>
+                        </svg>
+                        {#if entry.actor.avatar_url}
+                          <img
+                            src={entry.actor.avatar_url}
+                            alt=""
+                            class="card-avatar-img"
+                            onerror={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                          />
+                        {/if}
+                      </div>
+                      <span class="event-badge">✏️</span>
+                    </div>
+
+                    <div class="card-body">
+                      <div class="group-title-row">
+                        <span class="group-title-text">В видео «{entry.video_title}» обновлены сходы</span>
+                        <span class="group-count-pill">{entry.items.length}</span>
+                      </div>
+                      <div class="card-meta">
+                        <span class="actor-name">{entry.actor.display_name}</span>
+                        <span class="meta-dot">•</span>
+                        <span class="timestamp">{fmtDate(entry.created_at)}</span>
+                      </div>
+                    </div>
+
+                    <button
+                      class="group-toggle-btn"
+                      class:open={expandedGroupIds.has(entry.groupId)}
+                      onclick={(e) => toggleGroup(entry.groupId, e)}
+                      title={expandedGroupIds.has(entry.groupId) ? 'Свернуть список' : 'Показать сходы'}
+                      aria-label="Переключить список сходов"
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                      </svg>
+                    </button>
                   </div>
 
-                  <!-- Details Payload -->
-                  {#if n.event_type === 'comment_reply'}
-                    <div class="reply-container">
-                      {#if n.payload?.original_text}
-                        <div class="quote-text">«{n.payload.original_text}»</div>
-                      {/if}
-                      <div class="reply-text">↳ «{n.payload?.reply_text ?? ''}»</div>
-                    </div>
-                  {:else if n.event_type === 'video_comment'}
-                    <div class="comment-text-preview">«{n.payload?.comment_text ?? ''}»</div>
-                  {:else if n.event_type === 'bout_updated' && n.payload?.changes}
-                    <div class="bout-changes">
-                      {#each n.payload.changes as change}
-                        <span class="change-tag">{change}</span>
+                  {#if expandedGroupIds.has(entry.groupId)}
+                    <!-- svelte-ignore a11y_click_events_have_key_events -->
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                    <div class="group-accordion-list" onclick={(e) => e.stopPropagation()}>
+                      {#each entry.items as sub (sub.id)}
+                        <div class="group-subitem" onclick={(e) => handleSubItemClick(entry, sub, e)}>
+                          <div class="subitem-left">
+                            <span class="subitem-order">
+                              {#if sub.event_type === 'bout_added'}➕ Сход #{sub.payload?.order_index ?? ''}
+                              {:else}✏️ Сход #{sub.payload?.order_index ?? ''}{/if}
+                            </span>
+                            <span class="subitem-timeframe">
+                              {fmtMs(sub.payload?.time_start_ms ?? 0)} — {fmtMs(sub.payload?.time_end_ms ?? 0)}
+                            </span>
+                            {#if sub.payload?.changes && sub.payload.changes.length > 0}
+                              <div class="subitem-changes">
+                                {#each sub.payload.changes as ch}
+                                  <span class="change-tag-mini">{ch}</span>
+                                {/each}
+                              </div>
+                            {/if}
+                          </div>
+                          <div class="subitem-right">
+                            <span class="subitem-actor">{sub.actor.display_name}</span>
+                            <span class="subitem-date">{fmtDate(sub.created_at)}</span>
+                            <svg class="subitem-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                              <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                          </div>
+                        </div>
                       {/each}
-                    </div>
-                  {:else if n.event_type === 'bout_added'}
-                    <div class="bout-time-tag">
-                      Хронометраж: {fmtMs(n.payload?.time_start_ms ?? 0)} — {fmtMs(n.payload?.time_end_ms ?? 0)}
                     </div>
                   {/if}
                 </div>
-              </div>
+              {:else if entry.kind === 'comments_group'}
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div class="notif-card group-card unread" onclick={() => handleGroupCardClick(entry)}>
+                  <div class="unread-bar"></div>
+
+                  <div class="group-main-row">
+                    <div class="card-avatar-wrap">
+                      <div class="card-avatar-box" style:background={resolveColor(entry.actor.id, entry.actor.color)}>
+                        <svg class="card-avatar-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <circle cx="12" cy="8" r="4" stroke={getContrastColor(entry.actor.color)} stroke-width="1.6"/>
+                          <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke={getContrastColor(entry.actor.color)} stroke-width="1.6" stroke-linecap="round"/>
+                        </svg>
+                        {#if entry.actor.avatar_url}
+                          <img
+                            src={entry.actor.avatar_url}
+                            alt=""
+                            class="card-avatar-img"
+                            onerror={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                          />
+                        {/if}
+                      </div>
+                      <span class="event-badge">💬</span>
+                    </div>
+
+                    <div class="card-body">
+                      <div class="group-title-row">
+                        <span class="group-title-text">В видео «{entry.video_title}» новые комментарии</span>
+                        <span class="group-count-pill">{entry.items.length}</span>
+                      </div>
+                      <div class="card-meta">
+                        <span class="actor-name">{entry.actor.display_name}</span>
+                        <span class="meta-dot">•</span>
+                        <span class="timestamp">{fmtDate(entry.created_at)}</span>
+                      </div>
+                    </div>
+
+                    <button
+                      class="group-toggle-btn"
+                      class:open={expandedGroupIds.has(entry.groupId)}
+                      onclick={(e) => toggleGroup(entry.groupId, e)}
+                      title={expandedGroupIds.has(entry.groupId) ? 'Свернуть список' : 'Показать комментарии'}
+                      aria-label="Переключить список комментариев"
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                      </svg>
+                    </button>
+                  </div>
+
+                  {#if expandedGroupIds.has(entry.groupId)}
+                    <!-- svelte-ignore a11y_click_events_have_key_events -->
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                    <div class="group-accordion-list" onclick={(e) => e.stopPropagation()}>
+                      {#each entry.items as sub (sub.id)}
+                        <div class="group-subitem" onclick={(e) => handleSubItemClick(entry, sub, e)}>
+                          <div class="subitem-left">
+                            <span class="subitem-order">💬 {sub.actor.display_name}</span>
+                            <span class="subitem-timeframe">{fmtMs(sub.payload?.timestamp_ms ?? 0)}</span>
+                            <div class="subitem-comment-text">
+                              {#if sub.payload?.reply_text}↳ «{sub.payload.reply_text}»
+                              {:else if sub.payload?.comment_text}«{sub.payload.comment_text}»{/if}
+                            </div>
+                          </div>
+                          <div class="subitem-right">
+                            <span class="subitem-date">{fmtDate(sub.created_at)}</span>
+                            <svg class="subitem-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                              <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                          </div>
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+              {/if}
             {/each}
           </div>
         </section>
@@ -396,70 +713,228 @@
             Ранее просмотренные ({readNotifications.length})
           </div>
           <div class="notif-list">
-            {#each readNotifications as n (n.id)}
-              <!-- svelte-ignore a11y_click_events_have_key_events -->
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <div class="notif-card read" onclick={() => navigateToNotification(n)}>
-                <!-- Event Icon / Avatar -->
-                <div class="card-avatar-wrap">
-                  <div class="card-avatar-box muted" style:background={resolveColor(n.actor.id, n.actor.color)}>
-                    <svg class="card-avatar-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <circle cx="12" cy="8" r="4" stroke={getContrastColor(n.actor.color)} stroke-width="1.6"/>
-                      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke={getContrastColor(n.actor.color)} stroke-width="1.6" stroke-linecap="round"/>
-                    </svg>
-                    {#if n.actor.avatar_url}
-                      <img
-                        src={n.actor.avatar_url}
-                        alt=""
-                        class="card-avatar-img"
-                        onerror={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-                      />
+            {#each groupedRead as entry (entry.kind === 'single' ? entry.notification.id : entry.groupId)}
+              {#if entry.kind === 'single'}
+                {@const n = entry.notification}
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div class="notif-card read" onclick={() => handleSingleCardClick(n)}>
+                  <!-- Event Icon / Avatar -->
+                  <div class="card-avatar-wrap">
+                    <div class="card-avatar-box muted" style:background={resolveColor(n.actor.id, n.actor.color)}>
+                      <svg class="card-avatar-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <circle cx="12" cy="8" r="4" stroke={getContrastColor(n.actor.color)} stroke-width="1.6"/>
+                        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke={getContrastColor(n.actor.color)} stroke-width="1.6" stroke-linecap="round"/>
+                      </svg>
+                      {#if n.actor.avatar_url}
+                        <img
+                          src={n.actor.avatar_url}
+                          alt=""
+                          class="card-avatar-img"
+                          onerror={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                        />
+                      {/if}
+                    </div>
+                    <span class="event-badge muted">
+                      {#if n.event_type === 'video_tag'}⚔️
+                      {:else if n.event_type === 'bout_added'}➕
+                      {:else if n.event_type === 'bout_updated'}✏️
+                      {:else if n.event_type === 'comment_reply'}💬
+                      {:else if n.event_type === 'video_comment'}💭
+                      {:else}🔔{/if}
+                    </span>
+                  </div>
+
+                  <!-- Content -->
+                  <div class="card-body">
+                    <div class="card-meta">
+                      <span class="actor-name muted">{n.actor.display_name}</span>
+                      <span class="action-desc">
+                        {#if n.event_type === 'video_tag'}отметил(а) вас в ролике
+                        {:else if n.event_type === 'video_labeled'}разметил(а) ролик
+                        {:else if n.event_type === 'bout_added'}добавил(а) сход в
+                        {:else if n.event_type === 'bout_updated'}изменил(а) сход #{n.payload?.order_index ?? ''} в
+                        {:else if n.event_type === 'comment_reply'}ответил(а) на комментарий в
+                        {:else if n.event_type === 'video_comment'}оставил(а) комментарий к
+                        {:else}обновил(а) событие в{/if}
+                      </span>
+                      <span class="video-ref">{n.video_title}</span>
+                      <span class="meta-dot">•</span>
+                      <span class="timestamp">{fmtDate(n.created_at)}</span>
+                    </div>
+
+                    <!-- Details Payload -->
+                    {#if n.event_type === 'comment_reply'}
+                      <div class="reply-container muted">
+                        <div class="reply-text">↳ «{n.payload?.reply_text ?? ''}»</div>
+                      </div>
+                    {:else if n.event_type === 'video_comment'}
+                      <div class="comment-text-preview muted">«{n.payload?.comment_text ?? ''}»</div>
+                    {:else if n.event_type === 'bout_updated' && n.payload?.changes}
+                      <div class="bout-changes muted">
+                        {#each n.payload.changes as change}
+                          <span class="change-tag">{change}</span>
+                        {/each}
+                      </div>
                     {/if}
                   </div>
-                  <span class="event-badge muted">
-                    {#if n.event_type === 'video_tag'}⚔️
-                    {:else if n.event_type === 'bout_added'}➕
-                    {:else if n.event_type === 'bout_updated'}✏️
-                    {:else if n.event_type === 'comment_reply'}💬
-                    {:else if n.event_type === 'video_comment'}💭
-                    {:else}🔔{/if}
-                  </span>
                 </div>
+              {:else if entry.kind === 'bouts_group'}
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div class="notif-card group-card read" onclick={() => handleGroupCardClick(entry)}>
+                  <div class="group-main-row">
+                    <div class="card-avatar-wrap">
+                      <div class="card-avatar-box muted" style:background={resolveColor(entry.actor.id, entry.actor.color)}>
+                        <svg class="card-avatar-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <circle cx="12" cy="8" r="4" stroke={getContrastColor(entry.actor.color)} stroke-width="1.6"/>
+                          <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke={getContrastColor(entry.actor.color)} stroke-width="1.6" stroke-linecap="round"/>
+                        </svg>
+                        {#if entry.actor.avatar_url}
+                          <img
+                            src={entry.actor.avatar_url}
+                            alt=""
+                            class="card-avatar-img"
+                            onerror={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                          />
+                        {/if}
+                      </div>
+                      <span class="event-badge muted">✏️</span>
+                    </div>
 
-                <!-- Content -->
-                <div class="card-body">
-                  <div class="card-meta">
-                    <span class="actor-name muted">{n.actor.display_name}</span>
-                    <span class="action-desc">
-                      {#if n.event_type === 'video_tag'}отметил(а) вас в ролике
-                      {:else if n.event_type === 'video_labeled'}разметил(а) ролик
-                      {:else if n.event_type === 'bout_added'}добавил(а) сход в
-                      {:else if n.event_type === 'bout_updated'}изменил(а) сход #{n.payload?.order_index ?? ''} в
-                      {:else if n.event_type === 'comment_reply'}ответил(а) на комментарий в
-                      {:else if n.event_type === 'video_comment'}оставил(а) комментарий к
-                      {:else}обновил(а) событие в{/if}
-                    </span>
-                    <span class="video-ref">{n.video_title}</span>
-                    <span class="meta-dot">•</span>
-                    <span class="timestamp">{fmtDate(n.created_at)}</span>
+                    <div class="card-body">
+                      <div class="group-title-row">
+                        <span class="group-title-text muted">В видео «{entry.video_title}» обновлены сходы</span>
+                        <span class="group-count-pill muted">{entry.items.length}</span>
+                      </div>
+                      <div class="card-meta">
+                        <span class="actor-name muted">{entry.actor.display_name}</span>
+                        <span class="meta-dot">•</span>
+                        <span class="timestamp">{fmtDate(entry.created_at)}</span>
+                      </div>
+                    </div>
+
+                    <button
+                      class="group-toggle-btn"
+                      class:open={expandedGroupIds.has(entry.groupId)}
+                      onclick={(e) => toggleGroup(entry.groupId, e)}
+                      title={expandedGroupIds.has(entry.groupId) ? 'Свернуть список' : 'Показать сходы'}
+                      aria-label="Переключить список сходов"
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                      </svg>
+                    </button>
                   </div>
 
-                  <!-- Details Payload -->
-                  {#if n.event_type === 'comment_reply'}
-                    <div class="reply-container muted">
-                      <div class="reply-text">↳ «{n.payload?.reply_text ?? ''}»</div>
-                    </div>
-                  {:else if n.event_type === 'video_comment'}
-                    <div class="comment-text-preview muted">«{n.payload?.comment_text ?? ''}»</div>
-                  {:else if n.event_type === 'bout_updated' && n.payload?.changes}
-                    <div class="bout-changes muted">
-                      {#each n.payload.changes as change}
-                        <span class="change-tag">{change}</span>
+                  {#if expandedGroupIds.has(entry.groupId)}
+                    <!-- svelte-ignore a11y_click_events_have_key_events -->
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                    <div class="group-accordion-list" onclick={(e) => e.stopPropagation()}>
+                      {#each entry.items as sub (sub.id)}
+                        <div class="group-subitem" onclick={(e) => handleSubItemClick(entry, sub, e)}>
+                          <div class="subitem-left">
+                            <span class="subitem-order muted">
+                              {#if sub.event_type === 'bout_added'}➕ Сход #{sub.payload?.order_index ?? ''}
+                              {:else}✏️ Сход #{sub.payload?.order_index ?? ''}{/if}
+                            </span>
+                            <span class="subitem-timeframe muted">
+                              {fmtMs(sub.payload?.time_start_ms ?? 0)} — {fmtMs(sub.payload?.time_end_ms ?? 0)}
+                            </span>
+                            {#if sub.payload?.changes && sub.payload.changes.length > 0}
+                              <div class="subitem-changes">
+                                {#each sub.payload.changes as ch}
+                                  <span class="change-tag-mini muted">{ch}</span>
+                                {/each}
+                              </div>
+                            {/if}
+                          </div>
+                          <div class="subitem-right">
+                            <span class="subitem-actor muted">{sub.actor.display_name}</span>
+                            <span class="subitem-date">{fmtDate(sub.created_at)}</span>
+                            <svg class="subitem-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                              <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                          </div>
+                        </div>
                       {/each}
                     </div>
                   {/if}
                 </div>
-              </div>
+              {:else if entry.kind === 'comments_group'}
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div class="notif-card group-card read" onclick={() => handleGroupCardClick(entry)}>
+                  <div class="group-main-row">
+                    <div class="card-avatar-wrap">
+                      <div class="card-avatar-box muted" style:background={resolveColor(entry.actor.id, entry.actor.color)}>
+                        <svg class="card-avatar-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <circle cx="12" cy="8" r="4" stroke={getContrastColor(entry.actor.color)} stroke-width="1.6"/>
+                          <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke={getContrastColor(entry.actor.color)} stroke-width="1.6" stroke-linecap="round"/>
+                        </svg>
+                        {#if entry.actor.avatar_url}
+                          <img
+                            src={entry.actor.avatar_url}
+                            alt=""
+                            class="card-avatar-img"
+                            onerror={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                          />
+                        {/if}
+                      </div>
+                      <span class="event-badge muted">💬</span>
+                    </div>
+
+                    <div class="card-body">
+                      <div class="group-title-row">
+                        <span class="group-title-text muted">В видео «{entry.video_title}» новые комментарии</span>
+                        <span class="group-count-pill muted">{entry.items.length}</span>
+                      </div>
+                      <div class="card-meta">
+                        <span class="actor-name muted">{entry.actor.display_name}</span>
+                        <span class="meta-dot">•</span>
+                        <span class="timestamp">{fmtDate(entry.created_at)}</span>
+                      </div>
+                    </div>
+
+                    <button
+                      class="group-toggle-btn"
+                      class:open={expandedGroupIds.has(entry.groupId)}
+                      onclick={(e) => toggleGroup(entry.groupId, e)}
+                      title={expandedGroupIds.has(entry.groupId) ? 'Свернуть список' : 'Показать комментарии'}
+                      aria-label="Переключить список комментариев"
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                      </svg>
+                    </button>
+                  </div>
+
+                  {#if expandedGroupIds.has(entry.groupId)}
+                    <!-- svelte-ignore a11y_click_events_have_key_events -->
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                    <div class="group-accordion-list" onclick={(e) => e.stopPropagation()}>
+                      {#each entry.items as sub (sub.id)}
+                        <div class="group-subitem" onclick={(e) => handleSubItemClick(entry, sub, e)}>
+                          <div class="subitem-left">
+                            <span class="subitem-order muted">💬 {sub.actor.display_name}</span>
+                            <span class="subitem-timeframe muted">{fmtMs(sub.payload?.timestamp_ms ?? 0)}</span>
+                            <div class="subitem-comment-text muted">
+                              {#if sub.payload?.reply_text}↳ «{sub.payload.reply_text}»
+                              {:else if sub.payload?.comment_text}«{sub.payload.comment_text}»{/if}
+                            </div>
+                          </div>
+                          <div class="subitem-right">
+                            <span class="subitem-date">{fmtDate(sub.created_at)}</span>
+                            <svg class="subitem-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                              <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                          </div>
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+              {/if}
             {/each}
           </div>
         </section>
@@ -879,5 +1354,217 @@
     padding: 60px 20px;
     color: var(--text-secondary);
     gap: 12px;
+  }
+
+  /* ── Group Cards & Accordion ──────────────────────────────────────────────── */
+  .notif-card.group-card {
+    cursor: pointer;
+    position: relative;
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .group-main-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .group-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 2px;
+  }
+
+  .group-title-text {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .group-title-text.muted {
+    color: var(--text-secondary);
+  }
+
+  .group-count-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: var(--radius-pill);
+    background: rgba(245, 158, 11, 0.2);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    color: #f59e0b;
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
+
+  .group-count-pill.muted {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+    color: var(--text-secondary);
+  }
+
+  .group-toggle-btn {
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.2s, color 0.15s, border-color 0.15s;
+    flex-shrink: 0;
+  }
+
+  .group-toggle-btn:hover {
+    background: var(--surface-hover);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+  }
+
+  .group-toggle-btn.open svg {
+    transform: rotate(180deg);
+  }
+
+  .group-accordion-list {
+    border-top: 1px solid var(--border-color);
+    background: rgba(0, 0, 0, 0.18);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .group-subitem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 16px 10px 58px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+    transition: background 0.15s;
+    box-sizing: border-box;
+  }
+
+  .group-subitem:last-child {
+    border-bottom: none;
+  }
+
+  .group-subitem:hover {
+    background: var(--surface-hover);
+  }
+
+  .subitem-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .subitem-order {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+
+  .subitem-order.muted {
+    color: var(--text-secondary);
+  }
+
+  .subitem-timeframe {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    background: var(--surface-solid);
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .subitem-timeframe.muted {
+    opacity: 0.75;
+  }
+
+  .subitem-changes {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .change-tag-mini {
+    font-size: 0.72rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(234, 179, 8, 0.12);
+    border: 1px solid rgba(234, 179, 8, 0.25);
+    color: #eab308;
+    white-space: nowrap;
+  }
+
+  .change-tag-mini.muted {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+  }
+
+  .subitem-comment-text {
+    font-size: 0.83rem;
+    color: var(--text-primary);
+    font-style: italic;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 460px;
+  }
+
+  .subitem-comment-text.muted {
+    color: var(--text-secondary);
+  }
+
+  .subitem-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+  }
+
+  .subitem-actor {
+    color: var(--text-secondary);
+  }
+
+  .subitem-actor.muted {
+    opacity: 0.75;
+  }
+
+  .subitem-date {
+    font-size: 0.75rem;
+    opacity: 0.8;
+  }
+
+  .subitem-arrow {
+    opacity: 0.5;
+    transition: transform 0.15s, opacity 0.15s;
+  }
+
+  .group-subitem:hover .subitem-arrow {
+    opacity: 1;
+    transform: translateX(2px);
   }
 </style>

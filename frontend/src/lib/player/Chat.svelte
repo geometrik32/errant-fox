@@ -78,9 +78,6 @@
       : []
   );
 
-  let sharedBout = $derived(
-    sharedBoutId ? bouts.find(b => b.id === sharedBoutId) : null
-  );
   let text = $state('');
   let threadText = $state('');
   let sending = $state(false);
@@ -107,12 +104,7 @@
 
   let topLevelComments = $derived.by(() => {
     let filtered = comments.filter(c => !c.reply_to_id);
-    if (sharedBout) {
-      filtered = filtered.filter(c => {
-        if (highlightedId && c.id === highlightedId) return true;
-        return c.timestamp_ms >= sharedBout.time_start_ms && c.timestamp_ms <= sharedBout.time_end_ms;
-      });
-    } else if (filterByTimeline) {
+    if (filterByTimeline) {
       filtered = filtered.filter(c => {
         const diff = currentTimeMs - c.timestamp_ms;
         return diff >= -500 && diff <= 15000;
@@ -214,9 +206,6 @@
     try {
       let created: Comment;
       let commentTimeMs = Math.round(currentTime * 1000);
-      if (sharedBout) {
-        commentTimeMs = Math.max(sharedBout.time_start_ms, Math.min(sharedBout.time_end_ms, commentTimeMs));
-      }
       let drawingDataStr: string | null = null;
       if (drawingStrokes && drawingStrokes.length > 0) {
         drawingDataStr = JSON.stringify({ version: 1, strokes: drawingStrokes });
@@ -456,20 +445,18 @@
         <!-- Header -->
         <div class="chat-header">
           <span class="chat-title">Комментарии ({topLevelComments.length})</span>
-          {#if !sharedBoutId}
-            <label class="filter-switch" title="Живой чат: комментарии всплывают снизу по мере воспроизведения">
-              <div class="switch-container">
-                <input 
-                  type="checkbox" 
-                  bind:checked={filterByTimeline} 
-                />
-                <span class="slider"></span>
-              </div>
-              <span class="switch-label">
-                Живой чат
-              </span>
-            </label>
-          {/if}
+          <label class="filter-switch" title="Живой чат: комментарии всплывают снизу по мере воспроизведения">
+            <div class="switch-container">
+              <input 
+                type="checkbox" 
+                bind:checked={filterByTimeline} 
+              />
+              <span class="slider"></span>
+            </div>
+            <span class="switch-label">
+              Живой чат
+            </span>
+          </label>
         </div>
 
         <!-- Message list -->

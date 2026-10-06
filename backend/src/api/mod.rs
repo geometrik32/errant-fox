@@ -153,6 +153,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/notifications/read-bout", post(notifications::read_bout))
         .route("/api/notifications/read-comment", post(notifications::read_comment))
         .route("/api/notifications/read-all", post(notifications::read_all))
+        .route("/api/notifications/read-multiple", post(notifications::read_multiple))
         // WebSocket
         .route("/ws", get(crate::services::ws::ws_handler))
         .with_state(state)

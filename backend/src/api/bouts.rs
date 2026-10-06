@@ -239,6 +239,7 @@ pub async fn post_bout(
         let _ = recalculate_video_ai_status(&mut conn, &bout.video_id);
 
         let mut notifications = Vec::new();
+        let mut in_app_notified_uids = Vec::new();
 
         let video = videos::table
             .filter(videos::id.eq(&bout.video_id))
@@ -247,33 +248,27 @@ pub async fn post_bout(
             .unwrap_or(None);
 
         if let Some(video) = video {
-            let get_display_name = |v: &crate::db::models::Video, c: &mut diesel::SqliteConnection| -> String {
-                use crate::db::schema::users;
-                let date_str = v.date.format("%d.%m.%Y").to_string();
-                
-                let name_a = v.fighter_a_id.as_ref().and_then(|id_a| {
-                    users::table.filter(users::id.eq(id_a))
-                        .first::<crate::db::models::User>(c)
-                        .ok()
-                        .map(|u| u.display_name)
-                });
-                
-                let name_b = v.fighter_b_id.as_ref().and_then(|id_b| {
-                    users::table.filter(users::id.eq(id_b))
-                        .first::<crate::db::models::User>(c)
-                        .ok()
-                        .map(|u| u.display_name)
-                });
-                
-                match (name_a, name_b) {
-                    (Some(a), Some(b)) => format!("{} vs {} ({})", a, b, date_str),
-                    (Some(a), None) => format!("{} ({})", a, date_str),
-                    (None, Some(b)) => format!("{} ({})", b, date_str),
-                    (None, None) => format!("Без названия ({})", date_str),
-                }
-            };
+            use crate::db::models::{NewNotification, Notification};
+            use crate::db::schema::notifications as notif_schema;
 
-            let video_title = get_display_name(&video, &mut conn);
+            let all_bouts = bouts::table
+                .filter(bouts::video_id.eq(&bout.video_id))
+                .load::<Bout>(&mut conn)
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+
+            let is_already_labeled: bool = notif_schema::table
+                .filter(notif_schema::video_id.eq(&bout.video_id))
+                .filter(notif_schema::event_type.eq("video_labeled"))
+                .first::<Notification>(&mut conn)
+                .is_ok();
+
+            let is_tagged = video.fighter_a_id.is_some() && video.fighter_b_id.is_some();
+            let is_now_eligible = is_tagged
+                && !video.is_analyzing
+                && !all_bouts.is_empty()
+                && all_bouts.iter().all(|b| !b.is_ai);
+
+            let video_title = crate::api::notifications::get_video_title_db(&video, &mut conn);
 
             let mut participants = Vec::new();
             if let Some(ref fid) = video.fighter_a_id {
@@ -283,36 +278,62 @@ pub async fn post_bout(
                 participants.push(fid.clone());
             }
 
-            let mut in_app_notified_uids = Vec::new();
-            for part_id in participants {
-                if part_id != user_id {
-                    use crate::db::models::NewNotification;
-                    use crate::db::schema::notifications as notif_schema;
+            if is_now_eligible && !is_already_labeled {
+                // Video just became labeled! Emit video_labeled notification once.
+                for part_id in participants {
+                    if part_id != user_id {
+                        let _ = diesel::insert_into(notif_schema::table)
+                            .values(&NewNotification {
+                                user_id: part_id.clone(),
+                                actor_id: user_id.clone(),
+                                event_type: "video_labeled".to_string(),
+                                video_id: bout.video_id.clone(),
+                                bout_id: None,
+                                comment_id: None,
+                                payload: None,
+                                is_read: false,
+                            })
+                            .execute(&mut conn);
+                        in_app_notified_uids.push(part_id.clone());
 
-                    let payload_json = serde_json::json!({
-                        "order_index": bout.order_index,
-                        "time_start_ms": bout.time_start_ms,
-                        "time_end_ms": bout.time_end_ms,
-                    });
+                        if let Ok(part_user) = users::table.filter(users::id.eq(&part_id)).first::<User>(&mut conn) {
+                            if let Some(ref vk_id_str) = part_user.vk_id {
+                                if !vk_id_str.trim().is_empty() {
+                                    notifications.push((part_id.clone(), vk_id_str.clone(), video_title.clone()));
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if is_already_labeled {
+                // Video was already labeled. Emit bout_added notification.
+                for part_id in participants {
+                    if part_id != user_id {
+                        let payload_json = serde_json::json!({
+                            "order_index": bout.order_index,
+                            "time_start_ms": bout.time_start_ms,
+                            "time_end_ms": bout.time_end_ms,
+                        });
 
-                    let _ = diesel::insert_into(notif_schema::table)
-                        .values(&NewNotification {
-                            user_id: part_id.clone(),
-                            actor_id: user_id.clone(),
-                            event_type: "bout_added".to_string(),
-                            video_id: bout.video_id.clone(),
-                            bout_id: Some(bout.id),
-                            comment_id: None,
-                            payload: Some(payload_json.to_string()),
-                            is_read: false,
-                        })
-                        .execute(&mut conn);
-                    in_app_notified_uids.push(part_id.clone());
+                        let _ = diesel::insert_into(notif_schema::table)
+                            .values(&NewNotification {
+                                user_id: part_id.clone(),
+                                actor_id: user_id.clone(),
+                                event_type: "bout_added".to_string(),
+                                video_id: bout.video_id.clone(),
+                                bout_id: Some(bout.id),
+                                comment_id: None,
+                                payload: Some(payload_json.to_string()),
+                                is_read: false,
+                            })
+                            .execute(&mut conn);
+                        in_app_notified_uids.push(part_id.clone());
 
-                    if let Ok(part_user) = users::table.filter(users::id.eq(&part_id)).first::<User>(&mut conn) {
-                        if let Some(ref vk_id_str) = part_user.vk_id {
-                            if !vk_id_str.trim().is_empty() {
-                                notifications.push((part_id.clone(), vk_id_str.clone(), video_title.clone()));
+                        if let Ok(part_user) = users::table.filter(users::id.eq(&part_id)).first::<User>(&mut conn) {
+                            if let Some(ref vk_id_str) = part_user.vk_id {
+                                if !vk_id_str.trim().is_empty() {
+                                    notifications.push((part_id.clone(), vk_id_str.clone(), video_title.clone()));
+                                }
                             }
                         }
                     }
@@ -503,7 +524,7 @@ pub async fn patch_bout(
         // Write to history and notifications if there are changes
         let mut in_app_notified_uids = Vec::new();
         if !changes.is_empty() {
-            use crate::db::models::{NewBoutHistory, NewNotification};
+            use crate::db::models::{NewBoutHistory, NewNotification, Notification};
             use crate::db::schema::{bout_history, notifications as notif_schema, videos};
 
             diesel::insert_into(bout_history::table)
@@ -517,6 +538,23 @@ pub async fn patch_bout(
                 .map_err(|e| AppError::Internal(e.to_string()))?;
 
             if let Ok(video) = videos::table.filter(videos::id.eq(&cur.video_id)).first::<crate::db::models::Video>(&mut conn) {
+                let all_bouts = bouts::table
+                    .filter(bouts::video_id.eq(&cur.video_id))
+                    .load::<Bout>(&mut conn)
+                    .map_err(|e| AppError::Internal(e.to_string()))?;
+
+                let is_already_labeled: bool = notif_schema::table
+                    .filter(notif_schema::video_id.eq(&cur.video_id))
+                    .filter(notif_schema::event_type.eq("video_labeled"))
+                    .first::<Notification>(&mut conn)
+                    .is_ok();
+
+                let is_tagged = video.fighter_a_id.is_some() && video.fighter_b_id.is_some();
+                let is_now_eligible = is_tagged
+                    && !video.is_analyzing
+                    && !all_bouts.is_empty()
+                    && all_bouts.iter().all(|b| !b.is_ai);
+
                 let mut participants = Vec::new();
                 if let Some(ref fid) = video.fighter_a_id {
                     participants.push(fid.clone());
@@ -524,26 +562,110 @@ pub async fn patch_bout(
                 if let Some(ref fid) = video.fighter_b_id {
                     participants.push(fid.clone());
                 }
-                let payload_json = serde_json::json!({
-                    "order_index": cur.order_index,
-                    "time_start_ms": time_start_ms,
-                    "changes": changes,
-                });
-                for part_id in participants {
-                    if part_id != user_id {
-                        let _ = diesel::insert_into(notif_schema::table)
-                            .values(&NewNotification {
-                                user_id: part_id.clone(),
-                                actor_id: user_id.clone(),
-                                event_type: "bout_updated".to_string(),
-                                video_id: cur.video_id.clone(),
-                                bout_id: Some(id),
-                                comment_id: None,
-                                payload: Some(payload_json.to_string()),
-                                is_read: false,
-                            })
-                            .execute(&mut conn);
-                        in_app_notified_uids.push(part_id);
+
+                if is_now_eligible && !is_already_labeled {
+                    // Video just became labeled! Emit video_labeled once.
+                    for part_id in participants {
+                        if part_id != user_id {
+                            let _ = diesel::insert_into(notif_schema::table)
+                                .values(&NewNotification {
+                                    user_id: part_id.clone(),
+                                    actor_id: user_id.clone(),
+                                    event_type: "video_labeled".to_string(),
+                                    video_id: cur.video_id.clone(),
+                                    bout_id: None,
+                                    comment_id: None,
+                                    payload: None,
+                                    is_read: false,
+                                })
+                                .execute(&mut conn);
+                            in_app_notified_uids.push(part_id);
+                        }
+                    }
+                } else if is_already_labeled {
+                    // Video was already labeled. Deduplicate / update bout notifications.
+                    for part_id in participants {
+                        if part_id != user_id {
+                            let existing_unread: Option<Notification> = notif_schema::table
+                                .filter(notif_schema::user_id.eq(&part_id))
+                                .filter(notif_schema::bout_id.eq(id))
+                                .filter(notif_schema::is_read.eq(false))
+                                .order(notif_schema::id.desc())
+                                .first::<Notification>(&mut conn)
+                                .optional()
+                                .map_err(|e| AppError::Internal(e.to_string()))?;
+
+                            if let Some(existing) = existing_unread {
+                                if existing.actor_id == user_id {
+                                    // Same author edited again: update existing unread notification without creating duplicate
+                                    let payload_json = if existing.event_type == "bout_added" {
+                                        serde_json::json!({
+                                            "order_index": cur.order_index,
+                                            "time_start_ms": time_start_ms,
+                                            "time_end_ms": time_end_ms,
+                                        })
+                                    } else {
+                                        serde_json::json!({
+                                            "order_index": cur.order_index,
+                                            "time_start_ms": time_start_ms,
+                                            "time_end_ms": time_end_ms,
+                                            "changes": changes,
+                                        })
+                                    };
+
+                                    let _ = diesel::update(notif_schema::table.filter(notif_schema::id.eq(existing.id)))
+                                        .set((
+                                            notif_schema::payload.eq(Some(payload_json.to_string())),
+                                            notif_schema::created_at.eq(chrono::Utc::now().naive_utc()),
+                                        ))
+                                        .execute(&mut conn);
+
+                                    in_app_notified_uids.push(part_id);
+                                } else {
+                                    // Different author edited while unread: create new notification
+                                    let payload_json = serde_json::json!({
+                                        "order_index": cur.order_index,
+                                        "time_start_ms": time_start_ms,
+                                        "time_end_ms": time_end_ms,
+                                        "changes": changes,
+                                    });
+                                    let _ = diesel::insert_into(notif_schema::table)
+                                        .values(&NewNotification {
+                                            user_id: part_id.clone(),
+                                            actor_id: user_id.clone(),
+                                            event_type: "bout_updated".to_string(),
+                                            video_id: cur.video_id.clone(),
+                                            bout_id: Some(id),
+                                            comment_id: None,
+                                            payload: Some(payload_json.to_string()),
+                                            is_read: false,
+                                        })
+                                        .execute(&mut conn);
+                                    in_app_notified_uids.push(part_id);
+                                }
+                            } else {
+                                // No unread notification exists (previously read or first update): create new notification
+                                let payload_json = serde_json::json!({
+                                    "order_index": cur.order_index,
+                                    "time_start_ms": time_start_ms,
+                                    "time_end_ms": time_end_ms,
+                                    "changes": changes,
+                                });
+                                let _ = diesel::insert_into(notif_schema::table)
+                                    .values(&NewNotification {
+                                        user_id: part_id.clone(),
+                                        actor_id: user_id.clone(),
+                                        event_type: "bout_updated".to_string(),
+                                        video_id: cur.video_id.clone(),
+                                        bout_id: Some(id),
+                                        comment_id: None,
+                                        payload: Some(payload_json.to_string()),
+                                        is_read: false,
+                                    })
+                                    .execute(&mut conn);
+                                in_app_notified_uids.push(part_id);
+                            }
+                        }
                     }
                 }
             }
@@ -607,6 +729,12 @@ pub async fn delete_bout(
         if deleted == 0 {
             return Err(AppError::NotFound);
         }
+
+        // Clean up related notifications and history
+        let _ = diesel::delete(crate::db::schema::notifications::table.filter(crate::db::schema::notifications::bout_id.eq(id)))
+            .execute(&mut conn);
+        let _ = diesel::delete(crate::db::schema::bout_history::table.filter(crate::db::schema::bout_history::bout_id.eq(id)))
+            .execute(&mut conn);
 
         // Recalculate AI label — check if remaining bouts contain AI bouts
         let _ = recalculate_video_ai_status(&mut conn, &bout.video_id);

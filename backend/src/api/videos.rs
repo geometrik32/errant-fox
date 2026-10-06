@@ -943,6 +943,41 @@ pub async fn patch_video(
             .load::<Bout>(&mut conn)
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
+        let is_already_labeled: bool = crate::db::schema::notifications::table
+            .filter(crate::db::schema::notifications::video_id.eq(&video_id_for_db))
+            .filter(crate::db::schema::notifications::event_type.eq("video_labeled"))
+            .first::<crate::db::models::Notification>(&mut conn)
+            .is_ok();
+
+        let is_now_eligible = video.fighter_a_id.is_some()
+            && video.fighter_b_id.is_some()
+            && !video.is_analyzing
+            && !video_bouts.is_empty()
+            && video_bouts.iter().all(|b| !b.is_ai);
+
+        if is_now_eligible && !is_already_labeled {
+            let mut participants = Vec::new();
+            if let Some(ref fid) = video.fighter_a_id { participants.push(fid.clone()); }
+            if let Some(ref fid) = video.fighter_b_id { participants.push(fid.clone()); }
+            for part_id in participants {
+                if part_id != user_id {
+                    let _ = diesel::insert_into(crate::db::schema::notifications::table)
+                        .values(&crate::db::models::NewNotification {
+                            user_id: part_id.clone(),
+                            actor_id: user_id.clone(),
+                            event_type: "video_labeled".to_string(),
+                            video_id: video_id_for_db.clone(),
+                            bout_id: None,
+                            comment_id: None,
+                            payload: None,
+                            is_read: false,
+                        })
+                        .execute(&mut conn);
+                    tagged_user_ids.push(part_id);
+                }
+            }
+        }
+
         let video_comments = comments::table
             .filter(comments::video_id.eq(&video_id_for_db))
             .order(comments::id.asc())
