@@ -53,7 +53,8 @@ nano .env
 | `DATABASE_URL` | Путь внутри контейнера (не менять) | `/data/db/errant_fox.db` |
 | `JWT_SECRET` | Сгенерировать | `openssl rand -hex 32` |
 | `SEAFILE_URL` | Адрес вашего Seafile | `https://seafile.aat-terra.ru` |
-| `SEAFILE_TOKEN` | Seafile → Admin → API Token | `abc123def456...` |
+| `SEAFILE_TOKEN` | Библиотека в Seafile → ··· → API Token (токен библиотеки) | `abc123def456...` |
+| `SEAFILE_INTERNAL_URL` | Необязательно. Адрес контейнера Seafile в docker-сети `proxy`, чтобы бэкенд не ходил через внешний DNS/NAT. Уже задан в `docker-compose.yml` | `http://seafile` |
 | `PREVIEWS_DIR` | Путь внутри контейнера (не менять) | `/data/previews` |
 | `AVATARS_DIR` | Путь внутри контейнера (не менять) | `/data/avatars` |
 | `SERVER_PORT` | Порт внутри контейнера (не менять) | `8080` |

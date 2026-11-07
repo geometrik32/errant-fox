@@ -1,73 +1,57 @@
-# Rust
+# Builds
 target/
-
-# Node / Noodl
 node_modules/
+frontend/dist/
 *.log
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Secrets and local data
+# Secrets
 .env
 .env.*
 !.env.example
-.codex/
-*.sqlite
+
+# Local data (see AGENTS.md)
 data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 backend/avatars/
 backend/previews/
 
-# Frontend build
-frontend/dist/
-
-# IDEs and Tools
+# Machine-local AI tool configs
 .claude/
 .codex/
 .vscode/
-.claude
-.codex
-.vscode
+.agents/
+.github/agents/
+.github/hooks/
+.github/skills/
 
-# my docs
-напоминалка.md
-
-# SQLite temp files
-*.sqlite-shm
-*.sqlite-wal
-
-# Python Virtual Environments
+# Python
 venv/
+venv_cuda/
 .venv/
 __pycache__/
 *.pyc
 
-# AI / Neural model experiments
-ai_research/
-venv_cuda/
-yolo26n.pt
-yolov8m.pt
-yolov8n.pt
-yolov8x.pt
-directives/
-scratch/
-yolov8x-pose.pt
-test_venv/
-test_compression_output/
-GVHMR/
-models/
-outputs/
-docker/
-docker-compose.wham.yml
+# Big local folders and files (see AGENTS.md)
+archive/
+weights/
+cache/
+.cache/
+v2/
+*.pt
+*.mp4
+
+# execution/: only this script is tracked
 execution/*
 !execution/compress_adaptive_vfr.py
 
-# Local dev runners, logs and test files
+# Local dev runners and logs
 run_*.ps1
 run_*.bat
-*.mp4
 err_out.txt
 wget-log
-GEMINI.md
-

@@ -2,9 +2,10 @@
 
 **Движок:** SQLite (один файл `errant_fox.db` на сервере)
 **ORM:** Diesel (Rust)
-**Миграции:** 12 последовательных миграций в `backend/migrations/`
+**Миграции:** 19 последовательных миграций в `backend/migrations/`
+**Схема в коде:** `backend/src/db/schema.rs`
 
-Всего 7 таблиц.
+Всего 9 таблиц.
 
 ---
 
@@ -44,6 +45,11 @@
 | `created_at` | TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP | Когда появилось в системе |
 | `is_ai_labeled` | BOOLEAN NOT NULL DEFAULT 0 | Размечено ли видео ИИ-сервисом (миграция 0010) |
 | `is_analyzing` | BOOLEAN NOT NULL DEFAULT 0 | Находится ли видео в процессе фонового ИИ-анализа (миграция 0011) |
+| `is_queued` | BOOLEAN NOT NULL DEFAULT 0 | Видео стоит в очереди ИИ-анализа (миграция 0013) |
+| `is_optimized` | BOOLEAN NOT NULL DEFAULT 0 | Видео перекодировано/оптимизировано для веба (миграция 0017) |
+| `is_optimizing` | BOOLEAN NOT NULL DEFAULT 0 | Идёт оптимизация/перекодирование (миграция 0017) |
+| `is_tournament` | BOOLEAN NOT NULL DEFAULT 0 | Турнирная запись. Ставится при синхронизации, если папка Seafile называется `ГГГГ-ММ-ДД турнир <название>` (миграция 0018) |
+| `tournament_name` | TEXT | Название турнира из имени папки, nullable (миграция 0018) |
 
 > **Вычисляемые значения (не хранятся):**
 > - `total_score_a` = `SUM(bouts.score_a)` где `video_id = videos.id`
@@ -121,12 +127,13 @@
 | `timestamp_ms` | INTEGER NOT NULL | Позиция в видео (миллисекунды) |
 | `text` | TEXT NOT NULL | Текст комментария |
 | `reply_to_id` | INTEGER FK→comments.id | Ответ на другой комментарий, nullable |
-| `bout_id` | INTEGER FK→bouts.id | К какому сходу относится, nullable — заполняется автоматически (миграция 0003) |
+| `bout_id` | INTEGER FK→bouts.id | **Устарело:** колонка физически есть в БД, но обнулена миграцией 0015 и убрана из `schema.rs` |
 | `created_at` | TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP | |
 | `edited_at` | TIMESTAMP | Когда отредактирован, nullable |
 | `guest_nickname` | TEXT | Имя незарегистрированного гостя при отправке по расшаренной ссылке (миграция 0008), nullable |
+| `drawing` | TEXT | Рисунок поверх кадра, прикреплённый к комментарию, nullable (миграция 0014) |
 
-> `bout_id` определяется бэкендом автоматически при создании комментария: если `timestamp_ms` попадает в диапазон `[time_start_ms, time_end_ms]` какого-либо схода этого видео — записывается его id.
+> Привязка комментария к сходу больше не хранится: сход определяется на лету по `timestamp_ms`.
 
 ---
 
@@ -141,6 +148,39 @@
 | `kind` | TEXT NOT NULL CHECK(kind IN ('like', 'dislike')) | Тип реакции |
 
 **PK:** (`comment_id`, `user_id`) — один пользователь может иметь только одну реакцию на комментарий.
+
+---
+
+## Таблица `device_tokens`
+
+FCM-токены устройств для push-уведомлений в Android-приложение (миграция 0016).
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `id` | INTEGER PK AUTOINCREMENT | |
+| `user_id` | TEXT NOT NULL FK→users.id ON DELETE CASCADE | Владелец устройства |
+| `fcm_token` | TEXT UNIQUE NOT NULL | Токен Firebase Cloud Messaging |
+| `platform` | TEXT NOT NULL DEFAULT 'android' | Платформа |
+| `created_at` / `updated_at` | TIMESTAMP NOT NULL | |
+
+---
+
+## Таблица `notifications`
+
+Лента уведомлений пользователя (миграция 0019).
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `id` | INTEGER PK AUTOINCREMENT | |
+| `user_id` | TEXT NOT NULL FK→users.id ON DELETE CASCADE | Кому уведомление |
+| `actor_id` | TEXT NOT NULL FK→users.id ON DELETE CASCADE | Кто совершил действие |
+| `event_type` | TEXT NOT NULL | `bout_added`, `bout_updated`, `comment_reply`, `video_comment`, `video_labeled`, `video_tag` |
+| `video_id` | TEXT NOT NULL FK→videos.id ON DELETE CASCADE | |
+| `bout_id` | INTEGER FK→bouts.id ON DELETE CASCADE | nullable |
+| `comment_id` | INTEGER FK→comments.id ON DELETE CASCADE | nullable |
+| `payload` | TEXT | Доп. данные (JSON), nullable |
+| `is_read` | BOOLEAN NOT NULL DEFAULT 0 | |
+| `created_at` | TIMESTAMP NOT NULL | |
 
 ---
 
@@ -160,6 +200,13 @@
 | `0010_ai_label` | Добавление столбца `is_ai_labeled` в `videos` |
 | `0011_video_is_analyzing` | Добавление столбца `is_analyzing` в `videos` |
 | `0012_bout_is_ai` | Добавление столбца `is_ai` в `bouts` |
+| `0013_video_is_queued` | Добавление столбца `is_queued` в `videos` |
+| `0014_comment_drawing` | Добавление столбца `drawing` в `comments` |
+| `0015_remove_comment_bout_id` | Обнуление `comments.bout_id` (привязка к сходу больше не хранится) |
+| `0016_device_tokens` | Таблица `device_tokens` (push-уведомления) |
+| `0017_video_is_optimized` | Столбцы `is_optimized`, `is_optimizing` в `videos` |
+| `0018_tournament_videos` | Столбцы `is_tournament`, `tournament_name` в `videos`; гость переименован в «Вне клуба» |
+| `0019_notifications` | Таблица `notifications` + индексы |
 
 ---
 
@@ -182,6 +229,11 @@ CREATE INDEX idx_bout_history_bout_id ON bout_history(bout_id);
 
 -- Аналитика по бойцу
 CREATE INDEX idx_bouts_techniques ON bouts(technique_a_id, technique_b_id);
+
+-- Уведомления
+CREATE INDEX idx_notifications_user_unread  ON notifications(user_id, is_read);
+CREATE INDEX idx_notifications_user_created ON notifications(user_id, created_at);
+CREATE INDEX idx_notifications_video        ON notifications(video_id);
 ```
 
 ---
@@ -199,8 +251,9 @@ videos
   ├── fighter_a_id ──→ users.id
   ├── fighter_b_id ──→ users.id
   ├── seafile_path
-  ├── is_ai_labeled
-  └── is_analyzing
+  ├── is_ai_labeled / is_analyzing / is_queued
+  ├── is_optimized / is_optimizing
+  └── is_tournament / tournament_name
 
 bouts
   ├── id (PK)
@@ -225,11 +278,22 @@ comments
   ├── video_id ──────→ videos.id
   ├── author_id ─────→ users.id
   ├── reply_to_id ───→ comments.id
-  ├── bout_id ───────→ bouts.id
-  └── guest_nickname
+  ├── guest_nickname
+  └── drawing
 
 comment_reactions
   ├── comment_id ────→ comments.id (CASCADE)
   ├── user_id ───────→ users.id (CASCADE)
   └── kind
+
+device_tokens
+  ├── id (PK)
+  └── user_id ───────→ users.id (CASCADE)
+
+notifications
+  ├── id (PK)
+  ├── user_id / actor_id → users.id (CASCADE)
+  ├── video_id ──────→ videos.id (CASCADE)
+  ├── bout_id ───────→ bouts.id (CASCADE)
+  └── comment_id ────→ comments.id (CASCADE)
 ```

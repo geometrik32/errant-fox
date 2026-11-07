@@ -32,7 +32,7 @@ Errant Fox/
 │   │   ├── state.rs            ← AppState (пул БД, Seafile, WS hub)
 │   │   ├── db/
 │   │   │   ├── mod.rs          ← init_pool + run_migrations
-│   │   │   ├── schema.rs       ← Diesel schema (7 таблиц)
+│   │   │   ├── schema.rs       ← Diesel schema (9 таблиц)
 │   │   │   └── models.rs       ← Rust-структуры Queryable/Insertable
 │   │   ├── api/
 │   │   │   ├── mod.rs          ← Axum router (все маршруты)
@@ -41,16 +41,21 @@ Errant Fox/
 │   │   │   ├── videos.rs       ← /api/videos (CRUD, stream, previews, share, AI-label)
 │   │   │   ├── bouts.rs        ← /api/bouts + download_shared_bout
 │   │   │   ├── comments.rs     ← /api/comments + reactions + search + guest comments
+│   │   │   ├── notifications.rs ← /api/notifications (лента, счётчик, прочтение)
 │   │   │   └── techniques.rs   ← /api/techniques + admin
 │   │   ├── middleware/
 │   │   │   ├── mod.rs
 │   │   │   └── auth.rs         ← CurrentUser extractor (JWT middleware)
-│   │   ├── seafile.rs          ← HTTP-клиент к Seafile API
-│   │   ├── sync.rs             ← Фоновая синхронизация Seafile (60 сек)
-│   │   ├── previews.rs         ← FFmpeg генерация превью-кадров
-│   │   ├── moov.rs             ← Парсинг MP4 moov atom (FPS)
-│   │   └── ws.rs               ← WebSocket hub, broadcast live-событий
-│   ├── migrations/             ← 12 Diesel-миграций
+│   │   └── services/
+│   │       ├── seafile.rs      ← HTTP-клиент к Seafile API (+ внутренний URL в docker-сети)
+│   │       ├── sync.rs         ← Фоновая синхронизация Seafile, распознавание турнирных папок
+│   │       ├── previews.rs     ← FFmpeg генерация превью-кадров
+│   │       ├── moov.rs         ← Парсинг MP4 moov atom (FPS)
+│   │       ├── transcode.rs    ← Оптимизация / перекодирование в H.264
+│   │       ├── ai_queue.rs     ← Очередь ИИ-разметки (whisper-service)
+│   │       ├── vk.rs           ← VK ID авторизация
+│   │       └── ws.rs           ← WebSocket hub, broadcast live-событий
+│   ├── migrations/             ← 19 Diesel-миграций
 │   ├── Cargo.toml
 │   ├── .env.example
 │   └── Dockerfile              ← Dockerfile для сборки бэкенда

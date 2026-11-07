@@ -243,14 +243,16 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 
 ## 📂 Структура репозитория
 
-* [backend/](file:///e:/00_Curent%20project/Errant%20Fox/backend) — Серверное приложение на Rust (Axum, Diesel ORM, SQLite).
-* [frontend/](file:///e:/00_Curent%20project/Errant%20Fox/frontend) — Клиентский интерфейс на Svelte 5 + TypeScript + Vite.
-* [docs/](file:///e:/00_Curent%20project/Errant%20Fox/docs) — Техническая документация:
+* [backend/](./backend) — Серверное приложение на Rust (Axum, Diesel ORM, SQLite).
+* [frontend/](./frontend) — Клиентский интерфейс на Svelte 5 + TypeScript + Vite.
+* [whisper-service/](./whisper-service) — Python-сервис авторазметки сходов (Faster-Whisper).
+* [docs/](./docs) — Техническая документация:
   * 📋 [Техническое задание и требования](./docs/requirements.md)
   * 📐 [Архитектурная спецификация](./docs/architecture.md)
   * 💾 [Схема базы данных SQLite](./docs/database.md)
   * 🔌 [REST/WS API Reference](./docs/api.md)
-  * 🎬 [Сценарий промо-видеоролика](./docs/video_scenario.md)
+  * 🚢 [Деплой на TrueNAS](./docs/deploy.md)
+  * 💻 [Локальная разработка](./docs/quickstart_local.md)
 
 ---
 

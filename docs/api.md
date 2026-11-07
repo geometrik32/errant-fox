@@ -36,6 +36,15 @@
 }
 ```
 
+### GET /api/auth/vk/config
+Публичные параметры входа через VK ID (app id и т.п.) для фронтенда.
+
+### POST /api/auth/vk
+Вход через VK ID (тело — `VkLoginRequest` в `backend/src/api/auth.rs`). Возвращает тот же ответ, что `/auth/login`.
+
+### POST /api/auth/vk/unlink
+Отвязать VK-аккаунт от текущего пользователя.
+
 ---
 
 ## Профиль текущего пользователя
@@ -80,6 +89,34 @@
 
 ### GET /api/users/:id/avatar
 Отдаёт файл изображения аватара.
+
+### POST /api/users/me/devices · DELETE /api/users/me/devices
+Зарегистрировать / удалить FCM-токен устройства для push-уведомлений.
+```json
+{ "fcm_token": "...", "platform": "android" }
+```
+
+---
+
+## Пользователи и техники (администрирование)
+
+### GET /api/admin/users · POST /api/admin/users **[Admin]**
+Список пользователей / создать пользователя.
+```json
+{ "username": "ivan", "display_name": "Иван", "password": "...", "is_admin": false, "color": "#DB841F", "role": "fighter" }
+```
+
+### PATCH /api/admin/users/:id · DELETE /api/admin/users/:id **[Admin]**
+Изменить / удалить пользователя.
+
+### POST /api/admin/users/:id/avatar **[Admin]**
+Загрузить аватар за другого пользователя (`multipart/form-data`).
+
+### GET /api/techniques
+Справочник техник.
+
+### POST /api/admin/techniques · PATCH|DELETE /api/admin/techniques/:id **[Admin]**
+Создать / изменить / удалить технику (`name`, `description`).
 
 ---
 
@@ -150,8 +187,32 @@
 ### GET /api/videos/:id/stream
 Получить ссылку прямого воспроизведения из Seafile.
 
+### GET /api/videos/:id/stream/status
+Статус подготовки потока (перекодирование/кэш) перед воспроизведением.
+
+### GET /api/videos/:id/download
+Скачать видео целиком.
+
 ### GET /api/videos/:id/previews/:frame
 Получить статичный JPEG-кадр (frame = 0..9).
+
+> Поля `is_tournament` / `tournament_name` в ответах видео только для чтения: их выставляет синхронизация по имени папки Seafile (`ГГГГ-ММ-ДД турнир <название>`).
+
+---
+
+## Обрезка и оптимизация видео **[Admin]**
+
+| Метод и путь | Назначение |
+|---|---|
+| `GET /api/videos/:id/trim_ui` | HTML-интерфейс обрезки (`backend/video_trimmer_target.html`) |
+| `GET /api/videos/:id/keyframes` | Список ключевых кадров (секунды) |
+| `GET /api/videos/:id/trim_impact` | Какие сходы/комментарии затронет обрезка (`start_sec`, `end_sec`) |
+| `POST /api/videos/:id/trim` | Обрезать видео без перекодирования, границы прилипают к ключевым кадрам |
+| `GET /api/videos/:id/trim_status` | Прогресс обрезки |
+| `POST /api/videos/:id/optimize` | Оптимизировать видео для веба |
+| `GET /api/admin/videos/optimization-candidates` | Видео-кандидаты на оптимизацию |
+| `POST /api/admin/videos/batch-optimize` | Пакетная оптимизация (`video_ids`) |
+| `POST /api/admin/videos/batch-transcode` | Пакетное перекодирование в H.264 (`video_ids`) |
 
 ---
 
@@ -177,6 +238,9 @@
   "status": "cancelled"
 }
 ```
+
+### POST /api/admin/videos/batch-ai-label **[Admin]**
+Поставить в очередь ИИ-разметку нескольких видео (`video_ids`).
 
 ### GET /api/videos/:id/transcript **[Admin]**
 Запросить просмотрщик расшифровки ИИ (Exchange Inspector HTML).
@@ -223,6 +287,9 @@
 ### GET /api/shared/bouts/:id/download?token=...
 Скачать файл нарезки конкретного схода.
 
+### GET /s/video/:id
+Страница с Open Graph-разметкой для превью ссылки в мессенджерах; перенаправляет на просмотр. Путь без префикса `/api`.
+
 ---
 
 ## Администрирование и Синхронизация
@@ -258,6 +325,12 @@
 ### DELETE /api/bouts/:id
 Удалить сход.
 
+### GET /api/bouts/:id/download
+Скачать нарезку схода.
+
+### GET /api/bouts/:id/history
+История изменений схода (таблица `bout_history`).
+
 ---
 
 ## Комментарии и Реакции
@@ -282,10 +355,32 @@
 
 ---
 
+## Уведомления
+
+### GET /api/notifications
+Лента уведомлений. Query: `limit`, `offset`, `is_read`, `event_type`
+(`bout_added`, `bout_updated`, `comment_reply`, `video_comment`, `video_labeled`, `video_tag`).
+
+### GET /api/notifications/unread-count
+```json
+{ "unread_count": 3 }
+```
+
+### Отметить прочитанными (POST)
+| Путь | Тело |
+|---|---|
+| `/api/notifications/read-by-video` | `{ "video_id": "uuid" }` |
+| `/api/notifications/read-bout` | `{ "bout_id": 15 }` |
+| `/api/notifications/read-comment` | `{ "comment_id": 42 }` |
+| `/api/notifications/read-multiple` | `{ "ids": [1, 2, 3] }` |
+| `/api/notifications/read-all` | — |
+
+---
+
 ## WebSocket API
 
 ### WS /ws
-Единственное WebSocket-соединение с автоматической реподключением.
+Единственное WebSocket-соединение с автоматической реподключением. Путь без префикса `/api`. Полный список событий — enum в `backend/src/services/ws.rs`.
 
 **Сообщения от клиентов:**
 - `{ "token": "eyJ..." }` — авторизация при подключении
@@ -300,3 +395,10 @@
 | `new_video` | `{ id, date, preview_url }` | Обнаружено новое видео при синхронизации Seafile |
 | `UpdateVideoAiLabeled` | `{ video_id, is_ai_labeled, is_analyzing }` | Изменение статуса ИИ-анализа видео |
 | `UpdateVideoScore` | `{ video_id, total_score_a, total_score_b }` | Обновление суммарного счета видео |
+| `UpdateComment` / `DeleteComment` / `UpdateCommentReaction` | | Изменение комментариев и реакций |
+| `UpdateVideoFighters` | | Назначены бойцы видео |
+| `VideoRemoved` | | Видео удалено при синхронизации |
+| `PresenceUpdate` | | Кто сейчас смотрит видео |
+| `UpdateVideoPreview` | | Готовы превью-кадры |
+| `UpdateVideoOptimized` / `UpdateVideoTranscode` | | Статус оптимизации / перекодирования |
+| `UpdateNotificationUnreadCount` | | Новый счётчик непрочитанных уведомлений |

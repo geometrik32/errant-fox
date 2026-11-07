@@ -31,8 +31,8 @@ HEMA clubs and fighters need a self-hosted tool to:
 ```bash
 git clone https://github.com/geometrik32/errant-fox.git
 cd errant-fox
-cp backend/.env.example .env  # Configure SEAFILE_URL, JWT_SECRET, etc.
-docker compose -f infra/docker-compose.yml -f infra/docker-compose.local.yml up -d --build
+cp .env.example .env  # Configure SEAFILE_URL, JWT_SECRET, etc.
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 # Open: http://localhost:8081
 ```
 
@@ -42,7 +42,7 @@ docker compose -f infra/docker-compose.yml -f infra/docker-compose.local.yml up 
 - **Database Schema**: [docs/database.md](docs/database.md)
 - **REST & WebSocket API**: [docs/api.md](docs/api.md)
 - **Deployment Guide**: [docs/deploy.md](docs/deploy.md)
-- **Video Demo Scenario**: [docs/video_scenario.md](docs/video_scenario.md)
+- **Local Development**: [docs/quickstart_local.md](docs/quickstart_local.md)
 
 ## License
 MIT License. Free for personal club use, modification, and commercial application.
