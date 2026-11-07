@@ -2489,8 +2489,25 @@ pub async fn get_trim_ui(
 
     let stream_url = format!("/api/videos/{}/stream?token={}", video_id, token);
     
+    let temp_dir = get_temp_dir().await;
+    let cache_file = format!("{}/keyframes_{}.json", temp_dir, video_id);
+    let keyframes_json = if let Ok(data) = tokio::fs::read_to_string(&cache_file).await {
+        if let Ok(kfs) = serde_json::from_str::<Vec<f64>>(&data) {
+            if kfs.len() > 1 {
+                serde_json::to_string(&kfs).unwrap_or_else(|_| "[]".to_string())
+            } else {
+                "[]".to_string()
+            }
+        } else {
+            "[]".to_string()
+        }
+    } else {
+        "[]".to_string()
+    };
+
     let html = template
         .replace("let EMBEDDED_EXCHANGES = [];", &format!("let EMBEDDED_EXCHANGES = {};", exchanges_json))
+        .replace("let EMBEDDED_KEYFRAMES = [];", &format!("let EMBEDDED_KEYFRAMES = {};", keyframes_json))
         .replace("let streamUrl = \"\";", &format!("let streamUrl = \"{}\";", stream_url))
         .replace("let videoId = \"\";", &format!("let videoId = \"{}\";", video_id))
         .replace("let tokenStr = \"\";", &format!("let tokenStr = \"{}\";", token));
@@ -2534,6 +2551,80 @@ pub async fn get_trim_status(
     Ok(axum::Json(status))
 }
 
+pub async fn extract_keyframes_from_source(source: &str) -> Result<Vec<f64>, anyhow::Error> {
+    // 1. Try fast packet-level probe first (reads MP4 index / sync sample table without video decoding)
+    let pkt_output = tokio::process::Command::new("ffprobe")
+        .arg("-v")
+        .arg("error")
+        .arg("-select_streams")
+        .arg("v:0")
+        .arg("-show_entries")
+        .arg("packet=pts_time,flags")
+        .arg("-of")
+        .arg("csv=p=0")
+        .arg("-user_agent")
+        .arg("Mozilla/5.0")
+        .arg(source)
+        .output()
+        .await;
+
+    let mut keyframes: Vec<f64> = Vec::new();
+
+    if let Ok(out) = pkt_output {
+        if out.status.success() {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            for line in stdout.lines() {
+                let parts: Vec<&str> = line.trim().split(',').collect();
+                if parts.len() >= 2 && parts[1].contains('K') {
+                    if let Ok(pts) = parts[0].trim().parse::<f64>() {
+                        keyframes.push(pts);
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Fallback to frame probe if packet probe yielded insufficient keyframes
+    if keyframes.len() <= 1 {
+        let frame_output = tokio::process::Command::new("ffprobe")
+            .arg("-v")
+            .arg("error")
+            .arg("-select_streams")
+            .arg("v:0")
+            .arg("-skip_frame")
+            .arg("nokey")
+            .arg("-show_entries")
+            .arg("frame=pts_time")
+            .arg("-of")
+            .arg("default=noprint_wrappers=1:nokey=1")
+            .arg("-user_agent")
+            .arg("Mozilla/5.0")
+            .arg(source)
+            .output()
+            .await;
+
+        if let Ok(out) = frame_output {
+            if out.status.success() {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                for line in stdout.lines() {
+                    let pts_str = line.trim().split(',').next().unwrap_or("").trim();
+                    if let Ok(pts) = pts_str.parse::<f64>() {
+                        keyframes.push(pts);
+                    }
+                }
+            }
+        }
+    }
+
+    if keyframes.is_empty() || keyframes.first() != Some(&0.0) {
+        keyframes.insert(0, 0.0);
+    }
+    keyframes.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    keyframes.dedup();
+
+    Ok(keyframes)
+}
+
 pub async fn get_keyframes(
     State(state): State<AppState>,
     crate::middleware::auth::CurrentUser(user): crate::middleware::auth::CurrentUser,
@@ -2546,9 +2637,12 @@ pub async fn get_keyframes(
     let temp_dir = get_temp_dir().await;
     let cache_file = format!("{}/keyframes_{}.json", temp_dir, video_id);
 
+    // Read cache only if it has valid data with more than 1 keyframe
     if let Ok(data) = tokio::fs::read_to_string(&cache_file).await {
         if let Ok(kfs) = serde_json::from_str::<Vec<f64>>(&data) {
-            return Ok(axum::Json(kfs));
+            if kfs.len() > 1 {
+                return Ok(axum::Json(kfs));
+            }
         }
     }
 
@@ -2572,44 +2666,14 @@ pub async fn get_keyframes(
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    let output = tokio::process::Command::new("ffprobe")
-        .arg("-v")
-        .arg("error")
-        .arg("-select_streams")
-        .arg("v:0")
-        .arg("-skip_frame")
-        .arg("nokey")
-        .arg("-show_entries")
-        .arg("frame=pts_time")
-        .arg("-of")
-        .arg("csv=p=0")
-        .arg("-user_agent")
-        .arg("Mozilla/5.0")
-        .arg(&download_url)
-        .output()
+    let keyframes = extract_keyframes_from_source(&download_url)
         .await
-        .map_err(|e| AppError::Internal(format!("Failed to spawn ffprobe: {}", e)))?;
+        .map_err(|e| AppError::Internal(format!("Failed to extract keyframes: {}", e)))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        tracing::error!("ffprobe get_keyframes failed: {}", stderr);
-        return Err(AppError::Internal(format!("ffprobe failed: {}", stderr)));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut keyframes: Vec<f64> = stdout
-        .lines()
-        .filter_map(|l| l.trim().parse::<f64>().ok())
-        .collect();
-
-    if keyframes.is_empty() || keyframes.first() != Some(&0.0) {
-        keyframes.insert(0, 0.0);
-    }
-    keyframes.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    keyframes.dedup();
-
-    if let Ok(json_str) = serde_json::to_string(&keyframes) {
-        let _ = tokio::fs::write(&cache_file, json_str).await;
+    if keyframes.len() > 1 {
+        if let Ok(json_str) = serde_json::to_string(&keyframes) {
+            let _ = tokio::fs::write(&cache_file, json_str).await;
+        }
     }
 
     Ok(axum::Json(keyframes))
@@ -2697,15 +2761,13 @@ async fn run_trim_task(state: AppState, video_id: String, payload: TrimVideoPayl
 
     let seafile_path = video.seafile_path.clone();
     
-    let download_url = state.seafile.get_download_url(&seafile_path).await?;
-    
     let temp_dir = get_temp_dir().await;
     let temp_input = format!("{}/input_{}.mp4", temp_dir, video_id);
     let temp_output = format!("{}/trimmed_{}.mp4", temp_dir, video_id);
     
     // Step 1: Download the original video
     tracing::info!("Trim: downloading video {} from Seafile to {}...", video_id, temp_input);
-    let response = reqwest::get(&download_url).await?;
+    let response = state.seafile.fetch_range(&seafile_path, None).await?;
     {
         use tokio::io::AsyncWriteExt;
         let mut file = tokio::fs::File::create(&temp_input).await?;
@@ -2716,29 +2778,102 @@ async fn run_trim_task(state: AppState, video_id: String, payload: TrimVideoPayl
             file.write_all(&chunk).await?;
         }
     }
-    tracing::info!("Trim: download complete, running ffmpeg...");
-    
-    // Step 2: Run ffmpeg lossless stream copy (-c copy) on keyframe bounds
-    let duration = payload.end_sec - payload.start_sec;
-    
-    let output = tokio::process::Command::new("ffmpeg")
-        .arg("-y")
-        .arg("-ss")
-        .arg(payload.start_sec.to_string())
-        .arg("-i")
-        .arg(&temp_input)
-        .arg("-t")
-        .arg(duration.to_string())
-        .arg("-c")
-        .arg("copy")
-        .arg("-avoid_negative_ts")
-        .arg("make_zero")
-        .arg("-movflags")
-        .arg("+faststart")
-        .arg(&temp_output)
-        .output()
-        .await?;
+    tracing::info!("Trim: download complete, analyzing keyframes directly on local file...");
 
+    // Step 1.1: Extract exact keyframes from the local downloaded file
+    let keyframes = extract_keyframes_from_source(&temp_input).await?;
+    if keyframes.is_empty() {
+        let _ = tokio::fs::remove_file(&temp_input).await;
+        return Err(anyhow::anyhow!("Не удалось определить I-кадры в исходном видеофайле. Обрезка отменена."));
+    }
+
+    // Cache the accurate keyframes found on local disk
+    if keyframes.len() > 1 {
+        let cache_file = format!("{}/keyframes_{}.json", temp_dir, video_id);
+        if let Ok(json_str) = serde_json::to_string(&keyframes) {
+            let _ = tokio::fs::write(&cache_file, json_str).await;
+        }
+    }
+
+    // Determine actual video duration
+    let dur_output = tokio::process::Command::new("ffprobe")
+        .arg("-v").arg("error")
+        .arg("-show_entries").arg("format=duration")
+        .arg("-of").arg("default=noprint_wrappers=1:nokey=1")
+        .arg(&temp_input)
+        .output()
+        .await;
+    let video_duration = dur_output
+        .ok()
+        .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<f64>().ok())
+        .or_else(|| video.duration_ms.map(|d| d as f64 / 1000.0))
+        .unwrap_or_else(|| *keyframes.last().unwrap_or(&0.0));
+
+    // SNAP START TO CLOSEST KEYFRAME
+    let mut closest_start = keyframes[0];
+    let mut min_diff_start = (payload.start_sec - closest_start).abs();
+    for &k in &keyframes {
+        let diff = (payload.start_sec - k).abs();
+        if diff < min_diff_start {
+            min_diff_start = diff;
+            closest_start = k;
+        }
+    }
+    let actual_start_sec = closest_start;
+
+    // SNAP END TO CLOSEST KEYFRAME OR EOF
+    let actual_end_sec = if payload.end_sec >= video_duration - 0.1 || payload.end_sec >= *keyframes.last().unwrap_or(&video_duration) {
+        video_duration
+    } else {
+        let mut closest_end = *keyframes.last().unwrap_or(&video_duration);
+        let mut min_diff_end = (payload.end_sec - closest_end).abs();
+        for &k in &keyframes {
+            if k <= actual_start_sec {
+                continue;
+            }
+            let diff = (payload.end_sec - k).abs();
+            if diff < min_diff_end {
+                min_diff_end = diff;
+                closest_end = k;
+            }
+        }
+        closest_end
+    };
+
+    if actual_start_sec >= actual_end_sec {
+        let _ = tokio::fs::remove_file(&temp_input).await;
+        return Err(anyhow::anyhow!("После привязки к I-кадрам начало ({:.2}с) оказалось больше или равно концу ({:.2}с).", actual_start_sec, actual_end_sec));
+    }
+
+    tracing::info!(
+        "Trim: requested [{:.3}, {:.3}], snapped to exact keyframes [{:.6}, {:.6}] (duration: {:.3})",
+        payload.start_sec, payload.end_sec, actual_start_sec, actual_end_sec, video_duration
+    );
+
+    // Step 2: Run ffmpeg lossless stream copy (-c copy) strictly starting at keyframe
+    let mut cmd = tokio::process::Command::new("ffmpeg");
+    cmd.arg("-y");
+
+    if actual_start_sec > 0.0 {
+        let prev_kf = keyframes.iter().filter(|&&k| k < actual_start_sec).copied().last().unwrap_or(0.0);
+        let epsilon = ((actual_start_sec - prev_kf) / 2.0).min(0.04).max(0.005);
+        let seek_pos = (actual_start_sec - epsilon).max(0.0);
+        cmd.arg("-ss").arg(format!("{:.6}", seek_pos));
+    }
+
+    cmd.arg("-i").arg(&temp_input);
+
+    if actual_end_sec < video_duration - 0.05 {
+        let duration = actual_end_sec - actual_start_sec;
+        cmd.arg("-t").arg(format!("{:.6}", duration));
+    }
+
+    cmd.arg("-c").arg("copy")
+        .arg("-avoid_negative_ts").arg("make_zero")
+        .arg("-movflags").arg("+faststart")
+        .arg(&temp_output);
+
+    let output = cmd.output().await?;
     let _ = tokio::fs::remove_file(&temp_input).await;
 
     if !output.status.success() {
@@ -2747,7 +2882,29 @@ async fn run_trim_task(state: AppState, video_id: String, payload: TrimVideoPayl
         let _ = tokio::fs::remove_file(&temp_output).await;
         return Err(anyhow::anyhow!("FFmpeg trim failed: {}", stderr));
     }
-    tracing::info!("Trim: ffmpeg stream copy done, uploading to Seafile...");
+
+    // Step 2.1: Verify trimmed file starts with keyframe (I-frame)
+    let verify_out = tokio::process::Command::new("ffprobe")
+        .arg("-v").arg("error")
+        .arg("-select_streams").arg("v:0")
+        .arg("-show_entries").arg("frame=key_frame,pict_type")
+        .arg("-of").arg("csv=p=0")
+        .arg(&temp_output)
+        .output()
+        .await;
+
+    if let Ok(v_out) = verify_out {
+        let v_str = String::from_utf8_lossy(&v_out.stdout);
+        let first_frame = v_str.lines().next().unwrap_or("");
+        tracing::info!("Trim verification: first frame in trimmed file = '{}'", first_frame);
+        if !first_frame.starts_with('1') && !first_frame.contains(",I") {
+            tracing::error!("Trim verification failed: output does not start with keyframe! Frame: {}", first_frame);
+            let _ = tokio::fs::remove_file(&temp_output).await;
+            return Err(anyhow::anyhow!("Тримминг не попал в I-кадр! Первый кадр: {}", first_frame));
+        }
+    }
+
+    tracing::info!("Trim: ffmpeg stream copy verified and done, uploading to Seafile...");
 
     // Step 3: Upload trimmed file back to Seafile
     let file_bytes = tokio::fs::read(&temp_output).await?;
@@ -2758,11 +2915,11 @@ async fn run_trim_task(state: AppState, video_id: String, payload: TrimVideoPayl
     let _ = tokio::fs::remove_file(format!("{}/keyframes_{}.json", temp_dir, video_id)).await;
     let _ = tokio::fs::remove_file(state.transcode.target_path(&video_id)).await;
 
-    tracing::info!("Trim: upload done, updating DB...");
+    tracing::info!("Trim: upload done, updating DB with snapped boundaries...");
 
-    let start_ms = (payload.start_sec * 1000.0).round() as i32;
-    let end_ms = (payload.end_sec * 1000.0).round() as i32;
-    let new_duration_ms = ((payload.end_sec - payload.start_sec) * 1000.0).round() as i32;
+    let start_ms = (actual_start_sec * 1000.0).round() as i32;
+    let end_ms = (actual_end_sec * 1000.0).round() as i32;
+    let new_duration_ms = ((actual_end_sec - actual_start_sec) * 1000.0).round() as i32;
     
     tokio::task::spawn_blocking({
         let vid = video_id.clone();
@@ -2816,8 +2973,8 @@ async fn run_trim_task(state: AppState, video_id: String, payload: TrimVideoPayl
     let mut has_transcript = false;
     if let Ok(raw_json) = tokio::fs::read_to_string(&json_path).await {
         if let Ok(mut parsed) = serde_json::from_str::<serde_json::Value>(&raw_json) {
-            let start_sec = payload.start_sec;
-            let end_sec = payload.end_sec;
+            let start_sec = actual_start_sec;
+            let end_sec = actual_end_sec;
             let start_ms = (start_sec * 1000.0).round() as i64;
             let end_ms = (end_sec * 1000.0).round() as i64;
 
@@ -2962,10 +3119,38 @@ pub async fn get_trim_impact(
         return Err(AppError::Forbidden);
     }
     
+    let temp_dir = get_temp_dir().await;
+    let cache_file = format!("{}/keyframes_{}.json", temp_dir, video_id);
+    let (actual_start_sec, actual_end_sec) = if let Ok(data) = tokio::fs::read_to_string(&cache_file).await {
+        if let Ok(kfs) = serde_json::from_str::<Vec<f64>>(&data) {
+            if kfs.len() > 1 {
+                let snap = |val: f64| -> f64 {
+                    let mut closest = kfs[0];
+                    let mut min_diff = (val - closest).abs();
+                    for &k in &kfs {
+                        let diff = (val - k).abs();
+                        if diff < min_diff {
+                            min_diff = diff;
+                            closest = k;
+                        }
+                    }
+                    closest
+                };
+                (snap(payload.start_sec), snap(payload.end_sec))
+            } else {
+                (payload.start_sec, payload.end_sec)
+            }
+        } else {
+            (payload.start_sec, payload.end_sec)
+        }
+    } else {
+        (payload.start_sec, payload.end_sec)
+    };
+
     let db = state.db.clone();
     
-    let start_ms = (payload.start_sec * 1000.0).round() as i32;
-    let end_ms = (payload.end_sec * 1000.0).round() as i32;
+    let start_ms = (actual_start_sec * 1000.0).round() as i32;
+    let end_ms = (actual_end_sec * 1000.0).round() as i32;
     
     let impact = tokio::task::spawn_blocking(move || {
         use crate::db::schema::{bouts, comments};
@@ -3357,8 +3542,7 @@ async fn run_optimize_task(state: AppState, video_id: String) -> Result<(), anyh
 
     // 2. Download original video
     tracing::info!("Optimize: downloading video {} from Seafile to {}...", video_id, temp_input);
-    let download_url = state.seafile.get_download_url(&seafile_path).await?;
-    let response = reqwest::get(&download_url).await?;
+    let response = state.seafile.fetch_range(&seafile_path, None).await?;
     {
         use tokio::io::AsyncWriteExt;
         let mut file = tokio::fs::File::create(&temp_input).await?;

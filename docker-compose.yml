@@ -16,6 +16,7 @@ services:
       TRANSCRIPTS_DIR: /data/transcripts
       SQLITE_JOURNAL_MODE: DELETE
       WHISPER_URL: http://whisper-service:8000
+      SEAFILE_INTERNAL_URL: http://seafile
     networks:
       - default
       - proxy
@@ -29,6 +30,7 @@ services:
       - whisper_cache:/root/.cache/whisper
     networks:
       - default
+      - proxy
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
       interval: 30s

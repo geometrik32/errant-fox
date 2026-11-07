@@ -4,6 +4,7 @@ pub struct Config {
     pub database_url: String,
     pub jwt_secret: String,
     pub seafile_url: String,
+    pub seafile_internal_url: Option<String>,
     pub seafile_token: String,
     pub previews_dir: String,
     pub avatars_dir: String,
@@ -26,6 +27,9 @@ impl Config {
             database_url: resolve_data_path("DATABASE_URL"),
             jwt_secret: required("JWT_SECRET"),
             seafile_url: required("SEAFILE_URL"),
+            seafile_internal_url: env::var("SEAFILE_INTERNAL_URL")
+                .ok()
+                .filter(|s| !s.trim().is_empty()),
             seafile_token: required("SEAFILE_TOKEN"),
             previews_dir: resolve_data_path("PREVIEWS_DIR"),
             avatars_dir: resolve_data_path("AVATARS_DIR"),

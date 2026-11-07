@@ -1,6 +1,5 @@
 use axum::http::{header, Method};
 use std::net::SocketAddr;
-use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
@@ -21,6 +20,7 @@ async fn main() {
     let seafile_client = services::seafile::SeafileClient::new(
         config.seafile_url.clone(),
         config.seafile_token.clone(),
+        config.seafile_internal_url.clone(),
     );
 
     let db_pool = db::init_pool(&config.database_url);

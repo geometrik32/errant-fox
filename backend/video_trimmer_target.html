@@ -357,7 +357,10 @@
 
 <header>
   <h1>✂️ Errant Fox — Обрезка видео</h1>
-  <span class="badge-precision">⚡ HEVC Stream Copy (~1 сек) • Без перекодирования</span>
+  <div style="display:flex; align-items:center; gap:10px;">
+    <span id="kfStatusBadge" class="badge-precision" style="background: rgba(56, 189, 248, 0.15); border-color: rgba(56, 189, 248, 0.35); color: #38bdf8;">⏳ Загрузка I-кадров...</span>
+    <span class="badge-precision">⚡ HEVC Stream Copy (~1 сек) • Без перекодирования</span>
+  </div>
 </header>
 
 <div class="main">
@@ -393,16 +396,14 @@
         <span>Обрезать начало <span class="kf-badge" id="startKfBadge">I-кадр</span></span>
         <span id="startFormatted" style="color:var(--accent3)">00:00.00</span>
       </label>
-      <div class="desc">Удалить видео до этой секунды (привязка к ключевому I-кадру).</div>
+      <div class="desc">Удалить видео до этой секунды (строгая привязка к I-кадру).</div>
       <div class="input-row">
-        <input type="number" id="startInput" value="0.00" min="0" step="0.01">
-        <button class="btn" onclick="setStart()" title="Установить текущую позицию с привязкой к I-кадру (Клавиша I)">[ I ] Текущее</button>
+        <input type="number" id="startInput" value="0.00" min="0" step="any">
+        <button class="btn" onclick="setStart()" title="Установить текущую позицию с привязкой к I-кадру (Клавиша I)">[ I ] К I-кадру</button>
       </div>
       <div class="step-btns">
-        <button class="step-btn kf-btn" onclick="stepKeyframeStart(-1)" title="Предыдущий ключевой кадр">◄ I-кадр</button>
-        <button class="step-btn" onclick="nudgeStart(-0.04)">-1к</button>
-        <button class="step-btn" onclick="nudgeStart(0.04)">+1к</button>
-        <button class="step-btn kf-btn" onclick="stepKeyframeStart(1)" title="Следующий ключевой кадр">I-кадр ►</button>
+        <button class="step-btn kf-btn" onclick="stepKeyframeStart(-1)" title="Предыдущий ключевой I-кадр">◄ Предыдущий I-кадр</button>
+        <button class="step-btn kf-btn" onclick="stepKeyframeStart(1)" title="Следующий ключевой I-кадр">Следующий I-кадр ►</button>
       </div>
     </div>
 
@@ -411,16 +412,14 @@
         <span>Обрезать конец <span class="kf-badge" id="endKfBadge">I-кадр</span></span>
         <span id="endFormatted" style="color:var(--accent3)">00:00.00</span>
       </label>
-      <div class="desc">Удалить видео после этой секунды (привязка к ключевому I-кадру).</div>
+      <div class="desc">Удалить видео после этой секунды (строгая привязка к I-кадру).</div>
       <div class="input-row">
-        <input type="number" id="endInput" value="0.00" min="0" step="0.01">
-        <button class="btn" onclick="setEnd()" title="Установить текущую позицию с привязкой к I-кадру (Клавиша O)">[ O ] Текущее</button>
+        <input type="number" id="endInput" value="0.00" min="0" step="any">
+        <button class="btn" onclick="setEnd()" title="Установить текущую позицию с привязкой к I-кадру (Клавиша O)">[ O ] К I-кадру</button>
       </div>
       <div class="step-btns">
-        <button class="step-btn kf-btn" onclick="stepKeyframeEnd(-1)" title="Предыдущий ключевой кадр">◄ I-кадр</button>
-        <button class="step-btn" onclick="nudgeEnd(-0.04)">-1к</button>
-        <button class="step-btn" onclick="nudgeEnd(0.04)">+1к</button>
-        <button class="step-btn kf-btn" onclick="stepKeyframeEnd(1)" title="Следующий ключевой кадр">I-кадр ►</button>
+        <button class="step-btn kf-btn" onclick="stepKeyframeEnd(-1)" title="Предыдущий ключевой I-кадр">◄ Предыдущий I-кадр</button>
+        <button class="step-btn kf-btn" onclick="stepKeyframeEnd(1)" title="Следующий ключевой I-кадр">Следующий I-кадр ►</button>
       </div>
     </div>
 
@@ -432,15 +431,15 @@
     <div class="hotkeys-card">
       <strong>Горячие клавиши:</strong><br>
       <kbd>Пробел</kbd> Пауза / Воспроизведение<br>
-      <kbd>←</kbd> / <kbd>→</kbd> Шаг на 1 кадр (0.04с)<br>
-      <kbd>Shift + ←/→</kbd> Шаг на 1.0 сек<br>
-      <kbd>I</kbd> или <kbd>[</kbd> Установить начало (I-кадр)<br>
-      <kbd>O</kbd> или <kbd>]</kbd> Установить конец (I-кадр)
+      <kbd>←</kbd> / <kbd>→</kbd> Шаг видео на 1 кадр (0.04с)<br>
+      <kbd>Shift + ←/→</kbd> Шаг видео на 1.0 сек<br>
+      <kbd>I</kbd> или <kbd>[</kbd> Привязать начало к ближайшему I-кадру<br>
+      <kbd>O</kbd> или <kbd>]</kbd> Привязать конец к ближайшему I-кадру
     </div>
 
     <div class="control-group" style="border-color: rgba(56, 189, 248, 0.3);">
       <div class="desc" style="color: #38bdf8">
-        ⚡ <b>Потоковое копирование (Stream Copy):</b> перекодирование отсутствует. Ролик остаётся в оригинальном HEVC с исходным 2.7K качеством камеры GoPro. Обрезка занимает ~1 секунду.
+        🔒 <b>Только по ключевым I-кадрам:</b> потоковая резка без перекодирования (Stream Copy) возможна исключительно по границам I-кадров. Привязка выполняется строго и принудительно на клиенте и сервере.
       </div>
     </div>
 
@@ -450,6 +449,7 @@
 
 <script>
   let EMBEDDED_EXCHANGES = [];
+  let EMBEDDED_KEYFRAMES = [];
   let streamUrl = "";
   let videoId = "";
   let tokenStr = "";
@@ -470,41 +470,102 @@
   const trimEndRegion = document.getElementById('trimEndRegion');
   const trimBtn = document.getElementById('trimBtn');
   const overlay = document.getElementById('overlay');
+  const kfStatusBadge = document.getElementById('kfStatusBadge');
   
   let videoDuration = 0;
+  let kfLoading = false;
+
+  // Initialize from embedded data if provided by server
+  if (Array.isArray(EMBEDDED_KEYFRAMES) && EMBEDDED_KEYFRAMES.length > 1) {
+    KEYFRAMES = EMBEDDED_KEYFRAMES;
+  }
+
+  function updateKfBadge() {
+    if (!kfStatusBadge) return;
+    if (KEYFRAMES.length > 1) {
+      kfStatusBadge.textContent = `⚡ I-кадры: ${KEYFRAMES.length} шт. (строгая привязка)`;
+      kfStatusBadge.style.color = "var(--accent3)";
+      kfStatusBadge.style.borderColor = "var(--accent3)";
+      kfStatusBadge.style.background = "rgba(67, 209, 138, 0.15)";
+      if (trimBtn) trimBtn.disabled = false;
+    } else if (kfLoading) {
+      kfStatusBadge.textContent = "⏳ Загрузка I-кадров с сервера...";
+      kfStatusBadge.style.color = "#38bdf8";
+      kfStatusBadge.style.borderColor = "rgba(56, 189, 248, 0.35)";
+      kfStatusBadge.style.background = "rgba(56, 189, 248, 0.15)";
+      if (trimBtn) trimBtn.disabled = true;
+    } else {
+      kfStatusBadge.innerHTML = '❌ I-кадры не найдены <button onclick="loadKeyframes(true)" style="margin-left:6px; cursor:pointer; background:none; border:none; color:#fff; text-decoration:underline;">Повторить</button>';
+      kfStatusBadge.style.color = "var(--danger)";
+      kfStatusBadge.style.borderColor = "var(--danger)";
+      kfStatusBadge.style.background = "rgba(239, 68, 68, 0.15)";
+      if (trimBtn) trimBtn.disabled = true;
+    }
+  }
+
+  function onMetadataLoaded() {
+    if (vid.duration && !isNaN(vid.duration)) {
+      videoDuration = vid.duration;
+      tlEnd.textContent = formatTime(videoDuration);
+      if (!endInput.value || parseFloat(endInput.value) === 0) {
+        endInput.value = snapToKeyframe(videoDuration).toFixed(2);
+      }
+      renderTimeline();
+      renderKeyframes();
+      updateRegions();
+    }
+  }
+
+  vid.addEventListener('loadedmetadata', onMetadataLoaded);
+  vid.addEventListener('durationchange', onMetadataLoaded);
 
   if (streamUrl) {
     vid.src = streamUrl;
   }
 
-  vid.addEventListener('loadedmetadata', () => {
-    videoDuration = vid.duration;
-    tlEnd.textContent = formatTime(videoDuration);
-    endInput.value = videoDuration.toFixed(2);
-    renderTimeline();
-    renderKeyframes();
-    updateRegions();
-    loadKeyframes();
-  });
+  if (vid.readyState >= 1) {
+    onMetadataLoaded();
+  }
 
-  async function loadKeyframes() {
+  async function loadKeyframes(force = false) {
+    if (KEYFRAMES.length > 1 && !force) {
+      renderKeyframes();
+      updateKfBadge();
+      return;
+    }
+    kfLoading = true;
+    updateKfBadge();
     try {
       const res = await fetch(`/api/videos/${videoId}/keyframes?token=${tokenStr}`);
       if (res.ok) {
-        KEYFRAMES = await res.json();
-        renderKeyframes();
-        if (startInput.value) {
-          startInput.value = snapToKeyframe(parseFloat(startInput.value)).toFixed(2);
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 1) {
+          KEYFRAMES = data;
+          if (!videoDuration && KEYFRAMES.length > 0) {
+            videoDuration = KEYFRAMES[KEYFRAMES.length - 1];
+            tlEnd.textContent = formatTime(videoDuration);
+          }
+          renderKeyframes();
+          if (startInput.value) {
+            startInput.value = snapToKeyframe(parseFloat(startInput.value)).toFixed(2);
+          }
+          if (endInput.value) {
+            endInput.value = snapToKeyframe(parseFloat(endInput.value)).toFixed(2);
+          }
+          updateRegions();
         }
-        if (endInput.value) {
-          endInput.value = snapToKeyframe(parseFloat(endInput.value)).toFixed(2);
-        }
-        updateRegions();
       }
     } catch (e) {
       console.warn("Could not load keyframes", e);
+    } finally {
+      kfLoading = false;
+      updateKfBadge();
     }
   }
+
+  // Load keyframes immediately on startup
+  loadKeyframes();
+  updateKfBadge();
 
   function renderKeyframes() {
     timeline.querySelectorAll('.keyframe-tick').forEach(el => el.remove());
@@ -515,7 +576,7 @@
         const tick = document.createElement('div');
         tick.className = 'keyframe-tick';
         tick.style.left = pct + '%';
-        tick.title = `Ключевой I-кадр: ${formatTime(kf)}`;
+        tick.title = `Ключевой I-кадр: ${formatTime(kf)} (${kf.toFixed(3)}с)`;
         timeline.insertBefore(tick, tlCursor);
       }
     });
@@ -536,15 +597,18 @@
   }
 
   function stepKeyframeStart(dir) {
-    if (!KEYFRAMES || KEYFRAMES.length === 0) return;
+    if (!KEYFRAMES || KEYFRAMES.length === 0) {
+      alert("I-кадры ещё загружаются...");
+      return;
+    }
     const cur = parseFloat(startInput.value) || 0;
     let target = cur;
     if (dir > 0) {
-      const found = KEYFRAMES.find(k => k > cur + 0.05);
+      const found = KEYFRAMES.find(k => k > cur + 0.02);
       if (found !== undefined) target = found;
     } else {
       const rev = [...KEYFRAMES].reverse();
-      const found = rev.find(k => k < cur - 0.05);
+      const found = rev.find(k => k < cur - 0.02);
       if (found !== undefined) target = found;
     }
     startInput.value = target.toFixed(2);
@@ -553,15 +617,18 @@
   }
 
   function stepKeyframeEnd(dir) {
-    if (!KEYFRAMES || KEYFRAMES.length === 0) return;
+    if (!KEYFRAMES || KEYFRAMES.length === 0) {
+      alert("I-кадры ещё загружаются...");
+      return;
+    }
     const cur = parseFloat(endInput.value) || (videoDuration || 0);
     let target = cur;
     if (dir > 0) {
-      const found = KEYFRAMES.find(k => k > cur + 0.05);
+      const found = KEYFRAMES.find(k => k > cur + 0.02);
       if (found !== undefined) target = found;
     } else {
       const rev = [...KEYFRAMES].reverse();
-      const found = rev.find(k => k < cur - 0.05);
+      const found = rev.find(k => k < cur - 0.02);
       if (found !== undefined) target = found;
     }
     endInput.value = target.toFixed(2);
@@ -599,31 +666,24 @@
   }
 
   function setStart() {
+    if (!KEYFRAMES || KEYFRAMES.length === 0) {
+      alert("I-кадры ещё загружаются с сервера. Пожалуйста, подождите.");
+      return;
+    }
     const t = snapToKeyframe(vid.currentTime);
     startInput.value = t.toFixed(2);
+    vid.currentTime = t;
     updateRegions();
   }
 
   function setEnd() {
+    if (!KEYFRAMES || KEYFRAMES.length === 0) {
+      alert("I-кадры ещё загружаются с сервера. Пожалуйста, подождите.");
+      return;
+    }
     const t = snapToKeyframe(vid.currentTime);
     endInput.value = t.toFixed(2);
-    updateRegions();
-  }
-
-  function nudgeStart(delta) {
-    let val = Math.max(0, (parseFloat(startInput.value) || 0) + delta);
-    if (val >= (parseFloat(endInput.value) || videoDuration)) return;
-    startInput.value = val.toFixed(2);
-    vid.currentTime = val;
-    updateRegions();
-  }
-
-  function nudgeEnd(delta) {
-    let maxDur = videoDuration || 999999;
-    let val = Math.min(maxDur, (parseFloat(endInput.value) || maxDur) + delta);
-    if (val <= (parseFloat(startInput.value) || 0)) return;
-    endInput.value = val.toFixed(2);
-    vid.currentTime = val;
+    vid.currentTime = t;
     updateRegions();
   }
 
@@ -633,15 +693,17 @@
 
   startInput.addEventListener('change', () => {
     const val = parseFloat(startInput.value) || 0;
-    startInput.value = snapToKeyframe(val).toFixed(2);
-    vid.currentTime = parseFloat(startInput.value);
+    const snapped = snapToKeyframe(val);
+    startInput.value = snapped.toFixed(2);
+    vid.currentTime = snapped;
     updateRegions();
   });
 
   endInput.addEventListener('change', () => {
     const val = parseFloat(endInput.value) || (videoDuration || 0);
-    endInput.value = snapToKeyframe(val).toFixed(2);
-    vid.currentTime = parseFloat(endInput.value);
+    const snapped = snapToKeyframe(val);
+    endInput.value = snapped.toFixed(2);
+    vid.currentTime = snapped;
     updateRegions();
   });
 
@@ -691,19 +753,24 @@
   });
 
   async function submitTrim() {
-    startInput.value = snapToKeyframe(parseFloat(startInput.value) || 0).toFixed(2);
-    endInput.value = snapToKeyframe(parseFloat(endInput.value) || (videoDuration || 0)).toFixed(2);
+    if (!KEYFRAMES || KEYFRAMES.length <= 1) {
+      alert("I-кадры ещё не загружены с сервера! Обрезка разрешена ТОЛЬКО по ключевым I-кадрам.");
+      return;
+    }
+
+    const exactStart = snapToKeyframe(parseFloat(startInput.value) || 0);
+    const exactEnd = snapToKeyframe(parseFloat(endInput.value) || (videoDuration || 0));
+
+    startInput.value = exactStart.toFixed(2);
+    endInput.value = exactEnd.toFixed(2);
     updateRegions();
 
-    const start = parseFloat(startInput.value);
-    const end = parseFloat(endInput.value);
-
-    if (start >= end) {
+    if (exactStart >= exactEnd) {
       alert("Начало обрезки должно быть строго меньше конца.");
       return;
     }
     
-    if (start === 0 && end >= videoDuration - 0.02) {
+    if (exactStart === 0 && exactEnd >= videoDuration - 0.05) {
       alert("Выбран весь исходный видеофайл, нечего обрезать.");
       return;
     }
@@ -714,7 +781,7 @@
     let deleted_bouts = 0;
     let deleted_comments = 0;
     try {
-      const impactRes = await fetch(`/api/videos/${videoId}/trim_impact?token=${tokenStr}&start_sec=${start}&end_sec=${end}`);
+      const impactRes = await fetch(`/api/videos/${videoId}/trim_impact?token=${tokenStr}&start_sec=${exactStart}&end_sec=${exactEnd}`);
       if (impactRes.ok) {
         const impact = await impactRes.json();
         deleted_bouts = impact.deleted_bouts || 0;
@@ -724,15 +791,16 @@
       console.error("Failed to fetch trim impact", e);
     }
 
-    let confirmMsg = `Выполнить быструю потоковую обрезку без перекодирования (Stream Copy)?\n\n` +
-      `Интервал: ${formatTime(start)} — ${formatTime(end)} (Длительность: ${formatTime(end - start)})\n\n`;
+    let confirmMsg = `Выполнить быструю потоковую обрезку строго по ключевым I-кадрам (Stream Copy)?\n\n` +
+      `Интервал: ${formatTime(exactStart)} (${exactStart.toFixed(3)}с) — ${formatTime(exactEnd)} (${exactEnd.toFixed(3)}с)\n` +
+      `Новая длительность: ${formatTime(exactEnd - exactStart)}\n\n`;
     if (deleted_bouts > 0 || deleted_comments > 0) {
       confirmMsg += `ВНИМАНИЕ! Будут удалены элементы вне диапазона:\n`;
       if (deleted_bouts > 0) confirmMsg += `• Сходов: ${deleted_bouts}\n`;
       if (deleted_comments > 0) confirmMsg += `• Комментариев: ${deleted_comments}\n`;
       confirmMsg += `\n`;
     }
-    confirmMsg += `Файл останется в оригинальном формате HEVC (100% исходное качество). Длительность операции: ~1 секунда. Продолжить?`;
+    confirmMsg += `Файл останется в оригинальном формате HEVC (100% исходное качество). Длительность операции: ~1-2 сек. Продолжить?`;
 
     if (!confirm(confirmMsg)) {
       trimBtn.disabled = false;
@@ -740,13 +808,13 @@
     }
 
     overlay.style.display = 'flex';
-    document.getElementById('overlayText').textContent = "Выполняется быстрое потоковое копирование HEVC на сервере... Пожалуйста, подождите.";
+    document.getElementById('overlayText').textContent = "Выполняется быстрое потоковое копирование HEVC по I-кадрам на сервере... Пожалуйста, подождите.";
 
     try {
       const res = await fetch(`/api/videos/${videoId}/trim?token=${tokenStr}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ start_sec: start, end_sec: end })
+        body: JSON.stringify({ start_sec: exactStart, end_sec: exactEnd })
       });
 
       if (!res.ok) {
@@ -762,7 +830,7 @@
           const statusData = await statusRes.json();
           if (statusData.status === 'success') {
             clearInterval(pollInterval);
-            alert("Видео успешно и точно обрезано! Перезагрузите страницу для обновления данных.");
+            alert("Видео успешно и точно обрезано по I-кадрам! Перезагрузите страницу для обновления данных.");
             window.close();
           } else if (statusData.status === 'error') {
             clearInterval(pollInterval);
