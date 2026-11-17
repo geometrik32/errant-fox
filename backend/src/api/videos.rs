@@ -2679,6 +2679,16 @@ pub async fn get_keyframes(
     Ok(axum::Json(keyframes))
 }
 
+struct TempCleanupGuard(Vec<String>);
+
+impl Drop for TempCleanupGuard {
+    fn drop(&mut self) {
+        for path in &self.0 {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
 async fn get_temp_dir() -> String {
     if let Ok(dir) = std::env::var("TEMP_DIR") {
         if tokio::fs::create_dir_all(&dir).await.is_ok() {
@@ -2764,6 +2774,7 @@ async fn run_trim_task(state: AppState, video_id: String, payload: TrimVideoPayl
     let temp_dir = get_temp_dir().await;
     let temp_input = format!("{}/input_{}.mp4", temp_dir, video_id);
     let temp_output = format!("{}/trimmed_{}.mp4", temp_dir, video_id);
+    let _temp_guard = TempCleanupGuard(vec![temp_input.clone(), temp_output.clone()]);
     
     // Step 1: Download the original video
     tracing::info!("Trim: downloading video {} from Seafile to {}...", video_id, temp_input);
@@ -3539,6 +3550,7 @@ async fn run_optimize_task(state: AppState, video_id: String) -> Result<(), anyh
     let temp_dir = get_temp_dir().await;
     let temp_input = format!("{}/opt_in_{}.mp4", temp_dir, video_id);
     let temp_output = format!("{}/opt_out_{}.mp4", temp_dir, video_id);
+    let _temp_guard = TempCleanupGuard(vec![temp_input.clone(), temp_output.clone()]);
 
     // 2. Download original video
     tracing::info!("Optimize: downloading video {} from Seafile to {}...", video_id, temp_input);
@@ -3643,6 +3655,8 @@ async fn run_optimize_task(state: AppState, video_id: String) -> Result<(), anyh
     let file_bytes = tokio::fs::read(&temp_output).await?;
     state.seafile.upload_file(&seafile_path, file_bytes).await?;
     let _ = tokio::fs::remove_file(&temp_output).await;
+    let _ = tokio::fs::remove_file(format!("{}/keyframes_{}.json", temp_dir, video_id)).await;
+    let _ = tokio::fs::remove_file(state.transcode.target_path(&video_id)).await;
 
     // 5. Update DB: is_optimized = true, is_optimizing = false
     let vid_clone = video_id.clone();

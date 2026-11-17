@@ -46,7 +46,7 @@ services:
     image: ghcr.io/geometrik32/errant-fox-frontend:latest
     restart: unless-stopped
     ports:
-      - "8081:80"
+      - "127.0.0.1:8081:80"
     depends_on:
       backend:
         condition: service_started

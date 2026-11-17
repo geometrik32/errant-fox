@@ -1,13 +1,15 @@
 import json
+import multiprocessing
 import os
+import queue
 import re
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import traceback
-import gc
 
-import requests
 from fastapi import FastAPI
 from pydantic import BaseModel
 
@@ -171,59 +173,11 @@ def _extract_simple_exchanges_from_faster(segments_list, wav_path: str):
     return exchanges, all_words
 
 
-import time
 import asyncio
-from faster_whisper import WhisperModel
-
-WHISPER_MODEL_NAME = os.environ.get("WHISPER_MODEL", "medium")
 
 
-class DynamicWhisperModel:
-    def __init__(self, model_name: str, idle_timeout_sec: float = 300.0):
-        self.model_name = model_name
-        self.idle_timeout_sec = idle_timeout_sec
-        self.model = None
-        self.last_used = 0.0
-
-    def get_model(self) -> WhisperModel:
-        self.last_used = time.time()
-        if self.model is None:
-            print(f"[WhisperModel] Loading Faster-Whisper model '{self.model_name}' (from disk cache into RAM)...", flush=True)
-            t0 = time.time()
-            self.model = WhisperModel(self.model_name, device="cpu", compute_type="int8")
-            print(f"[WhisperModel] Model loaded successfully in {time.time() - t0:.2f}s.", flush=True)
-        return self.model
-
-    def check_unload(self):
-        if self.model is not None and (time.time() - self.last_used) > self.idle_timeout_sec:
-            print(f"[WhisperModel] Inactivity timeout ({self.idle_timeout_sec}s) reached. Unloading model from RAM...", flush=True)
-            del self.model
-            self.model = None
-            gc.collect()
-            print("[WhisperModel] Model unloaded. RAM freed.", flush=True)
-
-
-model_manager = DynamicWhisperModel(WHISPER_MODEL_NAME, idle_timeout_sec=300.0)
-
-
-async def _auto_unload_loop():
-    while True:
-        await asyncio.sleep(30)
-        try:
-            model_manager.check_unload()
-        except Exception as e:
-            print(f"[WhisperModel] Error in auto-unload loop: {e}", flush=True)
-
-
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(_auto_unload_loop())
-    print("[WhisperModel] Background auto-unload task started.", flush=True)
-
-
-def _detect_exchanges(wav_path: str):
-    print(f"  Transcribing audio via Faster-Whisper model...", flush=True)
-    model = model_manager.get_model()
+def _detect_exchanges_with_model(model, wav_path: str):
+    print("  Transcribing audio via Faster-Whisper model...", flush=True)
     segments, info = model.transcribe(
         wav_path,
         language="ru",
@@ -239,6 +193,209 @@ def _detect_exchanges(wav_path: str):
     return exchanges, all_words
 
 
+def _worker_main(model_name: str, req_q: multiprocessing.Queue, res_q: multiprocessing.Queue):
+    """Isolated child process hosting WhisperModel so OS reclaims 100% RAM on exit."""
+    try:
+        from faster_whisper import WhisperModel
+        print(f"[WhisperWorker] Loading Faster-Whisper model '{model_name}' (from disk cache into RAM)...", flush=True)
+        t0 = time.time()
+        model = WhisperModel(model_name, device="cpu", compute_type="int8")
+        print(f"[WhisperWorker] Model loaded successfully in {time.time() - t0:.2f}s.", flush=True)
+        res_q.put(("ready", None))
+    except Exception as exc:
+        res_q.put(("err", f"Failed to load WhisperModel: {exc}\n{traceback.format_exc()}"))
+        return
+
+    while True:
+        wav_path = req_q.get()
+        if wav_path is None:
+            print("[WhisperWorker] Shutdown signal received. Exiting.", flush=True)
+            break
+        try:
+            result = _detect_exchanges_with_model(model, wav_path)
+            res_q.put(("ok", result))
+        except Exception as exc:
+            res_q.put(("err", f"{exc}\n{traceback.format_exc()}"))
+
+
+class DynamicWhisperModel:
+    def __init__(self, model_name: str, idle_timeout_sec: float = 300.0):
+        self.model_name = model_name
+        self.idle_timeout_sec = idle_timeout_sec
+        self._ctx = multiprocessing.get_context("spawn")
+        self._process = None
+        self._req_queue = None
+        self._res_queue = None
+        self._busy = False
+        self.last_used = 0.0
+        # Protects only fast in-memory state transitions; never held across blocking I/O or join().
+        self._state_lock = threading.Lock()
+        # Serializes transcribe calls against the worker queues.
+        self._op_lock = threading.Lock()
+
+    @property
+    def is_loaded(self) -> bool:
+        with self._state_lock:
+            proc = self._process
+        return proc is not None and proc.is_alive()
+
+    def _detach_worker_locked(self):
+        detached = (self._process, self._req_queue, self._res_queue)
+        self._process = None
+        self._req_queue = None
+        self._res_queue = None
+        return detached
+
+    def _detach_if_same(self, proc):
+        with self._state_lock:
+            if self._process is proc:
+                return self._detach_worker_locked()
+        return (None, None, None)
+
+    @staticmethod
+    def _dispose_worker(proc, req_q, res_q):
+        if proc is not None:
+            if proc.is_alive() and req_q is not None:
+                try:
+                    req_q.put_nowait(None)
+                    proc.join(timeout=5)
+                except Exception:
+                    pass
+            if proc.is_alive():
+                proc.terminate()
+                proc.join(timeout=3)
+            if proc.is_alive():
+                proc.kill()
+                proc.join(timeout=2)
+        for q in (req_q, res_q):
+            if q is not None:
+                try:
+                    q.close()
+                    q.join_thread()
+                except Exception:
+                    pass
+
+    def _ensure_worker(self):
+        dead = None
+        with self._state_lock:
+            if self._process is not None and self._process.is_alive():
+                return self._process, self._req_queue, self._res_queue
+            if self._process is not None:
+                dead = self._detach_worker_locked()
+
+        if dead is not None and dead[0] is not None:
+            self._dispose_worker(*dead)
+
+        req_q = self._ctx.Queue()
+        res_q = self._ctx.Queue()
+        proc = self._ctx.Process(
+            target=_worker_main,
+            args=(self.model_name, req_q, res_q),
+            daemon=True,
+        )
+        proc.start()
+
+        # Wait until model finishes loading in child process without holding _state_lock
+        while True:
+            try:
+                status, payload = res_q.get(timeout=0.5)
+                if status == "ready":
+                    with self._state_lock:
+                        self._process = proc
+                        self._req_queue = req_q
+                        self._res_queue = res_q
+                    return proc, req_q, res_q
+                self._dispose_worker(proc, req_q, res_q)
+                raise RuntimeError(payload or "Whisper worker failed during initialization")
+            except queue.Empty:
+                if not proc.is_alive():
+                    exitcode = proc.exitcode
+                    self._dispose_worker(proc, req_q, res_q)
+                    raise RuntimeError(f"Whisper worker exited during startup (exitcode={exitcode})")
+
+    def transcribe(self, wav_path: str):
+        with self._op_lock:
+            with self._state_lock:
+                self._busy = True
+                self.last_used = time.time()
+            try:
+                proc, req_q, res_q = self._ensure_worker()
+                req_q.put(wav_path)
+                while True:
+                    try:
+                        status, payload = res_q.get(timeout=0.5)
+                        if status == "ok":
+                            return payload
+                        raise RuntimeError(payload or "Whisper worker transcription failed")
+                    except queue.Empty:
+                        if not proc.is_alive():
+                            exitcode = proc.exitcode
+                            detached = self._detach_if_same(proc)
+                            if detached[0] is not None:
+                                self._dispose_worker(*detached)
+                            raise RuntimeError(f"Whisper worker crashed during transcription (exitcode={exitcode})")
+            finally:
+                with self._state_lock:
+                    self._busy = False
+                    self.last_used = time.time()
+
+    def check_unload(self):
+        detached = None
+        reason = None
+        with self._state_lock:
+            if self._busy or self._process is None:
+                return
+            if not self._process.is_alive():
+                detached = self._detach_worker_locked()
+                reason = "dead"
+            elif (time.time() - self.last_used) > self.idle_timeout_sec:
+                print(
+                    f"[WhisperModel] Inactivity timeout ({self.idle_timeout_sec}s) reached. "
+                    "Terminating worker process to release RAM...",
+                    flush=True,
+                )
+                detached = self._detach_worker_locked()
+                reason = "timeout"
+
+        if detached is not None and detached[0] is not None:
+            self._dispose_worker(*detached)
+            if reason == "timeout":
+                print("[WhisperModel] Worker process terminated. OS RAM freed.", flush=True)
+
+    def shutdown(self):
+        with self._state_lock:
+            detached = self._detach_worker_locked()
+        if detached[0] is not None:
+            self._dispose_worker(*detached)
+
+
+model_manager = DynamicWhisperModel(WHISPER_MODEL_NAME, idle_timeout_sec=300.0)
+
+
+async def _auto_unload_loop():
+    while True:
+        await asyncio.sleep(30)
+        try:
+            await asyncio.to_thread(model_manager.check_unload)
+        except Exception as e:
+            print(f"[WhisperModel] Error in auto-unload loop: {e}", flush=True)
+
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(_auto_unload_loop())
+    print("[WhisperModel] Background auto-unload task started.", flush=True)
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    model_manager.shutdown()
+
+
+def _detect_exchanges(wav_path: str):
+    return model_manager.transcribe(wav_path)
+
+
 # ── Request / Response schemas ────────────────────────────────────────────────
 
 class AnalyzeRequest(BaseModel):
@@ -250,7 +407,7 @@ class AnalyzeRequest(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "model_loaded": model_manager.model is not None}
+    return {"status": "ok", "model_loaded": model_manager.is_loaded}
 
 
 analyze_lock = asyncio.Lock()
